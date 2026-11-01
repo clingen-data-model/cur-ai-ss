@@ -1,24 +1,34 @@
 #!/usr/bin/env bash
-# Build and push the pdf-parsing service image with Cloud Build.
+# Build the pdf-parsing service image with Cloud Build, and roll the service
+# onto it.
 #
-#   bin/build-pdf-parsing-image <docling-serve tag> <N>
+#   bin/build-pdf-parsing-image [--no-deploy]
 #
-# produces us-east4-docker.pkg.dev/clingen-caa/pdf-parsing/server:<tag>-caa.<N>
-# from docling-serve-cu128:<tag> (through the ghcr proxy repository) plus the
-# layout override; see infrastructure/pdf-parsing/Dockerfile. Then point
-# infrastructure/terraform/pdf-parsing/variables.tf (image_tag) at the new
-# tag and apply. Takes about ten minutes, most of it pulling the base image.
+# Builds us-east4-docker.pkg.dev/clingen-caa/pdf-parsing/server:<base>-<sha>
+# from docling-serve-cu128:<base> (infrastructure/pdf-parsing/base-tag,
+# through the ghcr proxy repository) plus the layout override, see
+# infrastructure/pdf-parsing/Dockerfile; <sha> is the short commit of HEAD.
+# Then updates the Cloud Run service's image, unless --no-deploy. This is
+# what .github/workflows/pdf-parsing-image.yml runs on a push to main; by
+# hand it needs the right to act as the builder account (terraform:
+# var.invokers). About ten minutes, most of it pulling the base image.
 set -euo pipefail
 
-base_tag="${1:?docling-serve tag, e.g. v1.23.0}"
-n="${2:?build number, e.g. 1}"
+deploy=true
+[[ "${1:-}" == "--no-deploy" ]] && deploy=false
+
 project=clingen-caa
 region=us-east4
+service=pdf-parsing
+builder="pdf-parsing-builder@${project}.iam.gserviceaccount.com"
 registry="${region}-docker.pkg.dev/${project}"
-base_image="${registry}/ghcr/docling-project/docling-serve-cu128:${base_tag}"
-image="${registry}/pdf-parsing/server:${base_tag}-caa.${n}"
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+base_tag="$(tr -d '[:space:]' < "$root/infrastructure/pdf-parsing/base-tag")"
+sha="$(git -C "$root" rev-parse --short=7 HEAD)"
+base_image="${registry}/ghcr/docling-project/docling-serve-cu128:${base_tag}"
+image="${registry}/pdf-parsing/server:${base_tag}-${sha}"
+
 context="$(mktemp -d)"
 trap 'rm -rf "$context"' EXIT
 cp "$root/infrastructure/pdf-parsing/Dockerfile" \
@@ -31,6 +41,13 @@ echo "building $image"
 gcloud builds submit "$context" \
   --project="$project" --region="$region" \
   --config="$context/cloudbuild.yaml" \
-  --service-account="projects/${project}/serviceAccounts/pdf-parsing-builder@${project}.iam.gserviceaccount.com" \
+  --service-account="projects/${project}/serviceAccounts/${builder}" \
+  --gcs-source-staging-dir="gs://${project}-pdf-parsing-build/source" \
   --substitutions="_BASE_IMAGE=${base_image},_IMAGE=${image}"
 echo "built $image"
+
+if $deploy; then
+  gcloud run services update "$service" \
+    --project="$project" --region="$region" --image="$image" --quiet
+  echo "deployed $image"
+fi

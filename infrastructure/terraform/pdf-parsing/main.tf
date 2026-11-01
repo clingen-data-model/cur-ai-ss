@@ -10,12 +10,18 @@
 # moves (lib/misc/pdf/remote.py).
 #
 # The image is docling-serve's own CUDA build plus the worker's layout
-# override (infrastructure/pdf-parsing/Dockerfile), built by Cloud Build into
-# this stack's repository from the ghcr.io release pulled through an Artifact
-# Registry remote repository (Cloud Run deploys only from Artifact Registry
-# or Docker Hub). The base release is the one that bundles the docling
-# version pyproject pins, so the server runs the same models as the worker
-# would: see var.image_tag.
+# override (infrastructure/pdf-parsing/Dockerfile). A push to main that
+# touches the image's inputs has GitHub Actions
+# (.github/workflows/pdf-parsing-image.yml) build it with Cloud Build into
+# this stack's repository, from the ghcr.io release pulled through an
+# Artifact Registry remote repository (Cloud Run deploys only from Artifact
+# Registry or Docker Hub), and roll the service onto it. Terraform creates
+# the service on the stock base image and ignores the image after that, so
+# a fresh stack comes up without a build and the next workflow run (a push
+# to main touching the inputs, or a manual dispatch) puts the override in
+# place. The base release, infrastructure/pdf-parsing/base-tag, is the one
+# that bundles the docling version pyproject pins, so the server runs the
+# same models as the worker would.
 
 terraform {
   required_version = ">= 1.5.0"
@@ -54,7 +60,9 @@ data "terraform_remote_state" "dev" {
 locals {
   region   = "us-east4"
   registry = "${local.region}-docker.pkg.dev/${data.google_project.project.project_id}"
-  image    = "${local.registry}/${google_artifact_registry_repository.images.repository_id}/server:${var.image_tag}"
+  base_tag = trimspace(file("${path.module}/../../pdf-parsing/base-tag"))
+  # What the service is created on; see the lifecycle block on the service.
+  bootstrap_image = "${local.registry}/${google_artifact_registry_repository.ghcr.repository_id}/docling-project/docling-serve-cu128:${local.base_tag}"
 }
 
 # --- Image -----------------------------------------------------------------
@@ -82,11 +90,97 @@ resource "google_artifact_registry_repository" "images" {
   description   = "The pdf-parsing service image: docling-serve plus the layout override"
 }
 
-# Cloud Build runs as this account: it pulls the base image from the proxy,
-# pushes the result, and writes its logs. Operators run builds with it.
+# Builds run as this account, from GitHub Actions through workload identity
+# federation (no key, no secret: GitHub's OIDC token for a run on this
+# repository is exchanged for this account's credentials) or by an operator
+# with bin/build-pdf-parsing-image. It submits the build, and the build
+# itself pulls the base image from the proxy, pushes the result and writes
+# its logs; then it rolls the service onto the new image.
 resource "google_service_account" "builder" {
   account_id   = "pdf-parsing-builder"
-  display_name = "pdf-parsing image builds (Cloud Build)"
+  display_name = "pdf-parsing image builds"
+}
+
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "github"
+  display_name              = "GitHub Actions"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github"
+  display_name                       = "GitHub Actions OIDC"
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository"
+    "attribute.ref"        = "assertion.ref"
+  }
+  # Only this repository's runs may exchange a token at all.
+  attribute_condition = "assertion.repository == \"${var.github_repository}\""
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+# ...and only runs on its main branch may act as the builder.
+resource "google_service_account_iam_member" "github_builds" {
+  service_account_id = google_service_account.builder.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.ref/refs/heads/main"
+}
+
+# Submitting a build: the right to create builds, a bucket to stage the
+# build context in (gcloud uploads it there; the build reads it back), and
+# the right to run the build as the builder account itself.
+resource "google_project_iam_member" "builder_submits" {
+  project = data.google_project.project.project_id
+  role    = "roles/cloudbuild.builds.editor"
+  member  = "serviceAccount:${google_service_account.builder.email}"
+}
+
+resource "google_storage_bucket" "build_source" {
+  name                        = "${data.google_project.project.project_id}-pdf-parsing-build"
+  location                    = local.region
+  storage_class               = "STANDARD"
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = true
+
+  lifecycle_rule {
+    condition {
+      age = 1 # days
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}
+
+resource "google_storage_bucket_iam_member" "builder_stages" {
+  bucket = google_storage_bucket.build_source.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.builder.email}"
+}
+
+resource "google_service_account_iam_member" "builder_runs_as_itself" {
+  service_account_id = google_service_account.builder.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.builder.email}"
+}
+
+# Rolling the service onto the new image: update the service, and act as
+# the account it runs as.
+resource "google_cloud_run_v2_service_iam_member" "builder_deploys" {
+  name     = google_cloud_run_v2_service.pdf_parsing.name
+  location = google_cloud_run_v2_service.pdf_parsing.location
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${google_service_account.builder.email}"
+}
+
+resource "google_service_account_iam_member" "builder_deploys_as_service" {
+  service_account_id = google_service_account.pdf_parsing.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.builder.email}"
 }
 
 resource "google_artifact_registry_repository_iam_member" "builder_pulls_base" {
@@ -131,11 +225,17 @@ resource "google_cloud_run_v2_service" "pdf_parsing" {
   ingress             = "INGRESS_TRAFFIC_ALL" # reachable from the VM; callers still need run.invoker
   deletion_protection = false
 
-  # The API reads back a service-level scaling block (zeros) this config
-  # never set; without this every plan wants to remove it and rolls a new
-  # revision for nothing. Instance bounds are in template.scaling.
   lifecycle {
-    ignore_changes = [scaling]
+    ignore_changes = [
+      # The API reads back a service-level scaling block (zeros) this
+      # config never set; without this every plan wants to remove it and
+      # rolls a new revision for nothing. Instance bounds are in
+      # template.scaling.
+      scaling,
+      # The image is rolled by the build workflow; the service is only
+      # created on local.bootstrap_image.
+      template[0].containers[0].image,
+    ]
   }
 
   template {
@@ -155,7 +255,7 @@ resource "google_cloud_run_v2_service" "pdf_parsing" {
     }
 
     containers {
-      image = local.image
+      image = local.bootstrap_image
 
       ports {
         container_port = 5001 # docling-serve's default (UVICORN_PORT)

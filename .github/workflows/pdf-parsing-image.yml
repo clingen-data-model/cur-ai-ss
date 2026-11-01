@@ -1,0 +1,40 @@
+# Build the pdf-parsing service image and roll the service onto it, on every
+# push to main that changes what goes into it. See
+# infrastructure/pdf-parsing/Dockerfile and bin/build-pdf-parsing-image.
+name: pdf-parsing image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - infrastructure/pdf-parsing/**
+      - lib/misc/pdf/layout.py
+      - bin/build-pdf-parsing-image
+      - .github/workflows/pdf-parsing-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # the OIDC token that workload identity federation exchanges
+
+concurrency:
+  group: pdf-parsing-image
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No key anywhere: the run's GitHub OIDC token is exchanged for the
+      # builder account's credentials. Which runs may do so is in terraform
+      # (infrastructure/terraform/pdf-parsing: this repository, main only).
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/947684729458/locations/global/workloadIdentityPools/github/providers/github
+          service_account: pdf-parsing-builder@clingen-caa.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: bin/build-pdf-parsing-image

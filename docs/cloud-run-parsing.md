@@ -27,7 +27,7 @@ so the GPU costs nothing while no paper is being parsed.
 | --- | --- |
 | Terraform stack: Artifact Registry proxy, service account, Cloud Run service, invoker grants | `infrastructure/terraform/pdf-parsing/` (state prefix `pdf-parsing`) |
 | Service | `pdf-parsing`, `us-east4`, one L4, 8 CPU / 32 GiB, max 1 instance, 2 conversions at once per instance, requests held up to 5 minutes, zonal redundancy off |
-| Image | `docling-serve-cu128:v1.23.0` from ghcr.io through the `ghcr` remote repository (Cloud Run pulls only from Artifact Registry or Docker Hub) |
+| Image | `pdf-parsing/server:<base>-<commit>`: docling-serve's CUDA image (base tag in `infrastructure/pdf-parsing/base-tag`, pulled from ghcr.io through the `ghcr` remote repository, since Cloud Run pulls only from Artifact Registry or Docker Hub) plus the layout override, see below. Built and rolled by `.github/workflows/pdf-parsing-image.yml` on a push to `main` touching its inputs; the stack creates the service on the stock base image and ignores the image after |
 | Exchange bucket | `clingen-caa-pdf-parsing-exchange`: private, objects deleted after a day. The VM's service account can read, write and sign URLs for it (it holds `serviceAccountTokenCreator` on itself for V4 signing). Not used by the client yet: see item 4 below |
 | Client | `lib/misc/pdf/remote.py`: one `POST /v1/convert/file` per PDF, Google identity token, document JSON back |
 | Switch | `PDF_PARSING_SERVICE_URL` (`lib/core/environment.py`): set, `parse_content` converts PDFs remotely; unset, locally. DOCX supplements stay local either way |
@@ -45,8 +45,21 @@ pins, so the service runs the same layout and table models the worker would.
 The document schema is the same (`1.10.0`) in every docling-core up to the
 newest, so a newer docling-serve's JSON also loads in the pinned
 docling-core; the pin is about model parity, not about reading the response.
-Bump `var.image_tag` together with the docling pin, and check the
-`cu128` image exists for the tag first (some releases have none).
+Bump `infrastructure/pdf-parsing/base-tag` together with the docling pin,
+and check the `cu128` image exists for the tag first (some releases have
+none); the push builds and rolls the new image.
+
+### Building the image
+
+Nothing is built on a laptop. `bin/build-pdf-parsing-image` stages the
+Dockerfile, `layout.py` and `sitecustomize.py`, submits them to Cloud Build
+as the `pdf-parsing-builder` account, and updates the service's image. The
+workflow runs it on `main`, authenticated through workload identity
+federation: the run's GitHub OIDC token is exchanged for the builder
+account, with terraform limiting that to this repository's `main` branch.
+No key or secret exists anywhere. By hand it works for anyone in
+`var.invokers` (they may act as the builder), for instance to bootstrap or
+to test a branch with `--no-deploy`.
 
 ### What the worker keeps doing
 
@@ -100,8 +113,9 @@ together. A third would queue at Cloud Run with the lease running.
    to 65k points of area; 109 page 11, 236k to 79k; 113 page 2, 131k to
    20k). Hence the derived image, `infrastructure/pdf-parsing/`: docling-
    serve's image plus a `sitecustomize.py` that installs the override at
-   interpreter start, built by Cloud Build (no docker on the laptop) into
-   the stack's own repository. The service runs that image.
+   interpreter start, built by Cloud Build into the stack's own repository
+   (above). Confirm on the service with the rehearsal on papers 105, 109
+   and 113: the figures on pages 8, 11 and 2 should come back whole.
 2. **OCR parity with the VM**, above.
 3. **Sync or async.** The client holds one request open for the whole
    conversion, up to the server's `DOCLING_SERVE_MAX_SYNC_WAIT` of five

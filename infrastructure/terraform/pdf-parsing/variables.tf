@@ -1,16 +1,7 @@
-variable "image_tag" {
+variable "github_repository" {
   type        = string
-  description = <<-EOT
-    Tag of the service image in this stack's repository, as built by
-    bin/build-pdf-parsing-image: the docling-serve release tag with -caa.N
-    appended. Each docling-serve release bundles one docling version (its
-    GitHub release notes list it); keep the base on the release that bundles
-    the docling pinned in pyproject.toml so the service runs the same models
-    the worker would. v1.23.0 is docling 2.82.0. Only some releases have a
-    cu128 image: check the tag exists before bumping. Build before applying a
-    new tag; the revision fails otherwise.
-  EOT
-  default     = "v1.23.0-caa.1"
+  description = "The GitHub repository whose Actions runs on main may build and roll the image."
+  default     = "clingen-data-model/cur-ai-ss"
 }
 
 variable "max_instances" {

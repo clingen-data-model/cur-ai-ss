@@ -9,10 +9,12 @@
 # before docling-serve loads its models, whatever the entrypoint.
 #
 # Built by bin/build-pdf-parsing-image, which stages this file, layout.py
-# and sitecustomize.py and runs Cloud Build (no docker is needed locally).
-# The base tag is the docling-serve release that bundles the docling version
-# pyproject.toml pins; the built tag is the same with -caa.N appended, and is
-# what infrastructure/terraform/pdf-parsing/variables.tf (image_tag) names.
+# and sitecustomize.py and runs Cloud Build (no docker is needed anywhere
+# but there); .github/workflows/pdf-parsing-image.yml runs it on every push
+# to main that touches these inputs and rolls the service onto the result.
+# The base tag, in base-tag beside this file, is the docling-serve release
+# that bundles the docling version pyproject.toml pins; the built tag is the
+# base tag and the short commit.
 
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
