@@ -180,3 +180,7 @@ cython_debug/
 # .tfstate files
 *.tfstate
 *.tfstate.*
+
+# Saved terraform plans (terraform plan -out=...)
+tfplan
+*.tfplan
