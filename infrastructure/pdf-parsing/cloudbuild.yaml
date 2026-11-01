@@ -1,5 +1,5 @@
-# Builds the pdf-parsing service image; see the Dockerfile. Run through
-# bin/build-pdf-parsing-image, which supplies the substitutions.
+# Builds the pdf-parsing service image; see the Dockerfile. Run by
+# .github/workflows/pdf-parsing-image.yml, which supplies the substitutions.
 steps:
   - name: gcr.io/cloud-builders/docker
     args:

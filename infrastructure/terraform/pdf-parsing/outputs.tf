@@ -14,7 +14,7 @@ output "workload_identity_provider" {
 }
 
 output "builder_service_account" {
-  description = "The account the build workflow and bin/build-pdf-parsing-image run as"
+  description = "The account the build workflow runs as"
   value       = google_service_account.builder.email
 }
 

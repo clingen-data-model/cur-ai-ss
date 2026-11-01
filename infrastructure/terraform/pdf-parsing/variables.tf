@@ -25,6 +25,6 @@ variable "concurrency" {
 
 variable "invokers" {
   type        = list(string)
-  description = "IAM members besides the VM allowed to call the service, for testing from a laptop (`gcloud auth print-identity-token`), and to run image builds as the builder account."
+  description = "IAM members besides the VM allowed to call the service, for testing from a laptop (`gcloud auth print-identity-token`)."
   default     = ["user:bblanken@broadinstitute.org"]
 }

@@ -51,15 +51,14 @@ none); the push builds and rolls the new image.
 
 ### Building the image
 
-Nothing is built on a laptop. `bin/build-pdf-parsing-image` stages the
+Nothing is built anywhere but in Cloud Build. The workflow stages the
 Dockerfile, `layout.py` and `sitecustomize.py`, submits them to Cloud Build
-as the `pdf-parsing-builder` account, and updates the service's image. The
-workflow runs it on `main`, authenticated through workload identity
-federation: the run's GitHub OIDC token is exchanged for the builder
-account, with terraform limiting that to this repository's `main` branch.
-No key or secret exists anywhere. By hand it works for anyone in
-`var.invokers` (they may act as the builder), for instance to bootstrap or
-to test a branch with `--no-deploy`.
+as the `pdf-parsing-builder` account, and updates the service's image. It
+runs on a push to `main`, or by hand from the Actions tab (workflow
+dispatch), authenticated through workload identity federation: the run's
+GitHub OIDC token is exchanged for the builder account, with terraform
+limiting that to this repository's `main` branch. No key or secret exists
+anywhere, and no operator holds build rights.
 
 ### What the worker keeps doing
 

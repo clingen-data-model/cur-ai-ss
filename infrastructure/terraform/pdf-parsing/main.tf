@@ -82,7 +82,7 @@ resource "google_artifact_registry_repository" "ghcr" {
   }
 }
 
-# The service image, built by bin/build-pdf-parsing-image.
+# The service image, built by .github/workflows/pdf-parsing-image.yml.
 resource "google_artifact_registry_repository" "images" {
   location      = local.region
   repository_id = "pdf-parsing"
@@ -92,10 +92,10 @@ resource "google_artifact_registry_repository" "images" {
 
 # Builds run as this account, from GitHub Actions through workload identity
 # federation (no key, no secret: GitHub's OIDC token for a run on this
-# repository is exchanged for this account's credentials) or by an operator
-# with bin/build-pdf-parsing-image. It submits the build, and the build
-# itself pulls the base image from the proxy, pushes the result and writes
-# its logs; then it rolls the service onto the new image.
+# repository is exchanged for this account's credentials). It submits the
+# build, and the build itself pulls the base image from the proxy, pushes
+# the result and writes its logs; then it rolls the service onto the new
+# image.
 resource "google_service_account" "builder" {
   account_id   = "pdf-parsing-builder"
   display_name = "pdf-parsing image builds"
@@ -201,13 +201,6 @@ resource "google_project_iam_member" "builder_logs" {
   project = data.google_project.project.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.builder.email}"
-}
-
-resource "google_service_account_iam_member" "operators_build" {
-  for_each           = toset(var.invokers)
-  service_account_id = google_service_account.builder.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = each.value
 }
 
 # --- Service -------------------------------------------------------------
