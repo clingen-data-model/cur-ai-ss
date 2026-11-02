@@ -267,13 +267,14 @@ Deploy a specific ref with `-e git_version=<ref>`, preview with `--check`, or ru
 `--tags certbot` to touch only TLS and nginx without restarting the app. The playbook
 header documents every variable and the one-time Secret Manager setup.
 
-### PDF parsing on a GPU (in progress)
+### PDF parsing on a GPU
 
 `infrastructure/terraform/pdf-parsing/` stands up the `pdf-parsing` Cloud Run service (docling-serve
-on an NVIDIA L4), so the worker's PDF Parsing step can run Docling's models there instead of
-on the VM's CPU. The worker uses it only when `PDF_PARSING_SERVICE_URL` is set; it is not set
-in the deployment yet. Status, results and the open questions are in
-`docs/cloud-run-parsing.md`; `lib.bin.parse_remote_test` rehearses a parse through the
-service into a temporary directory.
+on an NVIDIA L4), and the worker's PDF Parsing step runs Docling's models there instead of on
+the VM's CPU: the PDF and the converted document pass through a bucket, never an HTTP body.
+The worker uses it when `PDF_PARSING_SERVICE_URL` and `PDF_PARSING_EXCHANGE_BUCKET` are set,
+which the deployment does. The image is built by `.github/workflows/pdf-parsing-image.yml`
+on a push to `main`. Design, results and what is still open are in `docs/cloud-run-parsing.md`;
+`lib.bin.parse_remote_test` rehearses a parse through the service into a temporary directory.
 
 For more details, see `CLAUDE.md` in the repository.

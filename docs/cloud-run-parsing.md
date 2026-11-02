@@ -28,15 +28,46 @@ so the GPU costs nothing while no paper is being parsed.
 | Terraform stack: Artifact Registry proxy, service account, Cloud Run service, invoker grants | `infrastructure/terraform/pdf-parsing/` (state prefix `pdf-parsing`) |
 | Service | `pdf-parsing`, `us-east4`, one L4, 8 CPU / 32 GiB, max 1 instance, 2 conversions at once per instance, requests held up to 5 minutes, zonal redundancy off |
 | Image | `pdf-parsing/server:<base>-<commit>`: docling-serve's CUDA image (base tag in `infrastructure/pdf-parsing/base-tag`, pulled from ghcr.io through the `ghcr` remote repository, since Cloud Run pulls only from Artifact Registry or Docker Hub) plus the layout override, see below. Built and rolled by `.github/workflows/pdf-parsing-image.yml` on a push to `main` touching its inputs; the stack creates the service on the stock base image and ignores the image after |
-| Exchange bucket | `clingen-caa-pdf-parsing-exchange`: private, objects deleted after a day. The VM's service account can read, write and sign URLs for it (it holds `serviceAccountTokenCreator` on itself for V4 signing). Not used by the client yet: see item 4 below |
-| Client | `lib/misc/pdf/remote.py`: one `POST /v1/convert/file` per PDF, Google identity token, document JSON back |
-| Switch | `PDF_PARSING_SERVICE_URL` (`lib/core/environment.py`): set, `parse_content` converts PDFs remotely; unset, locally. DOCX supplements stay local either way |
-| Rehearsal | `uv run python -m lib.bin.parse_remote_test paper.pdf --url ...` parses into a temporary `CAA_ROOT` and deletes it; `--compare-local` runs the in-process converter beside it, `--keep` leaves the files |
+| Exchange bucket | `clingen-caa-pdf-parsing-exchange`: private, objects deleted after a day. The PDF and the converted document pass through it (below). The VM's service account reads, writes and signs URLs for it (it holds `serviceAccountTokenCreator` on itself for V4 signing); the operators in `var.invokers` hold the same role on that account, so a laptop can sign as it through an impersonating application-default login |
+| Client | `lib/misc/pdf/remote.py`: per PDF, upload to the bucket, two signed URLs, one small `POST /v1/convert/source` with a Google identity token, the bundle pulled from the bucket, both objects deleted |
+| Switch | `PDF_PARSING_SERVICE_URL` and `PDF_PARSING_EXCHANGE_BUCKET` (`lib/core/environment.py`): set, `parse_content` converts PDFs remotely; unset, locally. DOCX supplements stay local either way. `env.j2` sets both since 2026-11-02 |
+| Rehearsal | `uv run python -m lib.bin.parse_remote_test paper.pdf --url ... --bucket ...` parses into a temporary `CAA_ROOT` and deletes it; `--compare-local` runs the in-process converter beside it, `--keep` leaves the files |
 
 The service URL is a terraform output (`terraform output service_url`).
 Callers need `roles/run.invoker`: the stack grants it to the VM's service
 account and to the operators in `var.invokers`; from a laptop the client
-falls back to `gcloud auth print-identity-token`.
+falls back to `gcloud auth print-identity-token`. Signing the bucket URLs
+from a laptop needs application-default credentials that impersonate the
+VM's account:
+
+    gcloud auth application-default login \
+        --impersonate-service-account=dev-caa@clingen-caa.iam.gserviceaccount.com
+
+### The bucket as the medium
+
+Neither the PDF nor the document travels in an HTTP body. Cloud Run caps
+both request and response at 32 MiB for HTTP/1, and the document with its
+figure crops embedded at scale 4 was 22 MiB for the largest local paper
+(paper 2, a 5.9 MiB PDF) -- the response, not the request, was the limit
+that mattered. So the worker uploads the PDF to the exchange bucket, signs
+a read URL for it and a write URL for the result, and posts only those two
+and the options to `/v1/convert/source` (an `http` source and a `put`
+target). The service fetches the PDF, converts, and uploads the bundle --
+a zip holding `content.json` -- to the write URL; the response is a
+117-byte summary. The worker pulls the bundle and deletes both objects;
+the bucket's one-day lifecycle rule sweeps anything a crash leaves.
+
+One quirk, handled in `unwrap_multipart`: docling-jobkit's put target
+uploads as a multipart form (`files={"file": ...}`), and a signed PUT
+stores the body verbatim, so the object is the zip inside a form envelope,
+with the boundary in the object's content type. Newer docling-serve has a
+native Google Cloud Storage target that would remove the envelope, at the
+price of a newer docling than pyproject pins.
+
+Verified from dev-caa against the live service on 2026-11-02: paper 109
+in 16 s end to end (14 s on the server), a 3.2 MB bundle, the same
+document as the in-body call returned; through the full client, papers
+109 and 126 in 17 and 22 s with identical tables, figures and words.
 
 ### Versions
 
@@ -62,7 +93,7 @@ anywhere, and no operator holds build rights.
 
 ### What the worker keeps doing
 
-Only the converter call moves. The worker still crops tables and figures
+Only the conversion moves. The worker still crops tables and figures
 (`write_tables_and_images`), writes `words.json` (docling-parse, no model),
 runs table correction and builds `anchored.md`/`anchors.json`. Figures come
 back embedded in the document, already cropped at scale 4. Page renders do
@@ -125,17 +156,12 @@ together. A third would queue at Cloud Run with the lease running.
 3. **Sync or async.** The client holds one request open for the whole
    conversion, up to the server's `DOCLING_SERVE_MAX_SYNC_WAIT` of five
    minutes, ten times the longest conversion seen so far. docling-serve
-   also has `/v1/convert/file/async` with polling; it would survive a
+   also has `/v1/convert/source/async` with polling; it would survive a
    dropped connection, at the cost of a poll loop and task bookkeeping on
-   the worker. The 30-minute PDF Parsing lease (`lease_timeout_s`) covers
-   the sync wait with room for the cold start.
-4. **Request size.** The PDF goes in the request body. Cloud Run's HTTP/1
-   limit is 32 MB. The exchange bucket is there for the alternative: upload
-   the PDF, hand the service a signed URL as an `http_sources` entry of
-   `/v1/convert/source`, and optionally have it put the result bundle back
-   to a signed URL rather than hold the response open (docling-serve's
-   presigned-URL target). Both the client and the terraform grants are in
-   place for the worker to sign as its own service account.
+   the worker, and the bundle already lands in the bucket either way. The
+   30-minute PDF Parsing lease (`lease_timeout_s`) covers the sync wait
+   with room for the cold start. Not needed to switch.
+4. **Request and response size.** Settled by the bucket, above.
 5. **Retries and the cold start.** The first request after idle waits ~5
    minutes inside the same call; the worker's retry (`MAX_RETRIES`) covers a
    failed one. Whether to keep `min_instance_count` at 0 (free when idle)
@@ -147,7 +173,8 @@ together. A third would queue at Cloud Run with the lease running.
 
 ## Switching
 
-Set `PDF_PARSING_SERVICE_URL` in `infrastructure/ansible/templates/env.j2` to the
-terraform output and deploy. `remote.py` reads the identity token from the
-GCE metadata server on the VM, as the VM's service account, which the stack
-already allows to invoke. To go back, unset it and deploy.
+`infrastructure/ansible/templates/env.j2` sets `PDF_PARSING_SERVICE_URL` and
+`PDF_PARSING_EXCHANGE_BUCKET` to the terraform outputs; deploying switches
+the worker over. `remote.py` reads the identity token from the GCE metadata
+server on the VM and signs URLs as the VM's service account, which the
+stack allows to invoke and to sign. To go back, unset both and deploy.

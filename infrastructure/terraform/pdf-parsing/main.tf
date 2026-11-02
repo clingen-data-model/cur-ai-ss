@@ -236,6 +236,10 @@ resource "google_cloud_run_v2_service" "pdf_parsing" {
       # The image is rolled by the build workflow; the service is only
       # created on local.bootstrap_image.
       template[0].containers[0].image,
+      # The workflow rolls new images with gcloud, which also stamps the
+      # service with the client that made the change.
+      client,
+      client_version,
     ]
   }
 
