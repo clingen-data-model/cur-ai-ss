@@ -113,8 +113,14 @@ together. A third would queue at Cloud Run with the lease running.
    20k). Hence the derived image, `infrastructure/pdf-parsing/`: docling-
    serve's image plus a `sitecustomize.py` that installs the override at
    interpreter start, built by Cloud Build into the stack's own repository
-   (above). Confirm on the service with the rehearsal on papers 105, 109
-   and 113: the figures on pages 8, 11 and 2 should come back whole.
+   (above). **Confirmed 2026-11-02** once the stack was applied and the
+   workflow built `server:v1.23.0-c4b4043` (revision `pdf-parsing-00002`):
+   papers 105, 109 and 113 through the service give the figures on pages
+   8, 11 and 2 whole (135k, 236k and 131k points), every other picture
+   within a few points of the local override run, in 14 to 21 s each. The
+   first build attempt failed at `gcloud builds submit`: it reads the
+   staging bucket's metadata before uploading, which the builder's
+   objectAdmin grant does not cover, hence its Bucket Viewer grant.
 2. **OCR parity with the VM**, above.
 3. **Sync or async.** The client holds one request open for the whole
    conversion, up to the server's `DOCLING_SERVE_MAX_SYNC_WAIT` of five
