@@ -36,6 +36,7 @@ dependencies = [
     "hpo-toolkit>=0.7.0",
     # Office document generation
     "python-pptx>=0.6.23",
+    "google-cloud-storage>=3.17.1",
 ]
 
 [dependency-groups]

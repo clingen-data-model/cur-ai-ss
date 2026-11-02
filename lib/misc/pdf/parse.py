@@ -216,8 +216,16 @@ async def convert(
     """The Docling document of the file: from the PDF parsing service when
     ``PDF_PARSING_SERVICE_URL`` names one (PDFs only; ``lib.misc.pdf.remote``),
     else from the converter in this process."""
-    if supplement_format != FileFormat.DOCX and env.PDF_PARSING_SERVICE_URL:
-        return await convert_pdf_remote(content, base_url=env.PDF_PARSING_SERVICE_URL)
+    if (
+        supplement_format != FileFormat.DOCX
+        and env.PDF_PARSING_SERVICE_URL
+        and env.PDF_PARSING_EXCHANGE_BUCKET
+    ):
+        return await convert_pdf_remote(
+            content,
+            base_url=env.PDF_PARSING_SERVICE_URL,
+            bucket=env.PDF_PARSING_EXCHANGE_BUCKET,
+        )
     return convert_locally(content, supplement_format)
 
 

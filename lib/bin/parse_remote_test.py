@@ -10,7 +10,8 @@ agents read. The temporary root is deleted at the end unless ``--keep``.
     uv run python -m lib.bin.parse_remote_test paper.pdf [more.pdf ...] \\
         --url https://pdf-parsing-<hash>.run.app
 
-``--url`` defaults to PDF_PARSING_SERVICE_URL. ``--compare-local`` parses each PDF
+``--url`` and ``--bucket`` default to PDF_PARSING_SERVICE_URL and
+PDF_PARSING_EXCHANGE_BUCKET. ``--compare-local`` parses each PDF
 with the in-process converter as well and prints both side by side (minutes
 per paper on a laptop). Table correction, the vision-model step, is skipped
 unless ``--correct-tables``, so the rehearsal costs no model calls by default.
@@ -38,6 +39,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help='service base URL (default: $PDF_PARSING_SERVICE_URL)',
     )
     parser.add_argument(
+        '--bucket',
+        default=os.environ.get('PDF_PARSING_EXCHANGE_BUCKET'),
+        help='exchange bucket (default: $PDF_PARSING_EXCHANGE_BUCKET)',
+    )
+    parser.add_argument(
         '--compare-local',
         action='store_true',
         help='also parse with the in-process converter and print both',
@@ -53,6 +59,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if not args.url:
         parser.error('--url or PDF_PARSING_SERVICE_URL is required')
+    if not args.bucket:
+        parser.error('--bucket or PDF_PARSING_EXCHANGE_BUCKET is required')
     return args
 
 
@@ -87,10 +95,16 @@ def describe(document: Any, paper_id: int) -> dict[str, Any]:
 
 
 async def run_one(
-    pdf: Path, paper_id: int, *, url: str | None, correct: bool
+    pdf: Path,
+    paper_id: int,
+    *,
+    url: str | None,
+    bucket: str | None = None,
+    correct: bool,
 ) -> tuple[dict[str, Any], float]:
-    """Parse one PDF as paper ``paper_id``: remotely at ``url``, or locally
-    when ``url`` is None. Returns the description and the converter's seconds."""
+    """Parse one PDF as paper ``paper_id``: remotely at ``url`` through
+    ``bucket``, or locally when ``url`` is None. Returns the description and
+    the converter's seconds."""
     from lib.misc.pdf.parse import convert_locally, write_parse_outputs
     from lib.misc.pdf.paths import document_raw_path
     from lib.misc.pdf.remote import convert_pdf_remote
@@ -102,7 +116,8 @@ async def run_one(
 
     started = time.monotonic()
     if url:
-        document = await convert_pdf_remote(content, base_url=url)
+        assert bucket is not None
+        document = await convert_pdf_remote(content, base_url=url, bucket=bucket)
     else:
         document = convert_locally(content)
     elapsed = time.monotonic() - started
@@ -127,7 +142,11 @@ async def main_async(args: argparse.Namespace) -> None:
     for i, pdf in enumerate(args.pdfs):
         results: dict[str, tuple[dict[str, Any], float]] = {}
         results['remote'] = await run_one(
-            pdf, 2 * i + 1, url=args.url, correct=args.correct_tables
+            pdf,
+            2 * i + 1,
+            url=args.url,
+            bucket=args.bucket,
+            correct=args.correct_tables,
         )
         if args.compare_local:
             results['local'] = await run_one(
