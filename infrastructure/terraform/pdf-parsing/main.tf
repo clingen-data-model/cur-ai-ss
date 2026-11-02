@@ -162,6 +162,14 @@ resource "google_storage_bucket_iam_member" "builder_stages" {
   member = "serviceAccount:${google_service_account.builder.email}"
 }
 
+# `gcloud builds submit` reads the staging bucket's metadata before it
+# uploads, which objectAdmin does not cover.
+resource "google_storage_bucket_iam_member" "builder_sees_bucket" {
+  bucket = google_storage_bucket.build_source.name
+  role   = "roles/storage.bucketViewer"
+  member = "serviceAccount:${google_service_account.builder.email}"
+}
+
 resource "google_service_account_iam_member" "builder_runs_as_itself" {
   service_account_id = google_service_account.builder.name
   role               = "roles/iam.serviceAccountUser"
