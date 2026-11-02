@@ -10,8 +10,9 @@ agents read. The temporary root is deleted at the end unless ``--keep``.
     uv run python -m lib.bin.parse_remote_test paper.pdf [more.pdf ...] \\
         --url https://pdf-parsing-<hash>.run.app
 
-``--url`` and ``--bucket`` default to PDF_PARSING_SERVICE_URL and
-PDF_PARSING_EXCHANGE_BUCKET. ``--compare-local`` parses each PDF
+``--url`` and ``--bucket`` default to the PDF_PARSING_SERVICE_URL and
+PDF_PARSING_EXCHANGE_BUCKET settings (the environment or .env, so on dev-caa
+neither is needed). ``--compare-local`` parses each PDF
 with the in-process converter as well and prints both side by side (minutes
 per paper on a laptop). Table correction, the vision-model step, is skipped
 unless ``--correct-tables``, so the rehearsal costs no model calls by default.
@@ -34,14 +35,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('pdfs', nargs='+', type=Path, help='PDF files to parse')
     parser.add_argument(
-        '--url',
-        default=os.environ.get('PDF_PARSING_SERVICE_URL'),
-        help='service base URL (default: $PDF_PARSING_SERVICE_URL)',
+        '--url', help='service base URL (default: the PDF_PARSING_SERVICE_URL setting)'
     )
     parser.add_argument(
         '--bucket',
-        default=os.environ.get('PDF_PARSING_EXCHANGE_BUCKET'),
-        help='exchange bucket (default: $PDF_PARSING_EXCHANGE_BUCKET)',
+        help='exchange bucket (default: the PDF_PARSING_EXCHANGE_BUCKET setting)',
     )
     parser.add_argument(
         '--compare-local',
@@ -56,12 +54,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         '--keep', action='store_true', help='leave the temporary CAA_ROOT in place'
     )
-    args = parser.parse_args(argv)
-    if not args.url:
-        parser.error('--url or PDF_PARSING_SERVICE_URL is required')
-    if not args.bucket:
-        parser.error('--bucket or PDF_PARSING_EXCHANGE_BUCKET is required')
-    return args
+    return parser.parse_args(argv)
 
 
 def _count(path: Path, pattern: str) -> int:
@@ -169,6 +162,15 @@ def main(argv: list[str] | None = None) -> None:
         level=logging.INFO, format='%(levelname)s %(name)s: %(message)s'
     )
     try:
+        from lib.core.environment import env
+
+        args.url = args.url or env.PDF_PARSING_SERVICE_URL
+        args.bucket = args.bucket or env.PDF_PARSING_EXCHANGE_BUCKET
+        if not args.url or not args.bucket:
+            sys.exit(
+                '--url and --bucket are required unless PDF_PARSING_SERVICE_URL '
+                'and PDF_PARSING_EXCHANGE_BUCKET are set'
+            )
         asyncio.run(main_async(args))
     finally:
         if args.keep:
