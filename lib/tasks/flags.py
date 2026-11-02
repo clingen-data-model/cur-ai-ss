@@ -36,6 +36,23 @@ def match_label(about: str, labels: Iterable[tuple[str | None, int]]) -> int | N
     return None
 
 
+def patient_label(family: str, identifier: str) -> str:
+    """How a flag's ``about`` names a patient: the family then the identifier
+    ("Family 2 II-1"), since the family is not part of the identifier and two
+    families may each have a "II-1" or a "sister"."""
+    return f'{family} {identifier}'
+
+
+def patient_labels(
+    patients: Iterable[tuple[str, str, int]],
+) -> list[tuple[str, int]]:
+    """(label, id) for each (family, identifier, id), for ``match_label``."""
+    return [
+        (patient_label(family, identifier), row_id)
+        for family, identifier, row_id in patients
+    ]
+
+
 def flags_of(output: Any) -> list[AnyFlag]:
     """The flags list of an agent output, or none: a fallback block built by
     a handler when the agent gave up, or an output from before flags

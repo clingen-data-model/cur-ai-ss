@@ -193,7 +193,13 @@ from lib.tasks.extraction_verification import (
     open_flags,
     verification_input,
 )
-from lib.tasks.flags import flags_of, match_label, replace_flags, split_pair
+from lib.tasks.flags import (
+    flags_of,
+    match_label,
+    patient_labels,
+    replace_flags,
+    split_pair,
+)
 from lib.tasks.hpo_link_cache import (
     CachedHpoLink,
     is_cacheable,
@@ -918,7 +924,7 @@ async def handle_patient_extraction(task_id: int) -> None:
             family_entries_by_id[entry.family.identifier.value] = db_family.id
 
         # Insert patients (identity only; demographics filled by a later agent)
-        patient_ids_by_identifier: dict[str, int] = {}
+        inserted: list[tuple[str, str, int]] = []
         for patient_info in parsed.patients:
             db_patient = patient_identity_to_db(paper_id, patient_info)
             # Use family_identifier from patient to find correct family
@@ -930,10 +936,13 @@ async def handle_patient_extraction(task_id: int) -> None:
                 )
             session.add(db_patient)
             session.flush()
-            patient_ids_by_identifier[patient_info.identifier.value] = db_patient.id
+            inserted.append(
+                (family_id_value, patient_info.identifier.value, db_patient.id)
+            )
+        patient_label_ids = patient_labels(inserted)
 
         def resolve_patient_or_family(about: str) -> dict[str, int]:
-            patient_id = match_label(about, patient_ids_by_identifier.items())
+            patient_id = match_label(about, patient_label_ids)
             if patient_id is not None:
                 return {'patient_id': patient_id}
             family_id = match_label(about, family_entries_by_id.items())
@@ -1580,6 +1589,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             {
                 'patient_id': p.id,
                 'identifier': p.identifier,
+                'family': p.family.identifier,
                 'identifier_citations': cited_text(p.identifier_evidence),
             }
             for p in patient_rows
@@ -1643,9 +1653,9 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
                 paper.disease_name = parsed.disease_name.value
                 paper.disease_name_evidence = parsed.disease_name.model_dump()
 
-        patient_labels = [
-            (p['identifier'], p['patient_id']) for p in structured_patients
-        ]
+        patient_label_ids = patient_labels(
+            (p['family'], p['identifier'], p['patient_id']) for p in structured_patients
+        )
         variant_labels = [
             (v['variant_quote'], v['variant_id']) for v in structured_variants
         ]
@@ -1659,7 +1669,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             pair = split_pair(about)
             patient_half, variant_half = pair if pair else (about, about)
             links: dict[str, int] = {}
-            patient_id = match_label(patient_half, patient_labels)
+            patient_id = match_label(patient_half, patient_label_ids)
             if patient_id is not None:
                 links['patient_id'] = patient_id
             variant_id = match_label(variant_half, variant_labels)

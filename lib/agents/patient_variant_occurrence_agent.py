@@ -144,7 +144,10 @@ heterozygote's two variants each have their own):
     is the paper stating that person's result, exactly as a table cell
     reading "Het" is. The figure description carries these labels; cite
     the figure anchor and write the zygosity the label says;
-  - a genotyping figure read for that person: a Sanger trace described as
+  - a genotyping figure read for that person, under the label that figure
+    gives them (a figure that redraws a family with fewer generations numbers
+    from its own top row, so its II-4 is the full pedigree's III-4: match by
+    shared subject number, then position). A Sanger trace described as
     a double peak at the variant position is the paper reporting
     Heterozygous, a single mutant peak Homozygous (or Hemizygous where the
     paper says so); a restriction digest lane, a copy-number ratio or a read
@@ -229,10 +232,13 @@ heterozygote's two variants each have their own):
   paper gives it. Not a gene the paper merely screened and found negative.
 Not: a parent or sibling the paper reports as not carrying the variant (no
 link says that), nor a variant's notation (settled by the variant's own
-extraction and harmonization). The output carries a "flags" list. "about" is "patient identifier /
-variant quote" for a flag about one link -- always both halves, so the flag
-lands on that link; a patient identifier or variant quote alone for a flag
-about the patient or variant as a whole; null otherwise.
+extraction and harmonization). The output carries a "flags" list. A patient is
+named by their family then their identifier, both from the Patients JSON
+("Family 2 II-1"), since two families may each have a II-1. "about" is "family
+patient-identifier / variant quote" ("Family 2 II-1 / c.123A>G") for a flag
+about one link -- always both halves, so the flag lands on that link; the
+patient alone or the variant quote alone for a flag about the patient or
+variant as a whole; null otherwise.
 
 BEFORE RETURNING, CHECK:
 - Every variant the paper attributes to a patient by name has a link for that

@@ -668,3 +668,12 @@ def test_curator_feedback_rules_of_2026_10_29():
         in phenotype
     )
     assert 'not a relative it knows only by report' in phenotype
+
+
+def test_a_genotype_from_a_redrawn_pedigree_finds_its_patient():
+    """The gel under a shortened redrawing of the family labels people from
+    its own top row; the occurrence agent matches them to the full pedigree's
+    patients rather than linking a label nobody carries."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert 'redraws a family with fewer generations' in prompt
+    assert "its II-4 is the full pedigree's III-4" in prompt

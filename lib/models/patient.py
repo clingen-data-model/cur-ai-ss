@@ -522,6 +522,28 @@ class PatientExtractionOutput(BaseModel):
 
         return self
 
+    @model_validator(mode='after')
+    def validate_patients_named_apart(self) -> 'PatientExtractionOutput':
+        """No two patients share a family and an identifier. The family is not
+        part of the identifier, so two families may each have a II-1, but
+        within a family the identifier is the only thing telling people apart,
+        and a flag names a patient as family then identifier
+        (``lib.tasks.flags.patient_label``), compared with case and whitespace
+        ignored. A duplicate fails the output before any row is written; the
+        worker's retry is a fresh attempt."""
+        seen: dict[str, str] = {}
+        for p in self.patients:
+            label = f'{p.family_identifier.value} {p.identifier.value}'
+            key = ''.join(label.split()).casefold()
+            if key in seen:
+                raise ValueError(
+                    f'Two patients are named alike: "{seen[key]}" and "{label}". '
+                    'Give each a distinct identifier, as the identifier rules say '
+                    '(number or letter people the paper does not tell apart).'
+                )
+            seen[key] = label
+        return self
+
 
 class PatientDB(Base):
     __tablename__ = 'patients'
