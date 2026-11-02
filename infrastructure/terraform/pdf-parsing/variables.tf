@@ -1,13 +1,7 @@
-variable "image_tag" {
+variable "github_repository" {
   type        = string
-  description = <<-EOT
-    docling-serve release tag. Each release bundles one docling version (listed
-    in its GitHub release notes); keep this on the release that bundles the
-    docling pinned in pyproject.toml so the service runs the same models the
-    worker would. v1.23.0 is docling 2.82.0. Only some releases have a cu128
-    image: check the tag exists before bumping.
-  EOT
-  default     = "v1.23.0"
+  description = "The GitHub repository whose Actions runs on main may build and roll the image."
+  default     = "clingen-data-model/cur-ai-ss"
 }
 
 variable "max_instances" {

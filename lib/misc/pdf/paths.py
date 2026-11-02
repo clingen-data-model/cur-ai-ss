@@ -22,6 +22,10 @@ SUPPLEMENTARY_MATERIAL_HEADER = '# Supplementary Material'
 # which is also the number in the anchor ids (table-N, figure-N) printed into
 # anchored.md -- one numbering everywhere, assigned by Docling.
 
+# Tables and figures are cropped from page renders at this scale (4x 72 dpi),
+# whichever converter made the document.
+IMAGE_RESOLUTION_SCALE = 4.0
+
 
 def document_paper_dir(paper_id: int) -> Path:
     return env.documents_dir / str(paper_id)

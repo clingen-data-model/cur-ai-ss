@@ -57,7 +57,11 @@ RETRY_DELAY_S = 30
 # task is claimed only when a slot is free, and claiming it is starting it.
 GLOBAL_CONCURRENCY = 30
 TASK_CONCURRENCY: dict[TaskType, int] = {
-    TaskType.PDF_PARSING: 1,
+    # One Docling run already uses the whole VM CPU. Converting on the
+    # pdf-parsing service instead, the parse is a request held open, and the
+    # service takes two at once (infrastructure/terraform/pdf-parsing,
+    # var.concurrency): more than two would queue there against the lease.
+    TaskType.PDF_PARSING: 2 if env.PDF_PARSING_SERVICE_URL else 1,
     TaskType.VARIANT_HARMONIZATION: 10,
     TaskType.VARIANT_ANNOTATION: 10,
 }

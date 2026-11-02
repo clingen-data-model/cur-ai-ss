@@ -1,0 +1,76 @@
+# Build the pdf-parsing service image and roll the service onto it, on every
+# push to main that changes what goes into it. See
+# infrastructure/pdf-parsing/Dockerfile. Nothing is built anywhere but in
+# Cloud Build; to build by hand, dispatch this workflow.
+name: pdf-parsing image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - infrastructure/pdf-parsing/**
+      - lib/misc/pdf/layout.py
+      - .github/workflows/pdf-parsing-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # the OIDC token that workload identity federation exchanges
+
+concurrency:
+  group: pdf-parsing-image
+  cancel-in-progress: false
+
+env:
+  PROJECT: clingen-caa
+  REGION: us-east4
+  SERVICE: pdf-parsing
+  BUILDER: pdf-parsing-builder@clingen-caa.iam.gserviceaccount.com
+  REGISTRY: us-east4-docker.pkg.dev/clingen-caa
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No key anywhere: the run's GitHub OIDC token is exchanged for the
+      # builder account's credentials. Which runs may do so is in terraform
+      # (infrastructure/terraform/pdf-parsing: this repository, main only).
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/947684729458/locations/global/workloadIdentityPools/github/providers/github
+          service_account: pdf-parsing-builder@clingen-caa.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # The image is the docling-serve release in infrastructure/pdf-parsing/
+      # base-tag (through the ghcr proxy repository) plus the layout
+      # override, tagged <base>-<commit>.
+      - name: Name the image
+        run: |
+          base_tag="$(tr -d '[:space:]' < infrastructure/pdf-parsing/base-tag)"
+          echo "BASE_IMAGE=${REGISTRY}/ghcr/docling-project/docling-serve-cu128:${base_tag}" >> "$GITHUB_ENV"
+          echo "IMAGE=${REGISTRY}/pdf-parsing/server:${base_tag}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      # Only what the Dockerfile copies goes to Cloud Build, staged in the
+      # stack's build bucket (gcloud uploads it there; the build reads it).
+      - name: Build with Cloud Build
+        run: |
+          context="$(mktemp -d)"
+          cp infrastructure/pdf-parsing/Dockerfile \
+             infrastructure/pdf-parsing/sitecustomize.py \
+             infrastructure/pdf-parsing/cloudbuild.yaml \
+             lib/misc/pdf/layout.py \
+             "$context/"
+          gcloud builds submit "$context" \
+            --project="$PROJECT" --region="$REGION" \
+            --config="$context/cloudbuild.yaml" \
+            --service-account="projects/${PROJECT}/serviceAccounts/${BUILDER}" \
+            --gcs-source-staging-dir="gs://${PROJECT}-pdf-parsing-build/source" \
+            --substitutions="_BASE_IMAGE=${BASE_IMAGE},_IMAGE=${IMAGE}"
+
+      - name: Roll the service onto it
+        run: |
+          gcloud run services update "$SERVICE" \
+            --project="$PROJECT" --region="$REGION" --image="$IMAGE" --quiet

@@ -70,6 +70,12 @@ class Env(BaseSettings):
     JWT_ALGORITHM: str = 'HS256'
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
+    # The PDF parsing service: base URL of the docling-serve instance on a Cloud
+    # Run GPU (infrastructure/terraform/pdf-parsing). Set, the worker's PDF
+    # Parsing step sends each PDF there instead of running Docling's models in
+    # this process (lib/misc/pdf/remote.py); unset, the parse is local as before.
+    PDF_PARSING_SERVICE_URL: Optional[str] = None
+
     # Directories
     CAA_ROOT: str = '/var/caa'
     SQLLITE_DIR: str = 'sqllite'
