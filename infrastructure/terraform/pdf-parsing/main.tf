@@ -377,4 +377,14 @@ resource "google_service_account_iam_member" "worker_signs_as_itself" {
   member             = "serviceAccount:${data.terraform_remote_state.dev.outputs.service_account_email}"
 }
 
+# An operator rehearsing from a laptop (lib.bin.parse_remote_test) signs as
+# the VM's account too, through an application-default login that
+# impersonates it, which this role allows.
+resource "google_service_account_iam_member" "operators_sign_as_worker" {
+  for_each           = toset(var.invokers)
+  service_account_id = google_service_account_iam_member.worker_signs_as_itself.service_account_id
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = each.value
+}
+
 # The service needs no grant: it only ever sees signed URLs.

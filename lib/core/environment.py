@@ -75,6 +75,10 @@ class Env(BaseSettings):
     # Parsing step sends each PDF there instead of running Docling's models in
     # this process (lib/misc/pdf/remote.py); unset, the parse is local as before.
     PDF_PARSING_SERVICE_URL: Optional[str] = None
+    # The bucket the PDF and the converted document pass through (neither
+    # travels in an HTTP body); the stack's `exchange_bucket` output. Required
+    # with the URL.
+    PDF_PARSING_EXCHANGE_BUCKET: Optional[str] = None
 
     # Directories
     CAA_ROOT: str = '/var/caa'
@@ -103,6 +107,14 @@ class Env(BaseSettings):
     def validate_ncbi_settings(self) -> 'Env':
         if self.NCBI_API_KEY and not self.NCBI_EMAIL:
             raise ValueError('If NCBI_API_KEY is specified, NCBI_EMAIL is required.')
+        return self
+
+    @model_validator(mode='after')
+    def validate_pdf_parsing_service(self) -> 'Env':
+        if self.PDF_PARSING_SERVICE_URL and not self.PDF_PARSING_EXCHANGE_BUCKET:
+            raise ValueError(
+                'PDF_PARSING_EXCHANGE_BUCKET is required with PDF_PARSING_SERVICE_URL'
+            )
         return self
 
     @model_validator(mode='after')
