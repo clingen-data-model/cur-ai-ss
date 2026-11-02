@@ -160,6 +160,46 @@
           - libglib2.0-0
         state: present
 
+    # --- Swap ---
+    # A 2 GB cushion. The VM has no swap otherwise, and a memory spike during a
+    # deploy's frontend build would take out the worker rather than slow it;
+    # swappiness 10 keeps it for that, not for routine paging.
+    - name: Create swap file
+      command: fallocate -l 2G /swapfile
+      args:
+        creates: /swapfile
+
+    - name: Restrict swap file permissions
+      file:
+        path: /swapfile
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Format swap file
+      command: mkswap /swapfile
+      when: ansible_swaptotal_mb < 1024
+      register: mkswap_result
+
+    - name: Enable swap file
+      command: swapon /swapfile
+      when: mkswap_result is changed
+
+    - name: Keep swap across reboots
+      mount:
+        src: /swapfile
+        path: none
+        fstype: swap
+        opts: sw
+        state: present
+
+    - name: Prefer RAM, keep swap for spikes
+      sysctl:
+        name: vm.swappiness
+        value: "10"
+        sysctl_set: yes
+        state: present
+
     # --- User Setup ---
 
     - name: Create CAA user
