@@ -174,7 +174,7 @@ export function ExtractionPage() {
               variant="outline"
               size="sm"
               render={<Link to="/papers/$paperId/review" params={{ paperId: String(paperId) }} />}
-              title="Walk the paper's cases beside the PDF and sign each off"
+              title="Walk the paper's families beside the PDF, confirming each family's patient-variant occurrences"
             >
               <ClipboardCheck className="h-4 w-4 mr-2" />
               Review Mode

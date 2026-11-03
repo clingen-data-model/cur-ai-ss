@@ -32,7 +32,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Check, ChevronLeft, Flag, Highlighter, Undo2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronLeft, Flag, Highlighter, Info, Undo2 } from 'lucide-react'
 import {
   getFamiliesPapersPaperIdFamiliesGet,
   getSegregationAnalysisPapersPaperIdSegregationAnalysisGet,
@@ -40,6 +40,7 @@ import {
 import { ReviewStatus } from '@/api/generated/types.gen'
 import type { Citation, FlagResp, PatientResp, VariantResp } from '@/api/generated/types.gen'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -297,16 +298,35 @@ export function ReviewPage() {
                   <ArrowRight className="size-4" />
                 </Button>
               </div>
-              <div className="text-xs text-muted-foreground">
-                Family {cases.length ? currentIndex + 1 : 0} of {cases.length} · {confirmedCases} confirmed ·{' '}
-                {progress.confirmed}/{progress.total} occurrences
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>
+                  Family {cases.length ? currentIndex + 1 : 0} of {cases.length} · {confirmedCases} confirmed ·{' '}
+                  {progress.confirmed}/{progress.total} occurrences
+                </span>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={<span className="inline-flex items-center gap-1 cursor-help" />}
+                    aria-label="What is reviewed here"
+                  >
+                    <Info className="size-3.5" />
+                    Families with an occurrence
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-72 text-left">
+                    Review Mode walks the families that have at least one patient-variant occurrence, in the
+                    paper's order. Confirming a family stamps its occurrences; the paper's review completes when
+                    every occurrence is stamped. Patients with no linked variant, variants linked to no patient
+                    and flags about nothing extracted are not part of the review and stay on the paper page's
+                    tabs.
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
               {!current ? (
                 <p className="text-sm text-muted-foreground">
-                  Nothing to review yet: no patient of this paper is linked to a variant.
+                  Nothing to review yet: Review Mode walks the families with at least one patient-variant
+                  occurrence, and this paper has none.
                 </p>
               ) : (
                 <>
