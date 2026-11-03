@@ -7,8 +7,8 @@
  * "0 extracting" would be noise occupying the header for the state it spends
  * almost all its time in.
  */
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { Loader2, RefreshCw } from 'lucide-react'
 import {
@@ -64,6 +64,7 @@ function PaperRow({ paper, stats }: { paper: PaperSummaryResp; stats?: TaskStats
 }
 
 export function ActivityIndicator() {
+  const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: ['papers', 'active'],
     queryFn: () => listActivePapersPapersActiveGet(),
@@ -74,6 +75,20 @@ export function ActivityIndicator() {
   })
 
   const papers = data ?? []
+
+  // The table's status badges come from GET /papers, which is deliberately
+  // not polled (this is the one polled endpoint; see list_active_papers).
+  // Their value changes exactly when a paper enters or leaves the active set,
+  // so refresh the lists then, once, rather than on a timer.
+  const activeIds = papers.map((p) => p.id).sort((a, b) => a - b).join(',')
+  const previousIds = useRef(activeIds)
+  useEffect(() => {
+    if (activeIds === previousIds.current) return
+    previousIds.current = activeIds
+    queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey[0] === 'papers' && query.queryKey[1] !== 'active',
+    })
+  }, [activeIds, queryClient])
 
   // Shared with the card popovers, and only fetched once something is running.
   const { data: stats } = useQuery({

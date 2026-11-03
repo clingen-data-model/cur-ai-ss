@@ -566,7 +566,7 @@ def list_active_papers(
     Both non-terminal states count, which is the whole of the task lifecycle
     before a handler finishes:
 
-      PENDING  enqueued, not yet claimed. The scheduler polls every 10s, and
+      PENDING  enqueued, not yet claimed. The scheduler polls every 5s, and
                with PDF parsing limited to one at a time a second paper waits
                here for the length of the first paper's parse.
       RUNNING  a handler is executing it.

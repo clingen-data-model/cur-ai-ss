@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { listPapersPapersGet } from '@/api/generated'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
-import { pollWhileInFlight } from '@/lib/polling'
 
 export type { PaperSummaryResp, TaskType }
 
@@ -22,9 +21,6 @@ export function useGeneTable() {
     queryKey: ['papers'],
     queryFn: () => listPapersPapersGet({}),
     staleTime: STALE_TIME,
-    // The status badges would otherwise sit at whatever the last fetch said
-    // for up to STALE_TIME while a paper runs.
-    refetchInterval: (query) => pollWhileInFlight(query.state.data),
   })
 
   const { rows, papersByGene } = useMemo(() => {
