@@ -311,8 +311,8 @@ Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`.
 
 **OpenAI agents:** Uses `openai_agents.Runner` for structured outputs. Models must have Pydantic schema for OpenAI to use as response schema.
 
-**Deployment:** One GCP VM (`dev-caa`, domain `gene-curation-ai.app`) behind nginx:
-FastAPI at `/api/` (prefix stripped), the React SPA's static build at `/`. Deploy with `ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
+**Deployment:** One GCP VM (instance `dev-caa-2`; the address, service account and secrets are named `dev-caa`; domain `gene-curation-ai.app`) behind nginx:
+FastAPI at `/api/` (prefix stripped), the React SPA's static build at `/`. Deploy with `ansible-playbook -i dev-caa-2.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
 which pulls `main` from GitHub — so changes must be merged and pushed before deploying.
 See the Deployment section of `README.md`.
 

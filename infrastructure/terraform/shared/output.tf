@@ -1,9 +1,9 @@
 output "network" {
   description = "Default VPC network"
   value = {
-    id         = google_compute_network.default.id
-    name       = google_compute_network.default.name
-    self_link  = google_compute_network.default.self_link
+    id        = google_compute_network.default.id
+    name      = google_compute_network.default.name
+    self_link = google_compute_network.default.self_link
   }
 }
 
