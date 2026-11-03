@@ -76,18 +76,53 @@ def test_the_container_wins_without_asking_docling(monkeypatch):
     assert layout._select_keeping_the_container(object(), [*PANELS, WHOLE], {}) is WHOLE  # type: ignore[arg-type]
 
 
+# The same figure boxed from the other renderer's page image: the whole-figure
+# box just under Docling's bar, where it would be cut before grouping.
+WEAK_WHOLE = _picture(9, 57, 37, 355, 476, 0.48)
+
+
+def test_a_weak_box_around_two_or_more_panels_is_a_whole_figure():
+    assert layout.whole_figure_boxes([*PANELS, WEAK_WHOLE]) == [WEAK_WHOLE]
+
+
+def test_a_weak_box_around_one_panel_is_a_duplicate_not_a_figure():
+    duplicate = _picture(9, 55, 390, 300, 478, 0.48)  # F again, a touch larger
+    assert layout.whole_figure_boxes([*PANELS, duplicate]) == []
+
+
+def test_a_weak_box_inside_a_confident_one_is_not_a_figure():
+    inner = _picture(9, 60, 140, 345, 340, 0.45)  # around B, D and E, inside WHOLE
+    assert layout.whole_figure_boxes([*PANELS, WHOLE, inner]) == []
+
+
+def test_a_box_above_the_bar_needs_no_promotion():
+    assert layout.whole_figure_boxes([*PANELS, WHOLE]) == []
+
+
+def test_promotion_lifts_the_box_to_the_bar_and_touches_nothing_else():
+    weak = WEAK_WHOLE.model_copy()
+    panels = [p.model_copy() for p in PANELS]
+    layout.promote_whole_figures([*panels, weak])
+    assert weak.confidence == layout.PICTURE_BAR == 0.5
+    assert [p.confidence for p in panels] == [p.confidence for p in PANELS]
+
+
 def test_the_override_is_installed_on_the_pinned_docling():
     # parse.py installs it at import; the class is shared with Docling's own
-    # layout stage, so the attribute is the whole mechanism.
+    # layout stage, so the attributes are the whole mechanism.
     layout.install()
     assert layout.installed()
-    # The replaced method still exists upstream with the signature we wrap.
+    # The replaced methods still exist upstream with the signatures we wrap.
     params = list(inspect.signature(layout._select_docling).parameters)
     assert params == ['self', 'group_clusters', 'params']
+    params = list(inspect.signature(layout._init_docling).parameters)
+    assert params == ['self', 'page', 'clusters', 'options']
     assert (
         LayoutPostprocessor._select_best_cluster_from_group
         is layout._select_keeping_the_container
     )
+    assert LayoutPostprocessor.__init__ is layout._init_promoting_whole_figures
+    assert LayoutPostprocessor.CONFIDENCE_THRESHOLDS[DocItemLabel.PICTURE] == 0.5
 
 
 def test_layout_module_imports_nothing_from_lib():

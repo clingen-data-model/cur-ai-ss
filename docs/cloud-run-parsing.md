@@ -60,9 +60,10 @@ the bucket's one-day lifecycle rule sweeps anything a crash leaves.
 One quirk, handled in `unwrap_multipart`: docling-jobkit's put target
 uploads as a multipart form (`files={"file": ...}`), and a signed PUT
 stores the body verbatim, so the object is the zip inside a form envelope,
-with the boundary in the object's content type. Newer docling-serve has a
+with the boundary in the object's content type. docling-serve also has a
 native Google Cloud Storage target that would remove the envelope, at the
-price of a newer docling than pyproject pins.
+price of giving the service its own bucket credentials instead of a signed
+URL.
 
 Verified from dev-caa against the live service on 2026-11-02: paper 109
 in 16 s end to end (14 s on the server), a 3.2 MB bundle, the same
@@ -71,14 +72,32 @@ document as the in-body call returned; through the full client, papers
 
 ### Versions
 
-docling-serve v1.23.0 bundles docling 2.82.0, the version `pyproject.toml`
-pins, so the service runs the same layout and table models the worker would.
-The document schema is the same (`1.10.0`) in every docling-core up to the
-newest, so a newer docling-serve's JSON also loads in the pinned
-docling-core; the pin is about model parity, not about reading the response.
-Bump `infrastructure/pdf-parsing/base-tag` together with the docling pin,
-and check the `cu128` image exists for the tag first (some releases have
-none); the push builds and rolls the new image.
+docling-serve v1.38.2 locks docling 2.142.1 (as `docling-slim`, the same
+code without the CPU-only extras), the version `pyproject.toml` pins, so the
+service runs the same layout and table models the worker would. Keep the two
+together: the first service release, v1.23.0, was taken for a docling 2.82.0
+build and actually locked 2.102.1, and the day's comparison of its output
+against the VM's showed paragraph splits, caption links and a merged table
+header that were all the newer docling, not the GPU. The document schema is
+the same (`1.10.0`) in every docling-core up to the newest, so a newer
+docling-serve's JSON also loads in an older docling-core; the pin is about
+model parity, not about reading the response. To bump: read the release's
+`uv.lock` on GitHub for its `docling-slim` version, pin docling to that,
+check the `cu128` image exists for the tag (some releases have none), set
+`infrastructure/pdf-parsing/base-tag`, and run the test suite -- docling's
+geometry conventions move between versions (2.142 put rotated-page text
+boxes in the displayed frame, where 2.82 had them in user space). The push
+builds and rolls the new image; deploy the VM after it so the worker's
+docling-core matches.
+
+The backend is docling-parse (docling's default) on both sides since the
+2.142 bump. The pypdfium2 backend the pipeline had used reports whole
+lines as text cells, so TableFormer put every row of a table in its first
+column and the vision judge was rebuilding nearly every table from its
+image (30 of 31 across the local test papers); with word cells the grids
+parse right and the judge rebuilds fewer (3 of the 8 tables of papers
+105, 109 and 113 on 2026-11-02, for split superscripts and a doubled
+header, against 8 of 8 before).
 
 ### Building the image
 

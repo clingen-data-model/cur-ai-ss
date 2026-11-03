@@ -27,16 +27,18 @@ One thing the service does not send back is rebuilt here: page renders.
 Docling keeps a render of every page in the document and crops table images
 out of them (``TableItem.get_image``). The service is asked not to include
 them (at scale 4 a page is ~20 MB) and the pages that carry a table are
-rendered again locally with the same backend (pypdfium2) at the same scale
--- cheap and model-free -- so the crops come out as they would from the
-in-process run. Figures arrive embedded in the document (``image_export_mode``
-embedded), already cropped by the service.
+rendered again locally with pypdfium2 at the same scale -- cheap and
+model-free; the parsing backend has no random page access -- so the crops
+come out as they would from the in-process run (both backends report the
+same page geometry). Figures arrive embedded in the document
+(``image_export_mode`` embedded), already cropped by the service.
 
-The request options mirror ``parse.convert_locally`` (pypdfium2 backend,
-accurate tables, OCR on, scale 4), and the pinned docling-serve release
-bundles the docling version pyproject pins, so the service runs the same
-models, with the post-processing override in ``lib.misc.pdf.layout``
-installed in its image. See docs/cloud-run-parsing.md.
+The request options mirror ``parse.convert_locally`` (docling-parse backend,
+accurate tables, OCR on, scale 4). The service is docling-serve, whose
+release (``infrastructure/pdf-parsing/base-tag``) is kept at the one locking
+the docling version pyproject pins, so the service runs the same models,
+with the post-processing override in ``lib.misc.pdf.layout`` installed in its
+image. See docs/cloud-run-parsing.md.
 
 Calls carry a Google identity token; the Cloud Run service admits only the
 IAM members the terraform stack names (the VM's service account, and
@@ -72,7 +74,7 @@ logger = logging.getLogger(__name__)
 
 CONVERT_PATH = '/v1/convert/source'
 
-# What ``convert_locally`` configures the pipeline with: pypdfium2 backend,
+# What ``convert_locally`` configures the pipeline with: docling-parse backend,
 # OCR, accurate table structure, figure crops at the scale tables and figures
 # are stored at. Page renders are not sent back (module docstring), and a
 # failed page fails the request, as the in-process converter raises.
@@ -82,7 +84,7 @@ CONVERT_OPTIONS: dict[str, Any] = {
     'include_images': True,
     'include_page_images': False,
     'images_scale': IMAGE_RESOLUTION_SCALE,
-    'pdf_backend': 'pypdfium2',
+    'pdf_backend': 'docling_parse',
     'do_ocr': True,
     'do_table_structure': True,
     'table_mode': 'accurate',

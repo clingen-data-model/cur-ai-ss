@@ -12,9 +12,9 @@
 # that touches these inputs: it stages this file, layout.py and
 # sitecustomize.py, runs Cloud Build (no docker is needed anywhere but
 # there) and rolls the service onto the result. The base tag, in base-tag
-# beside this file, is the docling-serve release that bundles the docling
-# version pyproject.toml pins; the built tag is the base tag and the short
-# commit.
+# beside this file, is the docling-serve release that locks the docling
+# version pyproject.toml pins (its uv.lock names the docling-slim version);
+# the built tag is the base tag and the short commit.
 
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}

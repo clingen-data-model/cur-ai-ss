@@ -137,17 +137,18 @@ def test_build_anchored_boxes(paper_id):
     _, anchors = build_anchored(_document(), paper_id=paper_id)
     by_id = {a.id: a for a in anchors}
 
-    # Boxes are in PDF user space (bottom-left origin, y up). Text prov is
-    # already there: x = l, y = b, height = t - b.
+    # Boxes are in PDF user space (bottom-left origin, y up). With no raw.pdf
+    # on disk the page counts as unrotated at the origin, so the displayed
+    # frame's conversion is just the y flip and Docling's numbers come
+    # through: x = l, y = b, height = t - b.
     assert by_id['paragraph-1'].boxes == [
         PageBox(page_no=1, x=10, y=680, width=190, height=20)
     ]
-    # Table/picture prov is in the displayed frame; with no raw.pdf on disk the
-    # page counts as unrotated at the origin, so that is just the y flip too.
+    # The same for the picture's prov.
     assert by_id['figure-0'].boxes == [
         PageBox(page_no=1, x=10, y=340, width=290, height=60)
     ]
-    # The legend is its own text item: user-space prov, kept apart from the picture.
+    # The legend is its own text item, kept apart from the picture.
     assert by_id['figure-0'].caption_boxes == [
         PageBox(page_no=1, x=10, y=320, width=290, height=15)
     ]
@@ -171,17 +172,19 @@ def _write_pdf(paper_id: int, *, width: float, height: float, rotation: int) -> 
     pdf.save(path)
 
 
-def test_rotated_page_boxes_are_in_user_space(paper_id):
+def test_rotated_page_boxes_come_out_in_user_space(paper_id):
     # Paper 74 page 7 in miniature: a 595x794 page with /Rotate 90, so it is
     # displayed 794 wide and 595 tall and Docling reports size=794x595.
     _write_pdf(paper_id, width=595, height=794, rotation=90)
     doc = DoclingDocument(name='rotated')
     doc.add_page(page_no=1, size=Size(width=794, height=595))
-    # Text prov: user space, a tall strip (the row runs up the unrotated page).
+    # Text prov: displayed frame like everything else since docling 2.142, a
+    # row of the table read across the displayed page (docling-core would
+    # clamp the user-space strip of the same row, t=693, to the page's 595).
     doc.add_text(
         label=DocItemLabel.TEXT,
         text='Any ICD (ICD + CRT-D) 30.1%',
-        prov=_bottom_left(333, 693, 364, 64),
+        prov=_bottom_left(64, 262, 693, 231),
     )
     # Table prov: displayed frame, BOTTOMLEFT over the displayed height 595.
     cells = [
@@ -207,10 +210,12 @@ def test_rotated_page_boxes_are_in_user_space(paper_id):
     _, anchors = build_anchored(doc, paper_id=paper_id)
     by_id = {a.id: a for a in anchors}
 
+    # Displayed TOPLEFT (64, 333, 693, 364); rotation-90 inverse x = Y, y = X:
+    # a tall strip, the row running up the unrotated page.
     assert by_id['paragraph-0'].boxes == [
         PageBox(page_no=1, x=333, y=64, width=31, height=629)
     ]
-    # Displayed TOPLEFT (59, 177, 730, 407); rotation-90 inverse x = Y, y = X.
+    # Displayed TOPLEFT (59, 177, 730, 407) the same way.
     table = by_id['table-0']
     assert table.boxes == [PageBox(page_no=1, x=177, y=59, width=230, height=671)]
     # Data row cells: displayed TOPLEFT (60, 200, 660, 220) -> x 200..220, y 60..660.
@@ -586,7 +591,8 @@ def test_text_clipped_off_the_page_is_left_out(paper_id):
         label=DocItemLabel.TEXT, text='above', prov=_bottom_left(6, 931, 72, 923)
     )
     doc.add_heading('Clipped heading', level=1, prov=_bottom_left(10, -398, 200, -408))
-    # Straddling the bottom edge: part of it shows, so it stays, box and all.
+    # Straddling the bottom edge: part of it shows, so it stays, with the box
+    # docling-core clamps to the page (the 5 points below it are cut off).
     doc.add_text(
         label=DocItemLabel.TEXT, text='edge', prov=_bottom_left(10, 5, 200, -5)
     )
@@ -608,7 +614,7 @@ def test_text_clipped_off_the_page_is_left_out(paper_id):
     )
     assert [(a.id, a.boxes) for a in anchors] == [
         ('paragraph-0', [PageBox(page_no=1, x=10, y=680, width=190, height=20)]),
-        ('paragraph-4', [PageBox(page_no=1, x=10, y=-5, width=190, height=10)]),
+        ('paragraph-4', [PageBox(page_no=1, x=10, y=0, width=190, height=5)]),
         ('paragraph-5', [PageBox(page_no=1, x=10, y=40, width=190, height=20)]),
         ('paragraph-6', [PageBox(page_no=1, x=10, y=190, width=290, height=10)]),
     ]

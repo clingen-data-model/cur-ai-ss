@@ -16,9 +16,24 @@ contains every other, that container wins. For a figure that is the whole
 figure, which is what the vision step wants to see anyway (every panel, read
 together under the one caption). A group with no such container, two
 detections of one object or boxes that merely overlap, falls back to
-Docling's own choice. The layout options expose no switch for this, so the
-method is replaced on the class; docling is pinned (pyproject) and the
-replacement is checked by test_layout.py against that version's signature.
+Docling's own choice.
+
+The whole-figure box is a weak detection, and the post-processor drops any
+picture under a confidence of 0.5 before it groups anything, so the box has
+to clear that bar for the rule above to matter. It clears it by a hair or
+not at all: paper 113's Figure 1 box came in at 0.52 from one PDF
+renderer's page image and 0.48 from another's on 2026-11-02 (the pypdfium2
+and docling-parse backends on docling 2.142.1), and at 0.48 the figure
+split into its five panels. So the second half of the override runs before
+the bar: a picture below it that contains two or more pictures above it,
+and is contained by none, is a box around a whole figure and is lifted to
+the bar (``promote_whole_figures``). One contained picture is just a
+duplicate detection, which stays below the bar as Docling meant.
+
+The layout options expose no switch for either, so the group selection and
+the post-processor's constructor are replaced on the class; docling is
+pinned (pyproject) and the replacements are checked by test_layout.py
+against that version's signatures.
 """
 
 from typing import Any
@@ -64,13 +79,61 @@ def _select_keeping_the_container(
     return _select_docling(self, group_clusters, params)
 
 
+# The confidence a picture needs to survive the post-processor's first cut.
+PICTURE_BAR = LayoutPostprocessor.CONFIDENCE_THRESHOLDS[DocItemLabel.PICTURE]
+
+
+def whole_figure_boxes(clusters: list[Cluster]) -> list[Cluster]:
+    """The pictures below the bar that are a box around two or more pictures
+    above it (containing each, contained by none): the whole-figure detections
+    the bar would otherwise drop."""
+    pictures = [c for c in clusters if c.label == DocItemLabel.PICTURE]
+    confident = [c for c in pictures if c.confidence >= PICTURE_BAR]
+    found = []
+    for candidate in pictures:
+        if candidate.confidence >= PICTURE_BAR or any(
+            candidate.bbox.intersection_over_self(c.bbox) > CONTAINMENT
+            for c in confident
+        ):
+            continue
+        panels = [
+            p
+            for p in confident
+            if p.bbox.intersection_over_self(candidate.bbox) > CONTAINMENT
+        ]
+        if len(panels) >= 2:
+            found.append(candidate)
+    return found
+
+
+def promote_whole_figures(clusters: list[Cluster]) -> None:
+    """Lift every whole-figure box to the bar, in place."""
+    for cluster in whole_figure_boxes(clusters):
+        cluster.confidence = PICTURE_BAR
+
+
+_init_docling = LayoutPostprocessor.__init__
+
+
+def _init_promoting_whole_figures(
+    self: LayoutPostprocessor, *args: Any, **kwargs: Any
+) -> None:
+    _init_docling(self, *args, **kwargs)
+    # The constructor has split the clusters by type; the picture cut is
+    # taken from ``special_clusters`` when the pictures are processed.
+    promote_whole_figures(self.special_clusters)
+
+
 def install() -> None:
-    """Replace the group selection on Docling's post-processor; idempotent."""
+    """Replace the group selection and the constructor on Docling's
+    post-processor; idempotent."""
     LayoutPostprocessor._select_best_cluster_from_group = _select_keeping_the_container  # type: ignore[method-assign]
+    LayoutPostprocessor.__init__ = _init_promoting_whole_figures  # type: ignore[method-assign]
 
 
 def installed() -> bool:
     return (
         LayoutPostprocessor._select_best_cluster_from_group
         is _select_keeping_the_container
+        and LayoutPostprocessor.__init__ is _init_promoting_whole_figures
     )

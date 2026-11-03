@@ -7,7 +7,7 @@ from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
 
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+from docling.backend.docling_parse_backend import ThreadedDoclingParseDocumentBackend
 from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import (
@@ -192,7 +192,13 @@ def convert_locally(
     else:
         format_options = {
             InputFormat.PDF: PdfFormatOption(
-                backend=PyPdfiumDocumentBackend,
+                # Docling's default backend. The pypdfium2 one used from
+                # 2026-04 to 2026-11 reports whole lines as text cells, so
+                # TableFormer put every row of a table in its first column
+                # and the vision judge rebuilt 30 of the 31 tables of the
+                # local papers from their images; docling-parse gives word
+                # cells and the grids come out right (papers 106, 109, 113).
+                backend=ThreadedDoclingParseDocumentBackend,
                 pipeline_options=PdfPipelineOptions(
                     images_scale=IMAGE_RESOLUTION_SCALE,
                     # Page renders are what the table and picture crops are
@@ -242,7 +248,11 @@ async def write_parse_outputs(
     ``correct`` is off) anchored.md, anchors.json and the _SUCCESS marker."""
     write_tables_and_images(document, paper_id, supplement=supplement)
 
-    words_json = parse_words_json(BytesIO(content))
+    # A DOCX has no page geometry to place words on; docling-parse 7 raises on
+    # anything but a PDF where older releases returned no pages.
+    words_json = (
+        [] if not content.startswith(b'%PDF') else parse_words_json(BytesIO(content))
+    )
     with open(document_words_json_path(paper_id, supplement=supplement), 'w') as fp:
         json.dump([w.model_dump() for w in words_json], fp, indent=2)
 
