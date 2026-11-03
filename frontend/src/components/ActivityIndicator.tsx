@@ -76,26 +76,36 @@ export function ActivityIndicator() {
 
   const papers = data ?? []
 
-  // The table's status badges come from GET /papers, which is deliberately
-  // not polled (this is the one polled endpoint; see list_active_papers).
-  // Their value changes exactly when a paper enters or leaves the active set,
-  // so refresh the lists then, once, rather than on a timer; and the queries
-  // of each paper that entered or left, so an open paper page learns that
-  // its pipeline started (someone else queued it) or finished.
-  const activeIds = papers.map((p) => p.id).sort((a, b) => a - b).join(',')
-  const previousIds = useRef(activeIds)
+  // This is the one polled endpoint (see list_active_papers), and its answer
+  // carries the signal every other view needs: which papers are in flight,
+  // and per paper when a task last changed state. Nothing else polls.
+  //
+  // A paper entering or leaving the set is when the table's status badges
+  // change, so the papers lists are refreshed then, once. A paper's stamp
+  // moving is a task of it finishing (or starting), so every query keyed on
+  // that paper -- its page's own paper, patients, variants, occurrences,
+  // flags -- is refreshed then, and a section on "fills in once it completes"
+  // fills in. A paper leaving the set counts as a change too, for the last
+  // task.
+  const stamps = papers.map((p) => `${p.id}:${p.tasks_changed_at ?? ''}`).sort().join(',')
+  const previousStamps = useRef(stamps)
   useEffect(() => {
-    if (activeIds === previousIds.current) return
-    const before = new Set(previousIds.current.split(',').filter(Boolean).map(Number))
-    const after = new Set(activeIds.split(',').filter(Boolean).map(Number))
-    const changed = new Set([...before, ...after].filter((id) => before.has(id) !== after.has(id)))
-    previousIds.current = activeIds
+    if (stamps === previousStamps.current) return
+    const parse = (s: string) =>
+      new Map(s.split(',').filter(Boolean).map((e) => [Number(e.split(':')[0]), e]))
+    const before = parse(previousStamps.current)
+    const after = parse(stamps)
+    previousStamps.current = stamps
+    const changed = new Set(
+      [...before.keys(), ...after.keys()].filter((id) => before.get(id) !== after.get(id)),
+    )
+    const setChanged = [...changed].some((id) => before.has(id) !== after.has(id))
     queryClient.invalidateQueries({
       predicate: (query) =>
-        (query.queryKey[0] === 'papers' && query.queryKey[1] !== 'active') ||
+        (setChanged && query.queryKey[0] === 'papers' && query.queryKey[1] !== 'active') ||
         (typeof query.queryKey[1] === 'number' && changed.has(query.queryKey[1])),
     })
-  }, [activeIds, queryClient])
+  }, [stamps, queryClient])
 
   // Shared with the card popovers, and only fetched once something is running.
   const { data: stats } = useQuery({

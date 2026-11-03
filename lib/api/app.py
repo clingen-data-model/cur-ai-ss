@@ -1002,6 +1002,11 @@ def _paper_summaries(
         TaskDB.paper_id, TaskDB.status
     ).distinct():
         task_statuses[paper_id].append(task_status)
+    tasks_changed_at: dict[int, datetime.datetime | None] = dict(
+        session.query(TaskDB.paper_id, func.max(TaskDB.updated_at)).group_by(
+            TaskDB.paper_id
+        )
+    )
 
     touchers = _paper_touchers(session)
     # Resolved in one pass: there are a handful of users and each appears on
@@ -1049,6 +1054,7 @@ def _paper_summaries(
             variant_count=variant_counts.get(paper.id, 0),
             patient_variant_occurrences_count=occurrence_counts.get(paper.id, 0),
             open_flag_count=open_flag_counts.get(paper.id, 0),
+            tasks_changed_at=tasks_changed_at.get(paper.id),
         )
         for paper in query.all()
     ]

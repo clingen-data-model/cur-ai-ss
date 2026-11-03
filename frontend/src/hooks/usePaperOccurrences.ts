@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   getPaperPapersPaperIdGet,
   getOccurrencesPapersPaperIdOccurrencesGet,
@@ -12,8 +12,6 @@ import type {
   VariantResp,
   PatientVariantOccurrenceResp,
 } from '@/api/generated/types.gen'
-import { POLL_WHILE_ACTIVE_MS } from '@/lib/polling'
-import { ACTIVE_TASK_STATUSES } from '@/lib/taskState'
 
 export type { PaperResp, PatientResp, VariantResp, PatientVariantOccurrenceResp }
 
@@ -28,41 +26,11 @@ export interface OccurrenceRow {
 }
 
 export function usePaperOccurrences(paperId: number) {
-  const queryClient = useQueryClient()
   const paperQuery = useQuery({
     queryKey: ['paper', paperId],
     queryFn: () => getPaperPapersPaperIdGet({ path: { paper_id: paperId } }),
     staleTime: STALE_TIME,
-    // The page's status badge and its section gates ("fills in once it
-    // completes") are computed from this response's tasks, so while any is
-    // in flight the page follows the pipeline at the worker's cadence. Off
-    // once the paper is idle: a finished paper has nothing to learn. Without
-    // this the badge sat on "running" until the stale time ran out.
-    refetchInterval: (query) =>
-      query.state.data?.tasks?.some((t) => ACTIVE_TASK_STATUSES.has(t.status))
-        ? POLL_WHILE_ACTIVE_MS
-        : false,
   })
-
-  // A task that finishes has written its output into some other query of
-  // this paper (patients, variants, phenotypes, occurrences, flags...), so
-  // when the task set changes state, refresh every query keyed on this paper
-  // but this one, which just did. The first load sets the baseline only.
-  const taskFingerprint = (paperQuery.data?.tasks ?? [])
-    .map((t) => `${t.id}:${t.status}`)
-    .join(',')
-  const seenFingerprint = useRef<string | null>(null)
-  useEffect(() => {
-    if (!paperQuery.data) return
-    if (seenFingerprint.current === null || seenFingerprint.current === taskFingerprint) {
-      seenFingerprint.current = taskFingerprint
-      return
-    }
-    seenFingerprint.current = taskFingerprint
-    queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey[1] === paperId && query.queryKey[0] !== 'paper',
-    })
-  }, [taskFingerprint, paperQuery.data, paperId, queryClient])
 
   const occurrencesQuery = useQuery({
     queryKey: ['occurrences', paperId],
