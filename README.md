@@ -208,8 +208,8 @@ See `lib/models/` for full model definitions and `CLAUDE.md` for code patterns.
 
 ## Deployment
 
-Everything runs on a single GCP VM (`dev-caa`, defined in
-`infrastructure/terraform/dev`) behind nginx, which terminates TLS and routes by path.
+Everything runs on a single GCP VM (instance `dev-caa-2` of the `dev-caa` environment,
+defined in `infrastructure/terraform/dev`) behind nginx, which terminates TLS and routes by path.
 Replacing the machine itself (a new size or architecture) is a three-step sequence
 written above the module call in `infrastructure/terraform/dev/main.tf`: a standby
 instance is built and loaded beside the old one, the static address moves over, and
@@ -230,7 +230,7 @@ Deploying pulls `main` from GitHub onto the VM, syncs Python dependencies, write
 from GCP Secret Manager, builds the React SPA, then restarts the services:
 
 ```bash
-ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml
+ansible-playbook -i dev-caa-2.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml
 ```
 
 That direct form needs SSH to the VM's public IP, which works **from the Broad network
@@ -240,7 +240,7 @@ Broad org-level firewall policy allowing tcp:22 from Broad's IP ranges, which is
 picture with:
 
 ```bash
-gcloud compute instances network-interfaces get-effective-firewalls dev-caa \
+gcloud compute instances network-interfaces get-effective-firewalls dev-caa-2 \
   --zone=us-east4-a --project=clingen-caa
 ```
 
@@ -251,7 +251,7 @@ is the off-VPN option. Use an inventory file that supplies a `ProxyCommand`:
 ```ini
 # inventory.ini
 [all]
-dev-caa.us-east4-a.clingen-caa ansible_ssh_common_args='-o ProxyCommand="gcloud compute start-iap-tunnel dev-caa 22 --listen-on-stdin --project=clingen-caa --zone=us-east4-a"'
+dev-caa-2.us-east4-a.clingen-caa ansible_ssh_common_args='-o ProxyCommand="gcloud compute start-iap-tunnel dev-caa-2 22 --listen-on-stdin --project=clingen-caa --zone=us-east4-a"'
 ```
 
 ```bash

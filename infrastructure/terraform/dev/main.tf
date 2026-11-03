@@ -59,11 +59,11 @@ module "dev-caa" {
   network_self_link    = data.terraform_remote_state.shared_network.outputs.network.self_link
   subnetwork_self_link = data.terraform_remote_state.shared_network.outputs.subnetwork.self_link
 
-  standby = {
-    name              = "dev-caa-2"
-    machine_type      = "e2-medium"
-    boot_disk_type    = "pd-balanced"
-    boot_disk_size_gb = 100
-    boot_image        = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
-  }
+  # The machine since the 2026-11 replacement (step 3 above): the address,
+  # service account and secrets are still named dev-caa.
+  instance_name     = "dev-caa-2"
+  machine_type      = "e2-medium"
+  boot_disk_type    = "pd-balanced"
+  boot_disk_size_gb = 100
+  boot_image        = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
 }
