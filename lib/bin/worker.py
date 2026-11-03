@@ -40,7 +40,9 @@ DEFAULT_LEASE_TIMEOUT_S = 1200
 LEASE_TIMEOUT_S: dict[TaskType, int] = {
     TaskType.PDF_PARSING: 1800,
 }
-POLL_INTERVAL_S = 10
+# 5 s since 2026-11-03 (10 before): a poll is one cheap transaction, and a
+# pipeline of ten steps pays the interval at every step while a curator waits.
+POLL_INTERVAL_S = 5
 # Retries after the first attempt, so MAX_RETRIES + 1 attempts in all. A row's
 # tries counts the attempts started on it, so a row with tries <= MAX_RETRIES
 # is still owed a retry and one with tries > MAX_RETRIES has had its last.

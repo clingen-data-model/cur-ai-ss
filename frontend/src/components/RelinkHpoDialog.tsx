@@ -105,6 +105,10 @@ export function RelinkHpoDialog({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
+      // ['papers'] also covers ['papers', 'active']: the header indicator
+      // refetches now and switches to its brisk cadence, as after every other
+      // enqueue, instead of noticing on its next idle tick.
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
       toast.success('HPO linking agent queued')
       setOpen(false)
       setContext('')

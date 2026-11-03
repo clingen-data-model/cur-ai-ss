@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { listTasksPapersPaperIdTasksGet } from '@/api/generated'
 import { paperBusyMessage } from '@/lib/taskState'
+import { POLL_WHILE_ACTIVE_MS } from '@/lib/polling'
 
 /** Whether a paper has tasks in flight, for disabling rerun controls with the
  * reason shown. Only fetches while `enabled` -- callers pass their dialog's
@@ -15,9 +16,9 @@ export function usePaperBusy(paperId: number, enabled: boolean, action = 're-run
     queryFn: () =>
       listTasksPapersPaperIdTasksGet({ path: { paper_id: paperId }, throwOnError: true }),
     enabled,
-    // Matches the worker's 10s claim cadence: the paper can go idle (or
+    // Matches the worker's 5s claim cadence: the paper can go idle (or
     // busy) while the dialog sits open.
-    refetchInterval: enabled ? 10_000 : false,
+    refetchInterval: enabled ? POLL_WHILE_ACTIVE_MS : false,
   })
   return data ? paperBusyMessage(data, action) : null
 }

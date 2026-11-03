@@ -49,13 +49,13 @@ export function PaperProgressPopover({
         throwOnError: true,
       }),
     enabled: open,
-    // Faster than the worker's own 10s claim cadence -- a popover someone is
+    // Faster than the worker's own 5s claim cadence -- a popover someone is
     // actively watching is worth the occasional repeated-rows fetch for the
     // snappier feel. Off entirely once nothing is in flight -- a finished
     // paper's popover has nothing left to learn by polling. "In flight" must
     // include Pending, not just Running: a successor task is created Pending
     // the instant its predecessor completes, and only flips to Running once
-    // the worker's next poll starts it (up to 10s later). Checking Running
+    // the worker's next poll starts it (up to 5s later). Checking Running
     // alone meant that gap could be the exact moment a fetch landed --
     // nothing yet Running, so this returned false and polling stopped for
     // good, leaving a real (if not-yet-started) successor stuck showing gray
