@@ -86,10 +86,16 @@ model parity, not about reading the response. To bump: read the release's
 check the `cu128` image exists for the tag (some releases have none), set
 `infrastructure/pdf-parsing/base-tag`, and run the test suite -- docling's
 geometry conventions move between versions (2.142 put rotated-page text
-boxes in the displayed frame, where 2.82 had them in user space, and its
-pypdfium2 backend stopped splitting table rows into cells, which is why the
-pipeline is on the docling-parse backend). The push builds and rolls the
-new image; deploy the VM after it so the worker's docling-core matches.
+boxes in the displayed frame, where 2.82 had them in user space). The push
+builds and rolls the new image; deploy the VM after it so the worker's
+docling-core matches.
+
+The backend is docling-parse (docling's default) on both sides since the
+2.142 bump. The pypdfium2 backend the pipeline had used reports whole
+lines as text cells, so TableFormer put every row of a table in its first
+column and the vision judge was rebuilding nearly every table from its
+image (30 of 31 across the local test papers); with word cells the grids
+parse right and the judge has little to do.
 
 ### Building the image
 

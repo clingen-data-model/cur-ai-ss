@@ -192,11 +192,12 @@ def convert_locally(
     else:
         format_options = {
             InputFormat.PDF: PdfFormatOption(
-                # Docling's default backend. The pypdfium2 one used until
-                # docling 2.142 hands TableFormer whole lines as text cells
-                # there, and every row of a table lands in its first column
-                # (papers 106, 109 and 113, 2026-11-02); docling-parse gives
-                # word cells and the grids come out right.
+                # Docling's default backend. The pypdfium2 one used from
+                # 2026-04 to 2026-11 reports whole lines as text cells, so
+                # TableFormer put every row of a table in its first column
+                # and the vision judge rebuilt 30 of the 31 tables of the
+                # local papers from their images; docling-parse gives word
+                # cells and the grids come out right (papers 106, 109, 113).
                 backend=ThreadedDoclingParseDocumentBackend,
                 pipeline_options=PdfPipelineOptions(
                     images_scale=IMAGE_RESOLUTION_SCALE,
