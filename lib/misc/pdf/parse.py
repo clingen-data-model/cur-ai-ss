@@ -7,28 +7,17 @@ from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
 
-from docling.backend.docling_parse_backend import ThreadedDoclingParseDocumentBackend
-from docling.datamodel.base_models import DocumentStream, InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import (
-    DocumentConverter,
-    FormatOption,
-    PdfFormatOption,
-    WordFormatOption,
-)
 from docling_core.types.doc import (
     DoclingDocument,
     PictureItem,
     TableItem,
 )
 from docling_core.types.doc.page import TextCellUnit
-from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
 from pydantic import BaseModel
 from xldown import excel_to_markdown
 
 from lib.agents.table_correction_agent import correct_tables
 from lib.core.environment import env
-from lib.misc.pdf import layout
 from lib.misc.pdf.anchors import anchored_from_markdown, build_anchored, write_anchored
 from lib.misc.pdf.paths import (
     IMAGE_RESOLUTION_SCALE,
@@ -45,9 +34,14 @@ from lib.misc.pdf.remote import attach_page_images, convert_pdf_remote
 from lib.models import PaperDB
 from lib.models.paper import FileFormat
 
-# A multi-panel figure comes out of Docling whole rather than as its one
-# best-scoring panel (see lib/misc/pdf/layout.py).
-layout.install()
+# ``docling`` itself (the converter, its pipeline options, the backends and
+# the layout override, which reaches into its post-processor) is imported
+# where it is used, not here. Importing it loads transformers and torch,
+# about 9 of the 22 seconds the API took to start on an e2-medium
+# (2026-11-03), and the API never converts anything: with the parsing
+# service configured the worker does not either, outside a DOCX supplement.
+# ``docling_core`` (the document types) and ``docling_parse`` (the words
+# file) are light by comparison and stay at the top.
 
 
 class Polygon(BaseModel):
@@ -82,6 +76,8 @@ class WordLoc(Polygon):
 
 
 def parse_words_json(stream: BytesIO) -> list[WordLoc]:
+    from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
+
     words_json = []
     parser = DoclingPdfParser()
     pdf_doc: PdfDocument = parser.load(path_or_stream=stream)
@@ -186,6 +182,24 @@ def convert_locally(
     content: bytes, supplement_format: FileFormat | None = None
 ) -> DoclingDocument:
     """Run Docling's converter in this process on a PDF (or DOCX supplement)."""
+    from docling.backend.docling_parse_backend import (
+        ThreadedDoclingParseDocumentBackend,
+    )
+    from docling.datamodel.base_models import DocumentStream, InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import (
+        DocumentConverter,
+        FormatOption,
+        PdfFormatOption,
+        WordFormatOption,
+    )
+
+    from lib.misc.pdf import layout
+
+    # A multi-panel figure comes out of Docling whole rather than as its one
+    # best-scoring panel (see lib/misc/pdf/layout.py); idempotent.
+    layout.install()
+
     format_options: dict[InputFormat, FormatOption]
     if supplement_format == FileFormat.DOCX:
         format_options = {InputFormat.DOCX: WordFormatOption()}

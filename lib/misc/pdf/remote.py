@@ -60,9 +60,7 @@ from typing import Any, cast
 
 import google.auth
 import httpx
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.document import InputDocument
+import pypdfium2 as pdfium
 from docling_core.types.doc import DoclingDocument, ImageRef
 from google.auth.transport.requests import Request
 from google.cloud.exceptions import NotFound
@@ -190,26 +188,35 @@ def attach_page_images(document: DoclingDocument, content: bytes) -> None:
     )
     if not page_numbers:
         return
-    in_doc = InputDocument(
-        path_or_stream=io.BytesIO(content),
-        format=InputFormat.PDF,
-        backend=PyPdfiumDocumentBackend,
-        filename='content.pdf',
-    )
-    backend = cast(PyPdfiumDocumentBackend, in_doc._backend)
+    # pypdfium2 directly rather than through docling's backend class, which
+    # would import docling and with it transformers and torch (see parse.py).
+    # The render is what that backend does: 1.5x the scale, resized down to
+    # the scale, which it finds sharper; the page size is pdfium's, the
+    # visible box as displayed.
+    pdf = pdfium.PdfDocument(content)
     try:
         for page_no in page_numbers:
             page = document.pages.get(page_no)
             if page is None:
                 continue
-            rendered = backend.load_page(page_no - 1).get_page_image(
-                scale=IMAGE_RESOLUTION_SCALE
-            )
+            pdf_page = pdf[page_no - 1]
+            try:
+                bitmap = pdf_page.render(scale=IMAGE_RESOLUTION_SCALE * 1.5, rotation=0)
+                rendered = bitmap.to_pil().copy()
+                bitmap.close()
+                rendered = rendered.resize(
+                    (
+                        round(pdf_page.get_width() * IMAGE_RESOLUTION_SCALE),
+                        round(pdf_page.get_height() * IMAGE_RESOLUTION_SCALE),
+                    )
+                )
+            finally:
+                pdf_page.close()
             page.image = ImageRef.from_pil(
                 rendered, dpi=round(72 * IMAGE_RESOLUTION_SCALE)
             )
     finally:
-        backend.unload()
+        pdf.close()
 
 
 def _delete_quietly(blob: Blob) -> None:
