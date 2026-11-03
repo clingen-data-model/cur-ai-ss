@@ -1,10 +1,11 @@
 /* The review walk: a paper's families one at a time, each beside the PDF
  * with its evidence highlighted, and one confirm per family.
  *
- * A case is a family -- its members, their occurrences and variants, and
- * the open flags about any of them -- in the paper's order (lib/misc/
- * review_cases.py); the variants linked to nobody and the flags about
- * nothing in particular trail as two more cases. The rail on the left
+ * A case is a family with at least one occurrence -- its members, their
+ * occurrences and variants, and the open flags about any of them -- in the
+ * paper's order (lib/misc/review_cases.py). Variants linked to nobody,
+ * patients with no linked variant and flags about nothing extracted are
+ * not cases; the paper page's tabs have them. The rail on the left
  * shows the current case the way the paper page shows the paper: the same
  * Occurrences table for its rows (flags, sign-off and evidence on each
  * row, the Patient and Variant panels behind the expander), the same
@@ -24,9 +25,8 @@
  * draggable.
  *
  * Confirm stamps the case's occurrences (lib/models/signoff.py) and moves
- * to the next unconfirmed family. The two trailing cases are optional: the
- * walk never lands on them by itself, they are not in the progress count,
- * and a paper completes with them untouched (open flags included). Keys: arrows (or j/k) move, Enter
+ * to the next unconfirmed family; a paper completes when every occurrence
+ * is stamped, open flags or not. Keys: arrows (or j/k) move, Enter
  * confirms, u takes a confirmation back.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -50,7 +50,6 @@ import { OccurrencesTab } from '@/components/OccurrencesTab'
 import { EvidencePanes, PdfHighlightProvider, type HighlightTarget } from '@/components/PdfHighlightProvider'
 import { ReviewStatusBadge } from '@/components/ReviewStatusCell'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
-import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
 import { usePaperFlags } from '@/hooks/usePaperFlags'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
 import { caseRows, useReviewCases, useSignoff, type ReviewCaseResp } from '@/hooks/useSignoff'
@@ -84,12 +83,6 @@ function collectCitations(entities: unknown[]): Citation[] {
     }
   }
   return found
-}
-
-/** A case the confirm button can stamp: a family with at least one
- * occurrence. The others have nothing to stamp, only flags to resolve. */
-function isStampable(reviewCase: ReviewCaseResp): boolean {
-  return reviewCase.kind === 'family' && (reviewCase.occurrence_ids?.length ?? 0) > 0
 }
 
 function openFlagCount(reviewCase: ReviewCaseResp): number {
@@ -133,7 +126,7 @@ export function ReviewPage() {
   const currentIndex = useMemo(() => {
     const asked = search.case ? cases.findIndex((c) => c.key === search.case) : -1
     if (asked !== -1) return asked
-    const firstOpen = cases.findIndex((c) => !c.confirmed && !c.optional)
+    const firstOpen = cases.findIndex((c) => !c.confirmed)
     return firstOpen === -1 ? 0 : firstOpen
   }, [cases, search.case])
   const current: ReviewCaseResp | undefined = cases[currentIndex]
@@ -146,11 +139,11 @@ export function ReviewPage() {
     },
     [cases, currentIndex, goTo],
   )
-  /** The next unconfirmed required case after this one, wrapping, or none. */
+  /** The next unconfirmed case after this one, wrapping, or none. */
   const nextOpen = useMemo(() => {
     for (let offset = 1; offset <= cases.length; offset++) {
       const candidate = cases[(currentIndex + offset) % cases.length]
-      if (candidate && !candidate.confirmed && !candidate.optional && candidate.key !== current?.key) return candidate
+      if (candidate && !candidate.confirmed && candidate.key !== current?.key) return candidate
     }
     return undefined
   }, [cases, currentIndex, current?.key])
@@ -209,11 +202,11 @@ export function ReviewPage() {
   const target = narrowed ?? defaultTarget
 
   const confirmCurrent = useCallback(() => {
-    if (!current || !isStampable(current) || signoff.isPending) return
+    if (!current || signoff.isPending) return
     signoff.mutate({ ...caseRows(current), confirmed: true }, { onSuccess: () => nextOpen && goTo(nextOpen.key) })
   }, [current, signoff, nextOpen, goTo])
   const unconfirmCurrent = useCallback(() => {
-    if (!current || !isStampable(current) || !current.confirmed || signoff.isPending) return
+    if (!current || !current.confirmed || signoff.isPending) return
     signoff.mutate({ ...caseRows(current), confirmed: false })
   }, [current, signoff])
 
@@ -254,8 +247,7 @@ export function ReviewPage() {
   }
 
   const tasks = paper?.tasks ?? []
-  const required = cases.filter((c) => !c.optional)
-  const confirmedCases = required.filter((c) => c.confirmed).length
+  const confirmedCases = cases.filter((c) => c.confirmed).length
   const progress = { total: paper?.signoff?.total ?? 0, confirmed: paper?.signoff?.confirmed ?? 0 }
   const reviewStatus = paper?.review_status ?? ReviewStatus.NOT_ASSIGNED
   const openFlags = current ? openFlagCount(current) : 0
@@ -287,7 +279,7 @@ export function ReviewPage() {
                     {cases.map((c, index) => (
                       <SelectItem key={c.key} value={c.key}>
                         {index + 1}. {c.label}
-                        {c.optional ? ' (optional)' : c.confirmed ? ' ✓' : openFlagCount(c) > 0 ? ` ⚑${openFlagCount(c)}` : ''}
+                        {c.confirmed ? ' ✓' : openFlagCount(c) > 0 ? ` ⚑${openFlagCount(c)}` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -306,22 +298,21 @@ export function ReviewPage() {
                 </Button>
               </div>
               <div className="text-xs text-muted-foreground">
-                Case {cases.length ? currentIndex + 1 : 0} of {cases.length} · {confirmedCases}/{required.length} families
-                confirmed · {progress.confirmed}/{progress.total} occurrences
+                Family {cases.length ? currentIndex + 1 : 0} of {cases.length} · {confirmedCases} confirmed ·{' '}
+                {progress.confirmed}/{progress.total} occurrences
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
               {!current ? (
                 <p className="text-sm text-muted-foreground">
-                  Nothing to review yet: the pipeline has not produced patients or variants for this paper.
+                  Nothing to review yet: no patient of this paper is linked to a variant.
                 </p>
               ) : (
                 <>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex flex-wrap items-center gap-2">
                       <h2 className="text-lg font-semibold truncate">{current.label}</h2>
-                      {current.optional && <Badge variant="secondary">Optional</Badge>}
                       {openFlags > 0 ? (
                         <Badge variant="outline" className="border-violet-500 text-violet-700 dark:text-violet-400">
                           <Flag className="size-3" />
@@ -337,28 +328,22 @@ export function ReviewPage() {
                           <Undo2 className="size-3.5 mr-1" />
                           Confirmed
                         </Button>
-                      ) : isStampable(current) ? (
-                        <Button size="sm" onClick={confirmCurrent} disabled={signoff.isPending} title="Confirm this case (Enter)">
-                          <Check className="size-3.5 mr-1" />
-                          Confirm case
-                        </Button>
-                      ) : current.kind === 'family' ? (
-                        <span className="text-xs text-muted-foreground">No occurrence to confirm</span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Nothing to confirm here</span>
+                        <Button size="sm" onClick={confirmCurrent} disabled={signoff.isPending} title="Confirm this family (Enter)">
+                          <Check className="size-3.5 mr-1" />
+                          Confirm family
+                        </Button>
                       )}
                     </div>
                   </div>
 
-                  {current.kind === 'family' && caseOccurrenceRows.length > 0 && (
+                  {caseOccurrenceRows.length > 0 && (
                     <OccurrencesTab paperId={paperId} rows={caseOccurrenceRows} flags={flags} compact />
                   )}
 
-                  {current.kind === 'family' && caseUnlinkedPatients.length > 0 && (
+                  {caseUnlinkedPatients.length > 0 && (
                     <section className="space-y-1">
-                      <h3 className="text-sm font-semibold">
-                        {caseOccurrenceRows.length > 0 ? 'Members with no linked variant' : 'Members'}
-                      </h3>
+                      <h3 className="text-sm font-semibold">Members with no linked variant</h3>
                       <UnassociatedPatientsTab
                         paperId={paperId}
                         patients={caseUnlinkedPatients}
@@ -369,18 +354,12 @@ export function ReviewPage() {
                     </section>
                   )}
 
-                  {current.kind === 'unlinked_variants' && (
-                    <UnassociatedVariantsTab paperId={paperId} variants={caseVariants} tasks={tasks} flags={flags} />
-                  )}
+                  <section className="space-y-1">
+                    <h3 className="text-sm font-semibold">Family</h3>
+                    <FamiliesTab paperId={paperId} only={familyIds} />
+                  </section>
 
-                  {current.kind === 'family' && (
-                    <section className="space-y-1">
-                      <h3 className="text-sm font-semibold">Family</h3>
-                      <FamiliesTab paperId={paperId} only={familyIds} />
-                    </section>
-                  )}
-
-                  {(openFlags > 0 || current.kind === 'paper') && (
+                  {openFlags > 0 && (
                     <section className="space-y-1">
                       <h3 className="text-sm font-semibold">Flags</h3>
                       <FlagsTab

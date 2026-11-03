@@ -307,7 +307,8 @@ def test_review_cases_are_the_families_in_order_with_their_flags(
     )
     db_session.add(phenotype)
     db_session.flush()
-    # A family nothing links to has nothing to stamp.
+    # A family nothing links to is not a step, nor are a variant linked to
+    # nobody and a flag about nothing extracted.
     family3 = _family(db_session, paper, 'Family 3')
     _patient(db_session, paper, family3, 'P2')
     unlinked = _variant(db_session, paper, 'c.3A>G')
@@ -318,8 +319,8 @@ def test_review_cases_are_the_families_in_order_with_their_flags(
         db_session, paper, 'about seizures', phenotype_id=phenotype.id
     )
     about_family2 = _flag(db_session, paper, 'about F2', family_id=family2.id)
-    about_paper = _flag(db_session, paper, 'about nobody')
-    about_unlinked = _flag(db_session, paper, 'about c.3A>G', variant_id=unlinked.id)
+    _flag(db_session, paper, 'about nobody')
+    _flag(db_session, paper, 'about c.3A>G', variant_id=unlinked.id)
     resolved = _flag(db_session, paper, 'settled', patient_id=case['proband'].id)
     db_session.commit()
     resp = client.post(f'/papers/{paper.id}/flags/{resolved.id}/resolve', json={})
@@ -331,13 +332,9 @@ def test_review_cases_are_the_families_in_order_with_their_flags(
     assert [c['key'] for c in cases] == [
         f'family-{case["family"].id}',
         f'family-{family2.id}',
-        f'family-{family3.id}',
-        'variants',
-        'paper',
     ]
-    first, second, third, variants, paper_case = cases
+    first, second = cases
 
-    assert first['kind'] == 'family'
     assert first['label'] == 'Family 1'
     assert first['family_id'] == case['family'].id
     assert first['patient_ids'] == [case['proband'].id, case['relative'].id]
@@ -347,26 +344,12 @@ def test_review_cases_are_the_families_in_order_with_their_flags(
     # The resolved flag is not listed.
     assert first['flag_ids'] == [about_relative.id]
     assert first['confirmed'] is False
-    assert first['optional'] is False
 
     assert second['label'] == 'Family 2'
     assert second['patient_ids'] == [lone.id]
     assert second['occurrence_ids'] == [linked.id]
     assert second['variant_ids'] == [variant2.id]
     assert second['flag_ids'] == [about_phenotype.id, about_family2.id]
-
-    assert third['occurrence_ids'] == []
-    assert third['confirmed'] is True
-
-    assert variants['kind'] == 'unlinked_variants'
-    assert variants['variant_ids'] == [unlinked.id]
-    assert variants['flag_ids'] == [about_unlinked.id]
-    assert variants['confirmed'] is False
-    assert variants['optional'] is True
-    assert paper_case['kind'] == 'paper'
-    assert paper_case['flag_ids'] == [about_paper.id]
-    assert paper_case['confirmed'] is False
-    assert paper_case['optional'] is True
 
 
 def test_review_case_is_confirmed_once_every_occurrence_is_stamped(

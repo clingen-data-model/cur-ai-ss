@@ -5,10 +5,11 @@ which variant, with what zygosity and inheritance, against the pedigree
 and the segregation. So the walk (GET /papers/{id}/review-cases, the SPA's
 /papers/$id/review page) steps through families in the paper's order, each
 step the family's members, their occurrences and variants, and the open
-flags about any of them. Variants no occurrence links trail as one step,
-and open flags that name no row at all as a last, paper-level step; both
-are optional: there to look at, never to confirm, and the walk's "next"
-and its progress count families alone.
+flags about any of them. A family no occurrence links is not a step: there
+is nothing to confirm about it. Variants linked to no patient, patients
+with no linked variant and flags about nothing extracted are not steps
+either; they stay on the paper page's tabs for whoever wants them, and the
+walk is the occurrences alone.
 
 The order is the paper's own and never moves: the walk's "next" is stable,
 and the client skips confirmed steps itself. A confirm stamps the step's
@@ -19,7 +20,6 @@ listed for display, not stamped.
 from __future__ import annotations
 
 from collections import defaultdict
-from enum import StrEnum
 from typing import Sequence
 
 from pydantic import BaseModel
@@ -34,31 +34,19 @@ from lib.models.signoff import SignoffColumns
 from lib.models.variant import VariantDB
 
 
-class ReviewCaseKind(StrEnum):
-    FAMILY = 'family'
-    UNLINKED_VARIANTS = 'unlinked_variants'
-    PAPER = 'paper'
-
-
 class ReviewCaseResp(BaseModel):
     key: str
-    kind: ReviewCaseKind
     label: str
-    family_id: int | None = None
+    family_id: int
     patient_ids: list[int] = []
     # The rows the step stamps.
     occurrence_ids: list[int] = []
     variant_ids: list[int] = []
     family_ids: list[int] = []
-    # Open flags about any of them (or, for the paper-level step, about
-    # nothing extracted).
+    # Open flags about any of them.
     flag_ids: list[int] = []
-    # Every occurrence of the step is stamped (a family with none: at once;
-    # the unlinked-variants and paper-level steps: never, nothing to stamp).
+    # Every occurrence of the step is stamped.
     confirmed: bool
-    # Not a step the walk requires: the unlinked-variants and paper-level
-    # steps, which a curator may skip.
-    optional: bool = False
 
 
 def _stamped(rows: Sequence[SignoffColumns]) -> bool:
@@ -128,7 +116,6 @@ def build_review_cases(session: Session, paper_id: int) -> list[ReviewCaseResp]:
         return found
 
     cases: list[ReviewCaseResp] = []
-    claimed_flags: set[int] = set()
 
     for family in families:
         members: list[PatientDB] = sorted(
@@ -139,6 +126,8 @@ def build_review_cases(session: Session, paper_id: int) -> list[ReviewCaseResp]:
             for patient in members
             for occurrence in occurrences_by_patient.get(patient.id, [])
         ]
+        if not family_occurrences:
+            continue
         family_variants: list[VariantDB] = []
         for occurrence in family_occurrences:
             variant = variants.get(occurrence.variant_id)
@@ -150,11 +139,9 @@ def build_review_cases(session: Session, paper_id: int) -> list[ReviewCaseResp]:
             {variant.id for variant in family_variants},
             {family.id},
         )
-        claimed_flags.update(flag.id for flag in flags)
         cases.append(
             ReviewCaseResp(
                 key=f'family-{family.id}',
-                kind=ReviewCaseKind.FAMILY,
                 label=family.identifier,
                 family_id=family.id,
                 patient_ids=[patient.id for patient in members],
@@ -166,37 +153,6 @@ def build_review_cases(session: Session, paper_id: int) -> list[ReviewCaseResp]:
             )
         )
 
-    linked_variant_ids = {occurrence.variant_id for occurrence in occurrences}
-    unlinked = [
-        variant for vid, variant in variants.items() if vid not in linked_variant_ids
-    ]
-    if unlinked:
-        flags = flags_about(set(), set(), {variant.id for variant in unlinked}, set())
-        claimed_flags.update(flag.id for flag in flags)
-        cases.append(
-            ReviewCaseResp(
-                key='variants',
-                kind=ReviewCaseKind.UNLINKED_VARIANTS,
-                label='Variants linked to no patient',
-                variant_ids=[variant.id for variant in unlinked],
-                flag_ids=[flag.id for flag in flags],
-                confirmed=False,
-                optional=True,
-            )
-        )
-
-    paper_flags = [flag for flag in open_flags if flag.id not in claimed_flags]
-    if paper_flags:
-        cases.append(
-            ReviewCaseResp(
-                key='paper',
-                kind=ReviewCaseKind.PAPER,
-                label='Flags about the paper',
-                flag_ids=[flag.id for flag in paper_flags],
-                confirmed=False,
-                optional=True,
-            )
-        )
     # An occurrence whose patient the family loop never saw (none today: every
     # patient has a family) would be invisible; assert the invariant cheaply.
     seen = {pid for case in cases for pid in case.patient_ids}
