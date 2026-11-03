@@ -2946,6 +2946,28 @@ def test_active_papers_counts_waiting_work_as_in_flight(
     assert [p['id'] for p in client.get('/papers/active').json()] == [paper_id]
 
 
+def test_active_papers_say_when_their_tasks_last_changed(
+    client, test_pdf, db_session, seeded_genes
+):
+    """The header polls this list while anything runs; the stamp is how it
+    tells that a task of a paper finished, and refreshes that paper's page."""
+    paper_id = client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    ).json()['id']
+    tasks = db_session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
+    for task in tasks:
+        task.status = TaskStatus.PENDING
+    db_session.flush()
+    latest = max(task.updated_at for task in tasks)
+
+    (paper,) = client.get('/papers/active').json()
+
+    stamp = datetime.fromisoformat(paper['tasks_changed_at'])
+    assert stamp.replace(tzinfo=None) == latest.replace(tzinfo=None)
+
+
 def test_active_papers_is_empty_when_nothing_runs(client, db_session):
     """The common case: the indicator renders nothing rather than a zero."""
     assert client.get('/papers/active').json() == []

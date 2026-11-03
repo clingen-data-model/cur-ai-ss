@@ -460,6 +460,11 @@ class PaperSummaryResp(BaseModel):
     # Curator flags nobody has resolved yet (lib/models/flag.py): a paper with
     # any is not reviewed, whatever its review_status says.
     open_flag_count: int = 0
+    # When any task of the paper last changed state; None for a paper with no
+    # tasks. The header polls GET /papers/active while anything runs, and this
+    # stamp is how it tells that a task finished, so an open paper page can
+    # refresh its sections then and poll nothing itself.
+    tasks_changed_at: UtcDatetime | None = None
 
     @computed_field  # type: ignore[misc]
     @property
