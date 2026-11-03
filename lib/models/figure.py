@@ -57,7 +57,9 @@ class CaptionSource(StrEnum):
     also a copied block, but the vision model picked which, from the prose
     around the figure, having looked at the picture. MODEL_TRANSCRIBED is
     the model's reading of a legend printed inside the image, the one kind
-    of caption no block of the text holds (``find_legend``).
+    of caption no block of the text holds (``find_legend``). Either of the
+    MODEL_TRANSCRIBED is also the source of a caption the model's
+    transcription was merged into (``merge_caption``).
     """
 
     DOCLING = 'Docling'

@@ -27,6 +27,16 @@ figure is asked, since only those get a row; the answer is the row's
 rule can: that five panels are redox titrations and belong to the "Figure 3"
 legend two paragraphs down, or that the legend is drawn in the image.
 
+A figure that does have a caption is asked instead whether a legend is
+printed inside the image, ``transcribe_legend``, and what it reads is merged
+with the caption, ``merge_caption``. On the MSX1 paper (PMID 8696335) the
+layout model drew Fig. 3's picture box across the legend's first column, so
+"Fig. 3 Identification of an MSX1 mutation. a, ..." existed only inside the
+image and Docling linked the second column, "complex. The homeodomain
+contains...", as the caption; the stored legend is now the two in order.
+The rule is simply that a caption printed in the image gets transcribed,
+whatever the parser attached: one more vision call per readable figure.
+
 Both describing prompts are also shown the prose printed around the figure
 (``FigureRef.nearby``, the same blocks ``find_legend`` chooses from). Docling
 often links only a legend's title line to its picture and leaves the body,
@@ -43,6 +53,7 @@ that can act on them.
 """
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -164,6 +175,65 @@ Answer with exactly one line:
 
 Blocks near the figure:
 """
+
+# The question every captioned readable figure is asked: a legend set beside
+# or under the panels is often cut into the picture box, so it reaches the
+# text agents only if the model reads it here.
+TRANSCRIBE_PROMPT = f"""Is a figure legend printed inside this image: the text that names and explains the figure, usually opening "Figure N." or "Fig. N", or the continuation of one, set beside or under the panels? Axis labels, panel letters, lane labels and words that are part of the drawing are not a legend.
+
+Answer with exactly one line:
+- {LEGEND_TEXT_PREFIX} followed by the legend transcribed from the image exactly as printed, or
+- {NO_LEGEND} when none is printed in it."""
+
+# A caption that opens with a figure label: 'Figure 3.', 'Fig. 1 Title',
+# 'FIGURE 2', 'Supplementary Figure S1', 'Extended Data Fig. 2'. Looser than
+# the parser's is_figure_legend, which rejects 'Fig. 1 Biallelic...' (the BMC
+# style) to keep body prose from being adopted: here it only orders the two
+# halves of a legend that came apart.
+_LEGEND_OPENING = re.compile(
+    r'^\W{0,3}(?:(?:supplementary|supplemental|supp\.?|extended\s+data)\s+)?'
+    r'fig(?:ure)?\.?\s*S?\d',
+    re.IGNORECASE,
+)
+
+
+def opens_like_legend(caption: str) -> bool:
+    """Whether a caption begins with a figure label."""
+    return bool(_LEGEND_OPENING.match(caption.strip()))
+
+
+def _head(text: str) -> str:
+    return ' '.join(text.split())[:40].casefold()
+
+
+def merge_caption(attached: str, transcribed: str) -> str:
+    """One legend from the caption the document attached and the one the
+    model read off the image. Whichever contains the other's opening words
+    is the whole of it (the parser linked a part of a legend that is also
+    printed in the image, or the image shows a part of what the parser has);
+    otherwise they are two halves of one legend, the half that opens with a
+    figure label first, the image's first when neither does (the MSX1 paper:
+    the first column of Fig. 3's legend inside the picture, the second
+    linked as the caption)."""
+    a, t = ' '.join(attached.split()), ' '.join(transcribed.split())
+    a_in_t, t_in_a = _head(a) in t.casefold(), _head(t) in a.casefold()
+    if a_in_t and t_in_a:  # the same opening: the longer is the whole
+        return a if len(a) >= len(t) else t
+    if a_in_t:
+        return t
+    if t_in_a:
+        return a
+    if opens_like_legend(a) and not opens_like_legend(t):
+        return f'{a} {t}'
+    return f'{t} {a}'
+
+
+def transcribe_legend(image_url: str, notes: str | None) -> str | None:
+    """The legend printed inside the image, as the model transcribes it;
+    None when it reads none or gives no usable answer."""
+    answer = vlm_describe(image_url, TRANSCRIBE_PROMPT + _notes_section(notes))
+    legend = parse_legend(answer, ())
+    return legend.text if legend is not None else None
 
 
 def _nearby_section(nearby: tuple[tuple[str, str], ...]) -> str:
@@ -316,8 +386,10 @@ def describe_figures(
     """Classify every figure and describe the readable ones, in the order given.
 
     A readable figure with no caption is asked its legend first
-    (``find_legend``), so the description is written with it and the row
-    stores it. A figure of no readable kind, or one the model would not
+    (``find_legend``); one with a caption is asked whether a legend is
+    printed inside the image (``transcribe_legend``), merged into the caption
+    when so (``merge_caption``). Either way the description is written with
+    the result and the row stores it. A figure of no readable kind, or one the model would not
     describe, is left out. A provider or network error propagates: not reaching the model
     is a task failure, not a finding about the paper.
     """
@@ -341,6 +413,15 @@ def describe_figures(
                 f'Paper {paper_id} {label}: legend '
                 + (f'{source}: {caption[:60]!r}' if caption else 'not found')
             )
+        else:
+            transcribed = transcribe_legend(image_url, notes)
+            if transcribed is not None:
+                merged = merge_caption(caption, transcribed)
+                if merged != ' '.join(caption.split()):
+                    caption, source = merged, CaptionSource.MODEL_TRANSCRIBED
+                    logger.info(
+                        f'Paper {paper_id} {label}: legend in the image: {caption[:60]!r}'
+                    )
         description = describe_figure(image_url, kinds, caption, figure.nearby, notes)
         if description is None:
             logger.warning(f'Paper {paper_id} {label}: no usable description')

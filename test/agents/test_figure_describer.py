@@ -9,13 +9,17 @@ from lib.agents.figure_describer import (
     LEGEND_PROMPT,
     NOT_A_PEDIGREE,
     PEDIGREE_VISION_PROMPT,
+    TRANSCRIBE_PROMPT,
     FigureRef,
     Legend,
     describe_figure,
     describe_figures,
     find_legend,
+    merge_caption,
+    opens_like_legend,
     parse_kinds,
     parse_legend,
+    transcribe_legend,
 )
 from lib.misc.pdf.paths import document_image_path
 from lib.models.figure import CaptionSource, FigureKind
@@ -71,6 +75,8 @@ class _Vision:
             return self.pedigree
         if prompt.startswith(EVIDENCE_VISION_PROMPT[:40]):
             return self.evidence
+        if prompt.startswith(TRANSCRIBE_PROMPT):
+            return 'NONE'  # no legend printed in the image
         raise AssertionError(f'unexpected prompt: {prompt[:60]}')
 
 
@@ -205,7 +211,8 @@ def test_curator_notes_reach_every_prompt(monkeypatch):
 
     describe_figures(1, [FigureRef(0, False, 'cap')], notes='III-3 is the proband')
 
-    assert len(vision.prompts) == 3
+    # Classify, the legend-in-the-image question, pedigree, evidence.
+    assert len(vision.prompts) == 4
     assert all(
         'A human curator has given instructions for this run' in p
         and p.endswith('III-3 is the proband')
@@ -405,3 +412,147 @@ def test_describe_figures_asks_the_legend_only_of_a_readable_figure_without_one(
     evidence = [p for p in prompts if p.startswith(EVIDENCE_VISION_PROMPT[:40])]
     assert 'Figure 3. Mutations Identified in the ALX3 Gene' in evidence[-1]
     assert 'Figure 1. Traces' in evidence[0]
+
+
+@pytest.mark.parametrize(
+    'caption, opens',
+    [
+        ('Figure 3. Mutations Identified in the ALX3 Gene', True),
+        ('Fig. 1 Biallelic TSEN2 variants in the family.', True),
+        ('FIGURE 2 Pedigrees', True),
+        ('Figure S3 - Verification of both initiation blocking', True),
+        ('Supplementary Figure 1. Sanger traces', True),
+        ('Extended Data Fig. 2 | Linkage', True),
+        ('(Figure 2) Pedigrees', True),
+        ('complex. The homeodomain contains three helices', False),
+        ('(A) Pedigrees of families 1-7. (B) Linkage analysis.', False),
+        ('Pedigrees of two Swedish families', False),
+        ('', False),
+    ],
+)
+def test_opens_like_legend(caption, opens):
+    assert opens_like_legend(caption) is opens
+
+
+OPENING = 'Fig. 3 Identification of an MSX1 mutation. c, Schematic representation of MSX1 homeodomain-DNA'
+CONTINUATION = 'complex. The homeodomain contains three helices (cylinders).'
+
+
+@pytest.mark.parametrize(
+    'attached, transcribed, merged',
+    [
+        # The MSX1 case: the opening in the image, the continuation attached.
+        pytest.param(
+            CONTINUATION, OPENING, f'{OPENING} {CONTINUATION}', id='image-first'
+        ),
+        # Docling linked the title line; the body is printed in the image.
+        pytest.param(
+            'Figure 2. Pedigrees.',
+            '(A) Family 1. (B) Family 2.',
+            'Figure 2. Pedigrees. (A) Family 1. (B) Family 2.',
+            id='attached-first',
+        ),
+        # The image carries the whole legend, the parser a part of it.
+        pytest.param(
+            CONTINUATION,
+            f'{OPENING} {CONTINUATION} More.',
+            f'{OPENING} {CONTINUATION} More.',
+            id='image-whole',
+        ),
+        # The parser has it all; the image repeats its opening.
+        pytest.param(
+            f'{OPENING} {CONTINUATION}',
+            OPENING,
+            f'{OPENING} {CONTINUATION}',
+            id='attached-whole',
+        ),
+        # Identical, whitespace aside.
+        pytest.param(
+            'Figure 1.  Traces', 'Figure 1. Traces', 'Figure 1. Traces', id='same'
+        ),
+    ],
+)
+def test_merge_caption(attached, transcribed, merged):
+    assert merge_caption(attached, transcribed) == merged
+
+
+def test_transcribe_legend_asks_the_image_alone(monkeypatch):
+    seen: dict = {}
+
+    def vision(image_url, prompt):
+        seen.update(image_url=image_url, prompt=prompt)
+        return f'TEXT: {OPENING}'
+
+    monkeypatch.setattr(describer, 'vlm_describe', vision)
+
+    assert transcribe_legend('data:img', 'note') == OPENING
+    assert seen['prompt'].startswith(TRANSCRIBE_PROMPT)
+    assert seen['prompt'].endswith('note')
+
+    monkeypatch.setattr(describer, 'vlm_describe', lambda *_: 'NONE')
+    assert transcribe_legend('data:img', None) is None
+
+
+def _scripted(transcription: str | None):
+    prompts: list[str] = []
+
+    def scripted(image_url: str, prompt: str) -> str | None:
+        prompts.append(prompt)
+        if prompt.startswith(CLASSIFY_PROMPT):
+            return 'Gel'
+        if prompt.startswith(TRANSCRIBE_PROMPT):
+            return transcription
+        if prompt.startswith(LEGEND_PROMPT):
+            pytest.fail('asked the no-caption question of a captioned figure')
+        return 'M lane shows C'
+
+    return scripted, prompts
+
+
+def test_a_legend_printed_in_the_image_is_transcribed_into_the_caption(monkeypatch):
+    """The MSX1 case: Docling linked the legend's second column; the model
+    reads the first off the image, and the row stores both in order, as
+    transcribed, with the describing prompt written from the whole."""
+    scripted, prompts = _scripted(f'TEXT: {OPENING}')
+    monkeypatch.setattr(describer, 'vlm_describe', scripted)
+    monkeypatch.setattr(describer, 'image_to_data_url', lambda path: 'data:img')
+
+    described = describe_figures(
+        102, [FigureRef(8, False, CONTINUATION, CaptionSource.DOCLING, _NEARBY)]
+    )
+
+    assert [(d.caption, d.caption_source) for d in described] == [
+        (f'{OPENING} {CONTINUATION}', TRANSCRIBED)
+    ]
+    evidence = [p for p in prompts if p.startswith(EVIDENCE_VISION_PROMPT[:40])]
+    assert f'{OPENING} {CONTINUATION}' in evidence[0]
+
+
+def test_a_figure_with_no_legend_in_the_image_keeps_the_attached_caption(monkeypatch):
+    scripted, _ = _scripted('NONE')
+    monkeypatch.setattr(describer, 'vlm_describe', scripted)
+    monkeypatch.setattr(describer, 'image_to_data_url', lambda path: 'data:img')
+
+    described = describe_figures(
+        102, [FigureRef(8, False, CONTINUATION, CaptionSource.DOCLING, _NEARBY)]
+    )
+
+    assert [(d.caption, d.caption_source) for d in described] == [
+        (CONTINUATION, CaptionSource.DOCLING)
+    ]
+
+
+def test_a_transcription_the_parser_already_has_changes_nothing(monkeypatch):
+    """The image repeats the linked legend: the caption stays the parser's
+    exact text and keeps its source."""
+    scripted, _ = _scripted('TEXT: Figure 1. Traces')
+    monkeypatch.setattr(describer, 'vlm_describe', scripted)
+    monkeypatch.setattr(describer, 'image_to_data_url', lambda path: 'data:img')
+
+    described = describe_figures(
+        7, [FigureRef(0, False, 'Figure 1. Traces of II-1.', CaptionSource.DOCLING)]
+    )
+
+    assert [(d.caption, d.caption_source) for d in described] == [
+        ('Figure 1. Traces of II-1.', CaptionSource.DOCLING)
+    ]
