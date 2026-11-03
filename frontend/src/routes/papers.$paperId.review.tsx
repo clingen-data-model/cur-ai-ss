@@ -313,8 +313,8 @@ export function ReviewPage() {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-72 text-left">
                     Review Mode walks the families that have at least one patient-variant occurrence, in the
-                    paper's order. Confirming a family stamps its occurrences; the paper's review completes when
-                    every occurrence is stamped. Patients with no linked variant, variants linked to no patient
+                    paper's order. Confirming a family confirms its occurrences; the paper's review completes when
+                    every occurrence is confirmed. Patients with no linked variant, variants linked to no patient
                     and flags about nothing extracted are not part of the review and stay on the paper page's
                     tabs.
                   </TooltipContent>
