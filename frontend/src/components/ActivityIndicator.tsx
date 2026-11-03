@@ -20,11 +20,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { TaskTimeline } from '@/components/TaskTimeline'
 import { RerunTaskDialog } from '@/components/PaperActions'
 import type { PaperSummaryResp, TaskStatsResp } from '@/api/generated/types.gen'
+import { POLL_WHILE_ACTIVE_MS } from '@/lib/polling'
 
-// Polled, so the cadence is a real cost decision. The worker claims work every
-// 10s, so anything faster than that shows the same rows twice; and while
+// Polled, so the cadence is a real cost decision (lib/polling.ts); while
 // nothing is running there is nothing to be timely about.
-const POLL_WHILE_ACTIVE_MS = 10_000
 const POLL_WHILE_IDLE_MS = 60_000
 
 function PaperRow({ paper, stats }: { paper: PaperSummaryResp; stats?: TaskStatsResp }) {

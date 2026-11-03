@@ -6,6 +6,7 @@ import {
 } from '@/api/generated'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
 import { STATE_OF } from '@/lib/paperState'
+import { pollWhileInFlight } from '@/lib/polling'
 import { useAuth } from '@/lib/auth'
 import type { IndexSearch } from '@/routeTree'
 
@@ -44,6 +45,8 @@ export function usePapers(
         targetId === undefined ? {} : { query: { touched_by: targetId } },
       ),
     staleTime: STALE_TIME,
+    // Same as useGeneTable: status badges keep up while a paper runs.
+    refetchInterval: (query) => pollWhileInFlight(query.state.data),
     // Changing the filter changes the query key, so without this the new scope
     // starts out pending and the caller sees a load from scratch -- which blanked
     // the whole tab, including the control that had just been used. Holding the
