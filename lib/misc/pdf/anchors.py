@@ -229,40 +229,47 @@ def make_anchor_id(kind: AnchorKind, index: int, supplement: bool) -> str:
 #    On an ordinary page (rotation 0, box at the origin) this is just the y flip,
 #    which is why the difference never showed up until the rotated papers did.
 #
-# 3. What Docling reports. Docling is not in one frame:
-#      - TEXT items come from the PDF's text layer, so their ``prov`` boxes are in
-#        user space (1), as BOTTOMLEFT boxes.
-#      - TABLE and PICTURE items come from a layout model run on the *rendered*
-#        page image, so their ``prov`` boxes and a table's grid cells are in the
-#        displayed frame (2): cells as TOPLEFT boxes, prov as BOTTOMLEFT boxes
-#        measured over the displayed page height, and ``doc.pages[n].size`` is
-#        the displayed (rotated) size.
-#    Measured, not assumed: a census of the 9 prod papers with rotated pages
-#    (2026-09-30) found 880 text boxes that fit only the user-space frame and
-#    all 20 table + 2 picture boxes fitting only the displayed frame.
+# 3. What Docling reports: the displayed frame (2), for every item. ``prov``
+#    boxes are BOTTOMLEFT measured over the displayed page height, a table's
+#    grid cells are TOPLEFT, and ``doc.pages[n].size`` is the displayed
+#    (rotated) size. Measured, not assumed, on docling 2.142.1 (2026-11-02)
+#    with paper 74 page 7, the rotated page the worked example below is from:
+#    every text box on it, under either PDF backend, sits on its words only
+#    when read as a displayed-frame box, and so do its table and pictures.
+#    Docling 2.82 was not in one frame: its text items, straight from the
+#    PDF's text layer, came out in user space (1) -- a census of the 9 prod
+#    papers with rotated pages on 2026-09-30 found 880 text boxes fitting only
+#    that frame against 20 table + 2 picture boxes fitting only the displayed
+#    one -- and text passed through here untouched. docling-core now clamps
+#    every prov box to its page's size on load, so a user-space box taller
+#    than the displayed page cannot even arrive any more; anchors built before
+#    the upgrade stay on disk as they were, and a re-parse rebuilds them.
 #
-# So: text boxes pass through untouched; table, picture and cell boxes go through
-# ``_display_to_user``, the inverse of the mapping above, which needs each page's
-# rotation and visible box. Those are read from ``raw.pdf`` by ``_page_frames``.
+# So: every box goes through ``_display_to_user``, the inverse of the mapping
+# above, which needs each page's rotation and visible box. Those are read from
+# ``raw.pdf`` by ``_page_frames``.
 #
 # Worked example, paper 74 page 7 (mediabox 595 x 794, /Rotate 90, so displayed
 # 794 wide x 595 tall and Docling says size=794x595):
 #
-#     text  #/texts/369 "Any ICD (ICD + CRT-D) 30.1% ..."   a table row
-#           prov BOTTOMLEFT l=333 b=64 r=364 t=693         user space already:
-#           -> PageBox(x=333, y=64, w=31, h=629)            a tall thin strip, because
-#                                                           the row runs *up* the
-#                                                           unrotated page
-#     table #/tables/1
-#           prov BOTTOMLEFT l=59 b=188 r=730 t=418          displayed frame, height 595
-#           -> TOPLEFT      L=59 T=177 R=730 B=407          (T = 595 - 418, B = 595 - 188)
+#     text  "Table 2 Clinical presentation of dilated ..."  the table's caption
+#           prov BOTTOMLEFT l=62 b=424 r=727 t=444          displayed frame, height 595
+#           -> TOPLEFT      L=62 T=151 R=727 B=171           (T = 595 - 444, B = 595 - 424)
 #           -> rotation 90 inverse: x = Y + x0, y = X + y0
-#              corners (59, 177) -> (177, 59) and (730, 407) -> (407, 730)
+#           -> PageBox(x=151, y=62, w=20, h=665)             a tall thin strip, because
+#                                                            the line runs *up* the
+#                                                            unrotated page; PyMuPDF puts
+#                                                            its first word at user (155, 74)
+#     table #/tables/1
+#           prov BOTTOMLEFT l=59 b=188 r=730 t=418           displayed frame, height 595
+#           -> TOPLEFT      L=59 T=177 R=730 B=407           (T = 595 - 418, B = 595 - 188)
+#           -> corners (59, 177) -> (177, 59) and (730, 407) -> (407, 730)
 #           -> PageBox(x=177, y=59, w=230, h=671)
 #
-# and the text strip (x 333..364, y 64..693) now lies inside the table box
-# (x 177..407, y 59..730), as it must. Before this conversion the two disagreed
-# by hundreds of points, and the table box fell off the page.
+# and the caption strip (x 151..171) now sits right beside the table box
+# (x 177..407) on the side that is above it once the page is turned, as it must.
+# Read as user space, the caption would have been a wide band across the page
+# and the table box would have fallen off it.
 
 
 class _PageFrame(NamedTuple):
@@ -411,7 +418,6 @@ def on_page(box: PageBox, frame: _PageFrame, tol: float = 2.0) -> bool:
 
 
 def _prov_box(
-    item: DocItem,
     prov: ProvenanceItem,
     doc: DoclingDocument,
     frames: dict[int, _PageFrame],
@@ -421,18 +427,10 @@ def _prov_box(
     if page is None or page.size is None:  # DOCX and friends: no layout
         return None
     frame = _frame_for(frames, prov.page_no, page.size.width, page.size.height)
-    if isinstance(item, (TableItem, PictureItem)):
-        # Layout-model output: displayed frame, needs the page's rotation.
-        l, b, r, t = _display_to_user(prov.bbox, frame, page.size.height)
-    else:
-        # Text-layer output: user space already. (TOPLEFT never occurs for
-        # PDF text prov; the conversion is only there so the branch is total.)
-        bl = (
-            prov.bbox
-            if prov.bbox.coord_origin == CoordOrigin.BOTTOMLEFT
-            else prov.bbox.to_bottom_left_origin(page.size.height)
-        )
-        l, b, r, t = bl.l, bl.b, bl.r, bl.t
+    # Displayed frame for every kind of item (see the section comment), so
+    # each needs the page's rotation; ``_display_to_user`` takes a BOTTOMLEFT
+    # prov box or a TOPLEFT grid cell alike.
+    l, b, r, t = _display_to_user(prov.bbox, frame, page.size.height)
     return PageBox(page_no=prov.page_no, x=l, y=b, width=r - l, height=t - b), frame
 
 
@@ -456,19 +454,20 @@ def _prov_boxes(
         PageBox(page 3, x=66,  y=81,  w=228, h=21)   two-line tail, left column
         PageBox(page 3, x=311, y=535, w=228, h=176)  continuation, right column
 
-    -- for text, Docling's own numbers (``x = l``, ``y = b``, ``h = t - b``),
-    because text prov is already in user space. Drawn on the page, both sit
-    exactly on the text and the sentence runs from one into the other. Table
-    and picture prov is in the displayed frame instead and goes through
-    ``_display_to_user`` (see the section comment). Items from DOCX/XLSX have no
-    pages, so they get no boxes at all. Docling occasionally emits a zero-width
+    -- Docling's own numbers (``x = l``, ``y = b``, ``h = t - b``), because on
+    an unrotated page at the origin the displayed frame's y flip and the
+    inverse's own flip cancel. Drawn on the page, both sit exactly on the text
+    and the sentence runs from one into the other. On a rotated page every box
+    goes through ``_display_to_user`` for real (see the section comment). Items
+    from DOCX/XLSX have no pages, so they get no boxes at all. Docling
+    occasionally emits a zero-width
     or zero-height prov (7 of 14,640 anchors across the 94 prod papers); those
     cover nothing and are dropped, as is a box entirely off its page
     (``on_page``), which covers nothing a reader can see.
     """
     boxes = []
     for prov in item.prov:
-        placed = _prov_box(item, prov, doc, frames)
+        placed = _prov_box(prov, doc, frames)
         if placed is None:
             continue
         box, frame = placed
@@ -490,11 +489,27 @@ def _visible(
     text item whose every fragment is clipped off the page is the invisible
     duplicate described at ``on_page``; ``build_anchored`` leaves it out of
     the document so that it cannot be cited over the copy a reader can see.
+    Since docling-core 2.105 such a fragment no longer arrives off the page:
+    every prov box is clamped to its page's size on load, so one drawn wholly
+    outside lands flattened on the edge it crossed, zero extent in that axis
+    (``_clamped_to_edge``), and that counts as clipped too.
     """
-    placed = [
-        p for p in (_prov_box(item, prov, doc, frames) for prov in item.prov) if p
-    ]
-    return not placed or any(on_page(box, frame) for box, frame in placed)
+    placed = [p for p in (_prov_box(prov, doc, frames) for prov in item.prov) if p]
+    return not placed or any(
+        on_page(box, frame) and not _clamped_to_edge(box, frame)
+        for box, frame in placed
+    )
+
+
+def _clamped_to_edge(box: PageBox, frame: _PageFrame, tol: float = 0.5) -> bool:
+    """A box with no extent in an axis whose coordinate in that axis is the
+    visible box's edge: what docling-core's clamp makes of a box that was
+    entirely beyond that edge. A zero-area box elsewhere on the page (Docling
+    does emit a few) is not one; it is just dropped as nothing to highlight."""
+    at = lambda v, edge: abs(v - edge) <= tol  # noqa: E731
+    return (box.height <= 0 and (at(box.y, frame.y0) or at(box.y, frame.y1))) or (
+        box.width <= 0 and (at(box.x, frame.x0) or at(box.x, frame.x1))
+    )
 
 
 def _row_boxes(

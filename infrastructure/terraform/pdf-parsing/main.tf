@@ -20,7 +20,7 @@
 # a fresh stack comes up without a build and the next workflow run (a push
 # to main touching the inputs, or a manual dispatch) puts the override in
 # place. The base release, infrastructure/pdf-parsing/base-tag, is the one
-# that bundles the docling version pyproject pins, so the server runs the
+# that locks the docling version pyproject pins, so the server runs the
 # same models as the worker would.
 
 terraform {

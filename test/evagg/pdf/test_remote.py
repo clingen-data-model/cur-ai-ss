@@ -257,7 +257,7 @@ def test_unwrap_multipart_returns_the_one_file():
 
 
 def test_convert_options_mirror_the_local_pipeline():
-    assert CONVERT_OPTIONS['pdf_backend'] == 'pypdfium2'
+    assert CONVERT_OPTIONS['pdf_backend'] == 'docling_parse'
     assert CONVERT_OPTIONS['table_mode'] == 'accurate'
     assert CONVERT_OPTIONS['to_formats'] == ['json']
     assert CONVERT_OPTIONS['image_export_mode'] == 'embedded'
