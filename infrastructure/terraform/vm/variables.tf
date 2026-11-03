@@ -8,6 +8,35 @@ variable "name" {
   description = "Base name for all caa dashboard resources"
 }
 
+variable "instance_name" {
+  type        = string
+  default     = null
+  description = <<-EOT
+    The instance's own name when it is not var.name. The address, the service
+    account and the secrets keep var.name whatever the instance is called,
+    which is what lets a replacement machine take over from the one before
+    it without touching IAM or DNS (see `standby`).
+  EOT
+}
+
+variable "standby" {
+  description = <<-EOT
+    A second instance beside the first, on the same service account and
+    subnet with an ephemeral address: the next machine, built and loaded
+    while the first still serves, before the static address moves over and
+    the first is retired. null for none. The sequence is in
+    infrastructure/terraform/dev/main.tf.
+  EOT
+  type = object({
+    name              = string
+    machine_type      = string
+    boot_disk_type    = string
+    boot_disk_size_gb = number
+    boot_image        = string
+  })
+  default = null
+}
+
 variable "zone" {
   type        = string
   description = "GCP zone in us-east4"
@@ -15,8 +44,8 @@ variable "zone" {
 }
 
 variable "machine_type" {
-  type        = string
-  default     = "c4a-standard-2"
+  type    = string
+  default = "c4a-standard-2"
 }
 
 variable "boot_disk_size_gb" {
