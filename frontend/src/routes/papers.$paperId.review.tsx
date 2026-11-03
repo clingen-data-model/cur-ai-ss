@@ -351,7 +351,7 @@ export function ReviewPage() {
                   </div>
 
                   {current.kind === 'family' && caseOccurrenceRows.length > 0 && (
-                    <OccurrencesTab paperId={paperId} rows={caseOccurrenceRows} flags={flags} />
+                    <OccurrencesTab paperId={paperId} rows={caseOccurrenceRows} flags={flags} compact />
                   )}
 
                   {current.kind === 'family' && caseUnlinkedPatients.length > 0 && (

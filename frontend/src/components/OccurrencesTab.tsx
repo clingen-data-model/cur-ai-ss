@@ -92,10 +92,18 @@ export function OccurrencesTab({
   rows,
   flags,
   focus,
+  compact = false,
 }: {
   paperId: number
   rows: OccurrenceRow[]
   flags: FlagIndex
+  /** The review rail's form: the occurrence's own columns (patient, variant,
+   * zygosity, inheritance, de novo) and the row icons, without the count,
+   * the search box, the proband toggle, the variant type, testing methods,
+   * disease columns or the pair/delete actions, so a row fits half a
+   * viewport; the Patient and Variant panels behind the expander are the
+   * same. */
+  compact?: boolean
   /** An occurrence to open on arrival (from a flag's About chip), on the
    * panel the chip names. A new object is a new request, so the same row can
    * be asked for again after the reader has closed it. */
@@ -237,13 +245,15 @@ export function OccurrencesTab({
           </EntityLink>
         ),
       },
-      {
+    ]
+    if (!compact) {
+      cols.push({
         id: 'variant_type',
         header: 'Variant Type',
         accessorFn: (row) => row.variant.variant_type,
         cell: ({ row }) => <EditableVariantTypeCell paperId={paperId} variant={row.original.variant} />,
-      },
-    ]
+      })
+    }
 
     if (hasPairedVariants) {
       cols.push({
@@ -287,14 +297,16 @@ export function OccurrencesTab({
         header: 'De Novo',
         cell: ({ row }) => <EditableDeNovoCell paperId={paperId} occurrence={row.original.occurrence} />,
       },
-      {
-        id: 'testing_methods',
-        header: 'Testing Methods',
-        cell: ({ row }) => (
-          <EditableTestingMethodsCell paperId={paperId} occurrence={row.original.occurrence} />
-        ),
-      },
     )
+    if (compact) return cols
+
+    cols.push({
+      id: 'testing_methods',
+      header: 'Testing Methods',
+      cell: ({ row }) => (
+        <EditableTestingMethodsCell paperId={paperId} occurrence={row.original.occurrence} />
+      ),
+    })
 
     cols.push({
       id: 'disease_name',
@@ -340,7 +352,7 @@ export function OccurrencesTab({
     })
 
     return cols
-  }, [rows, hasPairedVariants, severalFamilies, paperId, expandedCell?.rowId, deleteMutation, flags])
+  }, [rows, hasPairedVariants, severalFamilies, paperId, expandedCell?.rowId, deleteMutation, flags, compact])
 
   if (rows.length === 0) {
     return (
@@ -352,14 +364,17 @@ export function OccurrencesTab({
 
   return (
     <>
-      <p className="text-sm text-muted-foreground mb-2">
-        {probandOnly
-          ? `${visibleRows.length} proband occurrence${visibleRows.length === 1 ? '' : 's'} of ${rows.length}`
-          : `${rows.length} total occurrences`}
-      </p>
+      {!compact && (
+        <p className="text-sm text-muted-foreground mb-2">
+          {probandOnly
+            ? `${visibleRows.length} proband occurrence${visibleRows.length === 1 ? '' : 's'} of ${rows.length}`
+            : `${rows.length} total occurrences`}
+        </p>
+      )}
       <DataTable
         columns={columns}
         data={visibleRows}
+        compact={compact}
         filterPlaceholder="Filter occurrences..."
         toolbar={
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
