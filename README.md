@@ -209,7 +209,12 @@ See `lib/models/` for full model definitions and `CLAUDE.md` for code patterns.
 ## Deployment
 
 Everything runs on a single GCP VM (`dev-caa`, defined in
-`infrastructure/terraform/dev`) behind nginx, which terminates TLS and routes by path:
+`infrastructure/terraform/dev`) behind nginx, which terminates TLS and routes by path.
+Replacing the machine itself (a new size or architecture) is a three-step sequence
+written above the module call in `infrastructure/terraform/dev/main.tf`: a standby
+instance is built and loaded beside the old one, the static address moves over, and
+the standby becomes the instance in terraform's state. Everything else -- the address,
+the service account, the certificate and the secrets -- stays put.
 
 | Path | Served by | Notes |
 | --- | --- | --- |

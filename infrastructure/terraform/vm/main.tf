@@ -13,7 +13,7 @@ resource "google_service_account" "this" {
 
 # Compute Instance
 resource "google_compute_instance" "this" {
-  name         = var.name
+  name         = coalesce(var.instance_name, var.name)
   machine_type = var.machine_type
   zone         = var.zone
 
@@ -21,7 +21,7 @@ resource "google_compute_instance" "this" {
 
   boot_disk {
     auto_delete = true
-    device_name = var.name
+    device_name = coalesce(var.instance_name, var.name)
 
     initialize_params {
       size  = var.boot_disk_size_gb
@@ -69,6 +69,74 @@ resource "google_compute_instance" "this" {
   lifecycle {
     ignore_changes = [
       metadata["ssh-keys"]
+    ]
+  }
+}
+
+# The standby: the same machine definition as above apart from what
+# `var.standby` sets and the address, which is ephemeral until the static one
+# is moved over by hand at cutover (the address cannot be on two instances,
+# so terraform cannot do that move in one apply).
+resource "google_compute_instance" "standby" {
+  count = var.standby == null ? 0 : 1
+
+  name         = var.standby.name
+  machine_type = var.standby.machine_type
+  zone         = var.zone
+
+  tags = var.tags
+
+  boot_disk {
+    auto_delete = true
+    device_name = var.standby.name
+
+    initialize_params {
+      size  = var.standby.boot_disk_size_gb
+      type  = var.standby.boot_disk_type
+      image = var.standby.boot_image
+    }
+  }
+
+  network_interface {
+    network    = var.network_self_link
+    subnetwork = var.subnetwork_self_link
+
+    access_config {
+      network_tier = "PREMIUM"
+    }
+
+    nic_type   = "GVNIC"
+    stack_type = "IPV4_ONLY"
+  }
+
+  service_account {
+    email  = google_service_account.this.email
+    scopes = ["cloud-platform"]
+  }
+
+  scheduling {
+    automatic_restart   = true
+    on_host_maintenance = "MIGRATE"
+    preemptible         = false
+    provisioning_model  = "STANDARD"
+  }
+
+  shielded_instance_config {
+    enable_integrity_monitoring = true
+    enable_secure_boot          = false
+    enable_vtpm                 = true
+  }
+
+  key_revocation_action_type = "NONE"
+  allow_stopping_for_update  = true
+
+  metadata = {}
+
+  lifecycle {
+    ignore_changes = [
+      metadata["ssh-keys"],
+      # The static address is moved onto it by hand at cutover.
+      network_interface[0].access_config,
     ]
   }
 }
