@@ -1002,7 +1002,7 @@ def _paper_summaries(
         TaskDB.paper_id, TaskDB.status
     ).distinct():
         task_statuses[paper_id].append(task_status)
-    tasks_changed_at: dict[int, datetime.datetime | None] = dict(
+    tasks_changed_at: dict[int, datetime | None] = dict(
         session.query(TaskDB.paper_id, func.max(TaskDB.updated_at)).group_by(
             TaskDB.paper_id
         )
