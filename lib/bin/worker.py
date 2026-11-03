@@ -4,12 +4,13 @@ import datetime
 import logging
 import os
 import signal
+import sqlite3
 from collections import Counter
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from lib.api.db import session_scope
+from lib.api.db import get_engine, session_scope
 from lib.core.agents_init import init_agents_sdk
 from lib.core.email import send_email
 from lib.core.environment import env
@@ -41,6 +42,43 @@ LEASE_TIMEOUT_S: dict[TaskType, int] = {
     TaskType.PDF_PARSING: 1800,
 }
 POLL_INTERVAL_S = 10
+# Between polls the loop looks every CHANGE_CHECK_S at SQLite's data_version,
+# which moves whenever another connection commits, and polls as soon as it
+# has: a task the API enqueued, or the successors an attempt's completion
+# enqueued, starts within about a second instead of up to POLL_INTERVAL_S
+# later. The full interval remains as the fallback for a commit the watch's
+# reset after a poll raced, and as the liveness line in the log.
+CHANGE_CHECK_S = 1.0
+
+
+class DatabaseWatch:
+    """Tells whether another connection has committed to the database since
+    the last look.
+
+    SQLite's `PRAGMA data_version` is an integer, private to a connection,
+    that changes whenever the file is modified through any other connection,
+    the API's included. Reading it is microseconds and takes no lock, so it
+    can be read every second where a poll (a transaction over the tasks
+    table) should not be. Any commit moves it, not only one to the tasks
+    table; a poll it provokes for nothing costs tens of milliseconds.
+    """
+
+    def __init__(self, path: str) -> None:
+        self._connection = sqlite3.connect(path)
+        self._seen = self._version()
+
+    def _version(self) -> int:
+        return int(self._connection.execute('PRAGMA data_version').fetchone()[0])
+
+    def changed(self) -> bool:
+        """Whether a commit has landed since the last call (or construction)."""
+        current = self._version()
+        if current == self._seen:
+            return False
+        self._seen = current
+        return True
+
+
 # Retries after the first attempt, so MAX_RETRIES + 1 attempts in all. A row's
 # tries counts the attempts started on it, so a row with tries <= MAX_RETRIES
 # is still owed a retry and one with tries > MAX_RETRIES has had its last.
@@ -435,8 +473,8 @@ async def _poll_and_schedule_tasks() -> None:
     against the limits above, so a task is claimed only when it can start,
     and claiming it is starting it (start_attempt): there is no in-process
     queue, nothing waits for a slot, and an attempt's lease runs from the
-    moment it actually began. A freed slot is refilled on the next poll, up
-    to POLL_INTERVAL_S later, which against runs of minutes is nothing.
+    moment it actually began. A freed slot is refilled on the next poll,
+    which the completion's own commit brings forward (DatabaseWatch).
 
     The fan-out gate is decided here too. Anthropic makes a prompt-cache
     entry available only once the first response that wrote it has begun, so
@@ -577,13 +615,27 @@ async def main_async() -> None:
     logger.info('Starting task worker')
     # Whatever the last process left claimed is nobody's now (see the sweep).
     await _sweep_claimed_tasks('restarted')
+    watch = DatabaseWatch(str(get_engine().url.database))
     while True:
         logger.info('Looking for work')
         try:
             await poll_and_schedule_tasks()
         except Exception:
             logger.exception('Unexpected error in worker loop')
-        await asyncio.sleep(POLL_INTERVAL_S)
+        # The poll's own writes moved the version; nothing to learn from them.
+        watch.changed()
+        await _wait_for_change_or_interval(watch)
+
+
+async def _wait_for_change_or_interval(watch: DatabaseWatch) -> None:
+    """Sleep until the next poll is due: POLL_INTERVAL_S from now, or as soon
+    as a commit from elsewhere has moved the database."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + POLL_INTERVAL_S
+    while (remaining := deadline - loop.time()) > 0:
+        await asyncio.sleep(min(CHANGE_CHECK_S, remaining))
+        if watch.changed():
+            return
 
 
 def main() -> None:
