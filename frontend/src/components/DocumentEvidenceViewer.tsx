@@ -255,11 +255,18 @@ export function DocumentEvidenceViewer({
       const highlight = anchor !== null && cited.has(anchor) && !narrowed?.has(anchor)
       // A figure whose image is missing is `[figure-N] <!-- image -->`, and
       // sanitize drops the comment: say what the empty paragraph stands for.
+      // A table with no caption of its own is a bare `[table-N]` line with
+      // the table right under it (most tables on dev): the label alone, since
+      // nothing is missing.
       const empty = anchor !== null && Array.isArray(content) && content.length === 0
+      const missing = empty && /figure-\d+$/.test(anchor)
       return (
         <p {...props} data-anchor={anchor ?? undefined} data-evidence-highlight={highlight ? '' : undefined}>
           {empty ? (
-            <span className="italic text-muted-foreground">{describeAnchor(anchor)} (missing)</span>
+            <span className="italic text-muted-foreground">
+              {describeAnchor(anchor)}
+              {missing ? ' (missing)' : ''}
+            </span>
           ) : (
             content
           )}
