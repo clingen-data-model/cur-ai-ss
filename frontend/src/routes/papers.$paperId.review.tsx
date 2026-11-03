@@ -349,7 +349,13 @@ export function ReviewPage() {
                           Confirmed
                         </Button>
                       ) : (
-                        <Button size="sm" onClick={confirmCurrent} disabled={signoff.isPending} title="Confirm this family (Enter)">
+                        <Button
+                          size="sm"
+                          className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
+                          onClick={confirmCurrent}
+                          disabled={signoff.isPending}
+                          title="Confirm this family (Enter)"
+                        >
                           <Check className="size-3.5 mr-1" />
                           Confirm family
                         </Button>
