@@ -63,7 +63,7 @@ module "dev-caa" {
     name              = "dev-caa-2"
     machine_type      = "e2-medium"
     boot_disk_type    = "pd-balanced"
-    boot_disk_size_gb = 100
+    boot_disk_size_gb = 50
     boot_image        = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
   }
 }
