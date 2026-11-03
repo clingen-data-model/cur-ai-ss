@@ -376,6 +376,7 @@ export function ReviewPage() {
                         allPatients={allPatients}
                         tasks={tasks}
                         flags={flags}
+                        compact
                       />
                     </section>
                   )}
