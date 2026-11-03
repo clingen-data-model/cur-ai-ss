@@ -65,9 +65,9 @@ export function ChatBubble({ paperId }: { paperId: number }) {
         side="top"
         align="end"
         sideOffset={12}
-        className="w-96 max-w-[calc(100vw-3rem)] rounded-none bg-transparent p-0 shadow-none ring-0"
+        className="w-[48rem] max-w-[calc(100vw-3rem)] rounded-none bg-transparent p-0 shadow-none ring-0"
       >
-        <Card className="h-[32rem] max-h-[70vh] gap-0 py-0 shadow-xl">
+        <Card className="h-[64rem] max-h-[85vh] gap-0 py-0 shadow-xl">
           <CardHeader className="border-b py-3">
             <CardTitle>Paper Chat</CardTitle>
             <CardAction className="flex items-center gap-1">
