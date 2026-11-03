@@ -1002,11 +1002,14 @@ def _paper_summaries(
         TaskDB.paper_id, TaskDB.status
     ).distinct():
         task_statuses[paper_id].append(task_status)
-    tasks_changed_at: dict[int, datetime] = dict(
-        session.query(TaskDB.paper_id, func.max(TaskDB.updated_at)).group_by(
-            TaskDB.paper_id
+    tasks_changed_at: dict[int, datetime] = {
+        paper_id: changed
+        for paper_id, changed in session.query(
+            TaskDB.paper_id, func.max(TaskDB.updated_at)
         )
-    )
+        .group_by(TaskDB.paper_id)
+        .all()
+    }
 
     touchers = _paper_touchers(session)
     # Resolved in one pass: there are a handful of users and each appears on
