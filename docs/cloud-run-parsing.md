@@ -95,7 +95,9 @@ The backend is docling-parse (docling's default) on both sides since the
 lines as text cells, so TableFormer put every row of a table in its first
 column and the vision judge was rebuilding nearly every table from its
 image (30 of 31 across the local test papers); with word cells the grids
-parse right and the judge has little to do.
+parse right and the judge rebuilds fewer (3 of the 8 tables of papers
+105, 109 and 113 on 2026-11-02, for split superscripts and a doubled
+header, against 8 of 8 before).
 
 ### Building the image
 
