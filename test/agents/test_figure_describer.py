@@ -6,6 +6,7 @@ from lib.agents import figure_describer as describer
 from lib.agents.figure_describer import (
     CLASSIFY_PROMPT,
     EVIDENCE_VISION_PROMPT,
+    LEGEND_IN_IMAGE_SECTION,
     LEGEND_PROMPT,
     NOT_A_PEDIGREE,
     PEDIGREE_VISION_PROMPT,
@@ -405,3 +406,24 @@ def test_describe_figures_asks_the_legend_only_of_a_readable_figure_without_one(
     evidence = [p for p in prompts if p.startswith(EVIDENCE_VISION_PROMPT[:40])]
     assert 'Figure 3. Mutations Identified in the ALX3 Gene' in evidence[-1]
     assert 'Figure 1. Traces' in evidence[0]
+
+
+def test_both_describing_prompts_ask_for_a_legend_printed_in_the_image(monkeypatch):
+    """A legend the layout model cut into the picture is in no block of the
+    parsed text; the describing model, looking at the image, is told to
+    transcribe it at the top of the description."""
+    vision = _Vision('Pedigree; Gel')
+    monkeypatch.setattr(describer, 'vlm_describe', vision)
+
+    describe_figure(
+        'data:', [FigureKind.PEDIGREE, FigureKind.GEL], 'Figure 1.', (), None
+    )
+
+    assert len(vision.prompts) == 2
+    for prompt in vision.prompts:
+        assert LEGEND_IN_IMAGE_SECTION in prompt
+        assert 'Legend as printed in the image' in prompt
+        # Ahead of the caption and the rest of the context.
+        assert prompt.index(LEGEND_IN_IMAGE_SECTION) < prompt.index(
+            'Caption as printed'
+        )

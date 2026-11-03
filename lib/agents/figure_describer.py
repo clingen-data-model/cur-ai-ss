@@ -27,7 +27,11 @@ figure is asked, since only those get a row; the answer is the row's
 rule can: that five panels are redox titrations and belong to the "Figure 3"
 legend two paragraphs down, or that the legend is drawn in the image.
 
-Both describing prompts are also shown the prose printed around the figure
+Both describing prompts also ask for a legend printed inside the image to
+be transcribed at the top of the description (``LEGEND_IN_IMAGE_SECTION``):
+the layout model sometimes cuts a legend set beside the panels into the
+picture, leaving the parsed text without it, and the model is looking at the
+image anyway. They are also shown the prose printed around the figure
 (``FigureRef.nearby``, the same blocks ``find_legend`` chooses from). Docling
 often links only a legend's title line to its picture and leaves the body,
 '(A) Pedigrees showing...', as the paragraph under it; on the MAG paper
@@ -208,6 +212,18 @@ def find_legend(
     return legend
 
 
+# Shown with both describing prompts. The layout model sometimes draws the
+# picture box over a legend set beside the panels, so the legend exists only
+# inside the image and the parsed text has none of it, or links the paragraph
+# under the picture, the legend's continuation, as the caption. The model is
+# looking at the image anyway; asking it to transcribe what it sees is the
+# whole of the fix, and the transcription reaches the text agents inside
+# the description.
+LEGEND_IN_IMAGE_SECTION = """
+
+If a figure legend is printed inside the image itself (the text that names and explains the figure, usually opening "Figure N." or "Fig. N", or the continuation of one, set beside or under the panels), open your description with it transcribed exactly as printed, under the heading "Legend as printed in the image", before anything else: the parsed text of the paper may lack it. Axis labels, panel letters, lane labels and words that are part of the drawing are not a legend."""
+
+
 def _caption_section(caption: str | None) -> str:
     return f'\n\nCaption as printed in the paper:\n{caption}' if caption else ''
 
@@ -285,7 +301,8 @@ def describe_figure(
     A figure of both sorts gets both texts, the pedigree first.
     """
     context = (
-        _caption_section(caption)
+        LEGEND_IN_IMAGE_SECTION
+        + _caption_section(caption)
         + _surroundings_section(nearby)
         + _notes_section(notes)
     )
