@@ -22,6 +22,7 @@ import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 import { LoginPage } from './routes/login'
 import { ExtractionPage } from './routes/papers.$paperId.extraction'
+import { ReviewPage } from './routes/papers.$paperId.review'
 import { parseExtractionTab, type ExtractionTab } from './lib/extractionTabs'
 import { SettingsPage } from './routes/settings'
 
@@ -127,11 +128,29 @@ const papersExtractionRoute = new Route({
   },
 })
 
+export interface ReviewSearch {
+  /** The open case's key (see ReviewCaseResp.key). Absent means the first
+   * unconfirmed case, which is where a fresh visit should land. */
+  case?: string
+}
+
+const papersReviewRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: '/papers/$paperId/review',
+  component: ReviewPage,
+  validateSearch: (search: Record<string, unknown>): ReviewSearch => {
+    const parsed: ReviewSearch = {}
+    if (typeof search.case === 'string' && search.case !== '') parsed.case = search.case
+    return parsed
+  },
+})
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   settingsRoute,
   papersExtractionRoute,
+  papersReviewRoute,
 ])
 
-export { papersExtractionRoute }
+export { papersExtractionRoute, papersReviewRoute }

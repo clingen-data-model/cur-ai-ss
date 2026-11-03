@@ -27,6 +27,7 @@ from lib.models.evidence_block import (
 )
 from lib.models.flag import ExtractionFlag, ReasoningFlag
 from lib.models.mondo import MondoComponentMapping, MondoTerm
+from lib.models.signoff import SignoffColumns, SignoffFields
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
@@ -199,7 +200,7 @@ class OccurrencePairRequest(BaseModel):
 # ==============================
 
 
-class PatientVariantOccurrenceDB(Base):
+class PatientVariantOccurrenceDB(SignoffColumns, Base):
     __tablename__ = 'patient_variant_occurrences'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -319,7 +320,7 @@ class PatientVariantOccurrenceDB(Base):
 # ==============================
 
 
-class PatientVariantOccurrenceResp(BaseModel):
+class PatientVariantOccurrenceResp(SignoffFields):
     id: int
     paper_id: int
     patient_id: int

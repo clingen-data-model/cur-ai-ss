@@ -4,6 +4,9 @@
  * about (the linked rows, each a link to its tab), the subject and reasoning,
  * and the resolution or Resolve / Re-run buttons. Open flags come first;
  * every column header sorts, and the Type pill explains its kind on hover.
+ *
+ * With `only`, the same table shows just those flags and no toolbar: the
+ * review walk puts the flags about one family beneath the family.
  */
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -75,6 +78,7 @@ export function FlagsTab({
   variants,
   rows: occurrenceRows,
   onNavigate,
+  only,
 }: {
   paperId: number
   patients: PatientResp[]
@@ -82,8 +86,17 @@ export function FlagsTab({
   rows: OccurrenceRow[]
   /** Open the tab and row a flag's About chip names. */
   onNavigate?: (target: FlagTarget) => void
+  /** Show these flags alone, without the state and agent toolbar. */
+  only?: Set<number>
 }) {
-  const flags = usePaperFlags(paperId)
+  const index = usePaperFlags(paperId)
+  const flags = useMemo(
+    () =>
+      only
+        ? { ...index, all: index.all.filter((f) => only.has(f.id)), open: index.open.filter((f) => only.has(f.id)) }
+        : index,
+    [index, only],
+  )
   const resolve = useResolveFlag(paperId)
   const resolveAll = useResolveFlags(paperId)
   const rerun = useRerunFromFlag(paperId)
@@ -337,6 +350,7 @@ export function FlagsTab({
   }
 
   if (flags.all.length === 0) {
+    if (only) return <p className="text-sm text-muted-foreground">No open flags.</p>
     return (
       <Empty className="border">
         <EmptyHeader>
@@ -357,6 +371,7 @@ export function FlagsTab({
 
   return (
     <div className="space-y-2">
+      {!only && (
       <div className="flex flex-wrap items-center gap-1">
         {(
           [
@@ -407,6 +422,7 @@ export function FlagsTab({
           </Select>
         </div>
       </div>
+      )}
       <DataTable
         columns={columns}
         data={rows}

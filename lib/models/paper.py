@@ -67,6 +67,7 @@ from lib.models.evidence_block import (
 from lib.models.gene_disease_relation import GeneDiseaseRelation
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient_variant_occurrences import Inheritance
+from lib.models.signoff import SignoffProgress
 from lib.models.user import UserSummaryResp
 from lib.tasks.models import TaskResp
 
@@ -376,6 +377,8 @@ class PaperResp(PaperExtractionOutput):
     proband_count: int = 0
     variant_count: int = 0
     patient_variant_occurrences_count: int = 0
+    # Curator sign-off: stamped rows over all rows (lib/models/signoff.py).
+    signoff: SignoffProgress = SignoffProgress()
 
     # Override the PaperExtractionOutput to make the fields optional.
     # Note that mypy does not approve of the override, though Pydantic functions
@@ -460,6 +463,8 @@ class PaperSummaryResp(BaseModel):
     # Curator flags nobody has resolved yet (lib/models/flag.py): a paper with
     # any is not reviewed, whatever its review_status says.
     open_flag_count: int = 0
+    # Curator sign-off progress, for the table's review column.
+    signoff: SignoffProgress = SignoffProgress()
     # When any task of the paper last changed state; None for a paper with no
     # tasks. The header polls GET /papers/active while anything runs, and this
     # stamp is how it tells that a task finished, so an open paper page can
