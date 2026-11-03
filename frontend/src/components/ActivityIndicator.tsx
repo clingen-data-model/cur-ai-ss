@@ -79,14 +79,21 @@ export function ActivityIndicator() {
   // The table's status badges come from GET /papers, which is deliberately
   // not polled (this is the one polled endpoint; see list_active_papers).
   // Their value changes exactly when a paper enters or leaves the active set,
-  // so refresh the lists then, once, rather than on a timer.
+  // so refresh the lists then, once, rather than on a timer; and the queries
+  // of each paper that entered or left, so an open paper page learns that
+  // its pipeline started (someone else queued it) or finished.
   const activeIds = papers.map((p) => p.id).sort((a, b) => a - b).join(',')
   const previousIds = useRef(activeIds)
   useEffect(() => {
     if (activeIds === previousIds.current) return
+    const before = new Set(previousIds.current.split(',').filter(Boolean).map(Number))
+    const after = new Set(activeIds.split(',').filter(Boolean).map(Number))
+    const changed = new Set([...before, ...after].filter((id) => before.has(id) !== after.has(id)))
     previousIds.current = activeIds
     queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey[0] === 'papers' && query.queryKey[1] !== 'active',
+      predicate: (query) =>
+        (query.queryKey[0] === 'papers' && query.queryKey[1] !== 'active') ||
+        (typeof query.queryKey[1] === 'number' && changed.has(query.queryKey[1])),
     })
   }, [activeIds, queryClient])
 
