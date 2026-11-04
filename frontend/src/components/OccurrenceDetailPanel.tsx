@@ -40,7 +40,7 @@ export function OccurrenceDetailPanel({
       <h4 className="text-sm font-semibold mb-2 max-w-xl">Occurrence</h4>
       <div className="max-w-xl">
         <Row label="Testing Methods" evidence={occurrence.testing_methods_evidence[0]}>
-          <EditableTestingMethodsCell paperId={paperId} occurrence={occurrence} />
+          <EditableTestingMethodsCell paperId={paperId} occurrence={occurrence} triggerClassName="justify-end" />
         </Row>
         <Row label="Disease Name" evidence={occurrence.disease_name_evidence}>
           <EditableDiseaseNameCell paperId={paperId} occurrence={occurrence} />
