@@ -26,6 +26,7 @@ import { FlagKindBadge } from '@/components/FlagKindBadge'
 import { ResolveAllFlagsDialog } from '@/components/ResolveAllFlagsDialog'
 import { ResolveFlagDialog } from '@/components/ResolveFlagDialog'
 import { RerunFromFlagDialog } from '@/components/RerunFromFlagDialog'
+import { Hint } from '@/components/Hint'
 import { usePaperFlags, useRerunFromFlag, useResolveFlag, useResolveFlags } from '@/hooks/usePaperFlags'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { flagKindLabel, flagSourceLabel, sortFlags } from '@/lib/flags'
@@ -56,23 +57,18 @@ function AboutChip({
   const className =
     'inline-flex max-w-56 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium'
   return onClick ? (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className={`${className} hover:bg-muted hover:underline underline-offset-2 cursor-pointer`}
-            onClick={(e) => {
-              e.stopPropagation()
-              onClick()
-            }}
-          />
-        }
+    <Hint label={`Open ${kind}`}>
+      <button
+        type="button"
+        className={`${className} hover:bg-muted hover:underline underline-offset-2 cursor-pointer`}
+        onClick={(e) => {
+          e.stopPropagation()
+          onClick()
+        }}
       >
         {inner}
-      </TooltipTrigger>
-      <TooltipContent>Open {kind}</TooltipContent>
-    </Tooltip>
+      </button>
+    </Hint>
   ) : (
     <span className={className}>{inner}</span>
   )
@@ -323,16 +319,11 @@ export function FlagsTab({
                 <Button size="sm" variant="outline" onClick={() => setResolving(flag)}>
                   Resolve
                 </Button>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button size="sm" variant="ghost" onClick={() => setRerunning(flag)}>
-                        <RefreshCw className="size-3.5" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>Re-run the agent</TooltipContent>
-                </Tooltip>
+                <Hint label="Re-run the agent">
+                  <Button size="sm" variant="ghost" onClick={() => setRerunning(flag)}>
+                    <RefreshCw className="size-3.5" />
+                  </Button>
+                </Hint>
               </div>
             )
           }

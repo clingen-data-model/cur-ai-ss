@@ -15,7 +15,7 @@ import { usePdfHighlight } from '@/components/PdfHighlightProvider'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Hint } from '@/components/Hint'
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -71,10 +71,9 @@ export function FiguresTab({ paperId }: { paperId: number }) {
     <Tabs key={figures.map((figure) => figure.anchor).join()} defaultValue={figures[0].anchor}>
       <TabsList variant="line">
         {figures.map((figure) => (
-          <Tooltip key={figure.anchor}>
-            <TooltipTrigger render={<TabsTrigger value={figure.anchor}>{figureLabel(figure)}</TabsTrigger>} />
-            <TooltipContent>{figure.anchor}</TooltipContent>
-          </Tooltip>
+          <Hint key={figure.anchor} label={figure.anchor}>
+            <TabsTrigger value={figure.anchor}>{figureLabel(figure)}</TabsTrigger>
+          </Hint>
         ))}
       </TabsList>
       {figures.map((figure) => (

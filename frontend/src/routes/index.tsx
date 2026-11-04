@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
 import { FileX, FolderPlus, UserRoundSearch } from 'lucide-react'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { Hint } from '@/components/Hint'
 
 export function HomePage() {
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -74,10 +74,12 @@ export function HomePage() {
             Browse every gene, or just the papers you have worked on.
           </p>
         </div>
-        <Tooltip>
-          <TooltipTrigger render={<Button onClick={() => setDialogOpen(true)}><FolderPlus />Upload paper</Button>} />
-          <TooltipContent>Upload a paper and select its gene from the list</TooltipContent>
-        </Tooltip>
+        <Hint label="Upload a paper and select its gene from the list">
+          <Button onClick={() => setDialogOpen(true)}>
+            <FolderPlus />
+            Upload paper
+          </Button>
+        </Hint>
       </div>
 
       {/* Tabs rather than routes: two views of the same collection, and the

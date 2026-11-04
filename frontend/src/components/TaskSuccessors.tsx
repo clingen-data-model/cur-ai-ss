@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { listTaskTypesTaskTypesGet } from '@/api/generated'
 import type { TaskType, TaskTypeResp } from '@/api/generated/types.gen'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Hint } from '@/components/Hint'
 
 /** The pipeline's task types with descriptions and successors; fixed for the
  * life of a deploy, so fetched once and kept. */
@@ -66,10 +66,9 @@ export function TaskSuccessors({ taskType, skipped = false }: { taskType: TaskTy
           {level.map((t, j) => (
             <span key={t}>
               {j > 0 && ', '}
-              <Tooltip>
-                <TooltipTrigger render={<span className="cursor-help" />}>{t}</TooltipTrigger>
-                <TooltipContent className="max-w-xs">{describe(t)}</TooltipContent>
-              </Tooltip>
+              <Hint label={describe(t)}>
+                <span className="cursor-help">{t}</span>
+              </Hint>
             </span>
           ))}
         </p>

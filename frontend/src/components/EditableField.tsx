@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Hint } from '@/components/Hint'
 import { pillColorFor } from '@/lib/pillColors'
 
 const NONE_VALUE = '__none__'
@@ -38,20 +38,15 @@ function FieldRow({
   return (
     <div className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0">
       {clickable ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                type="button"
-                className="text-sm text-muted-foreground shrink-0 w-44 text-left cursor-pointer hover:text-foreground hover:underline decoration-dotted underline-offset-2"
-                onClick={() => highlight?.openHighlight({ citations })}
-              />
-            }
+        <Hint label="Show this field's evidence in the paper">
+          <button
+            type="button"
+            className="text-sm text-muted-foreground shrink-0 w-44 text-left cursor-pointer hover:text-foreground hover:underline decoration-dotted underline-offset-2"
+            onClick={() => highlight?.openHighlight({ citations })}
           >
             {label}
-          </TooltipTrigger>
-          <TooltipContent>Show this field's evidence in the paper</TooltipContent>
-        </Tooltip>
+          </button>
+        </Hint>
       ) : (
         <span className="text-sm text-muted-foreground shrink-0 w-44">{label}</span>
       )}

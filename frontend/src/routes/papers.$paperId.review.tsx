@@ -51,6 +51,7 @@ import { OccurrencesTab } from '@/components/OccurrencesTab'
 import { EvidencePanes, PdfHighlightProvider, type HighlightTarget } from '@/components/PdfHighlightProvider'
 import { ReviewStatusBadge } from '@/components/ReviewStatusCell'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
+import { Hint } from '@/components/Hint'
 import { usePaperFlags } from '@/hooks/usePaperFlags'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
 import { caseRows, useReviewCases, useSignoff, type ReviewCaseResp } from '@/hooks/useSignoff'
@@ -285,31 +286,21 @@ export function ReviewPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button variant="outline" size="sm" onClick={() => step(-1)} disabled={currentIndex <= 0}>
-                        <ChevronLeft className="size-4" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>Previous family (←)</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => step(1)}
-                        disabled={currentIndex >= cases.length - 1}
-                      >
-                        <ArrowRight className="size-4" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>Next family (→)</TooltipContent>
-                </Tooltip>
+                <Hint label="Previous family (←)">
+                  <Button variant="outline" size="sm" onClick={() => step(-1)} disabled={currentIndex <= 0}>
+                    <ChevronLeft className="size-4" />
+                  </Button>
+                </Hint>
+                <Hint label="Next family (→)">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => step(1)}
+                    disabled={currentIndex >= cases.length - 1}
+                  >
+                    <ArrowRight className="size-4" />
+                  </Button>
+                </Hint>
               </div>
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>
@@ -357,34 +348,24 @@ export function ReviewPage() {
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {current.confirmed ? (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <Button variant="outline" size="sm" onClick={unconfirmCurrent} disabled={signoff.isPending}>
-                                <Undo2 className="size-3.5 mr-1" />
-                                Confirmed
-                              </Button>
-                            }
-                          />
-                          <TooltipContent>Take back (u)</TooltipContent>
-                        </Tooltip>
+                        <Hint label="Take back (u)">
+                          <Button variant="outline" size="sm" onClick={unconfirmCurrent} disabled={signoff.isPending}>
+                            <Undo2 className="size-3.5 mr-1" />
+                            Confirmed
+                          </Button>
+                        </Hint>
                       ) : (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <Button
-                                size="sm"
-                                className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
-                                onClick={confirmCurrent}
-                                disabled={signoff.isPending}
-                              >
-                                <Check className="size-3.5 mr-1" />
-                                Confirm family
-                              </Button>
-                            }
-                          />
-                          <TooltipContent>Confirm this family (Enter)</TooltipContent>
-                        </Tooltip>
+                        <Hint label="Confirm this family (Enter)">
+                          <Button
+                            size="sm"
+                            className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
+                            onClick={confirmCurrent}
+                            disabled={signoff.isPending}
+                          >
+                            <Check className="size-3.5 mr-1" />
+                            Confirm family
+                          </Button>
+                        </Hint>
                       )}
                     </div>
                   </div>
@@ -437,17 +418,12 @@ export function ReviewPage() {
               target={target}
               toolbar={
                 narrowed ? (
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button variant="outline" size="sm" onClick={() => setNarrowed(null)}>
-                          <Highlighter className="size-3.5 mr-1" />
-                          Highlight all case fields
-                        </Button>
-                      }
-                    />
-                    <TooltipContent>Back to every field of this case</TooltipContent>
-                  </Tooltip>
+                  <Hint label="Back to every field of this case">
+                    <Button variant="outline" size="sm" onClick={() => setNarrowed(null)}>
+                      <Highlighter className="size-3.5 mr-1" />
+                      Highlight all case fields
+                    </Button>
+                  </Hint>
                 ) : (
                   <span className="text-xs text-muted-foreground">
                     {defaultTarget ? 'Every field of this case' : 'Nothing cited'}

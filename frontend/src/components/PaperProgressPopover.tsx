@@ -13,9 +13,9 @@ import { RefreshCw } from 'lucide-react'
 import { getTaskStatsStatsGet, listTasksPapersPaperIdTasksGet } from '@/api/generated'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Spinner } from '@/components/ui/spinner'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { TaskTimeline } from '@/components/TaskTimeline'
 import { RerunTaskDialog } from '@/components/PaperActions'
+import { Hint } from '@/components/Hint'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
 
 /** The badge's click target: the pipeline's progress bars.
@@ -86,21 +86,16 @@ export function PaperProgressPopover({
             <p className="flex-1 truncate text-sm font-medium leading-tight">
               {paper.title ?? paper.filename}
             </p>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    disabled={isRunning}
-                    onClick={() => setRerunOpen(true)}
-                    className="flex items-center justify-center size-6 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  />
-                }
+            <Hint label="Re-run agents">
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={() => setRerunOpen(true)}
+                className="flex items-center justify-center size-6 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <RefreshCw className="size-3.5" />
-              </TooltipTrigger>
-              <TooltipContent>Re-run agents</TooltipContent>
-            </Tooltip>
+              </button>
+            </Hint>
           </div>
           {tasksQuery.isPending ? (
             <div className="flex justify-center py-6">

@@ -18,7 +18,6 @@ import { DEFAULT_EXTRACTION_TAB, isExtractionTab, type ExtractionTab } from '@/l
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { API_BASE_URL, getAccessToken } from '@/lib/api'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
 import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
@@ -34,6 +33,7 @@ import { FiguresTab } from '@/components/FiguresTab'
 import { FamiliesTab } from '@/components/FamiliesTab'
 import { PaperMetadataTab } from '@/components/PaperMetadataTab'
 import { PdfHighlightProvider } from '@/components/PdfHighlightProvider'
+import { Hint } from '@/components/Hint'
 
 /** What the Figure Descriptions tab can hold: the figure kinds extraction
  * reads for curation fields, as the tab's hover text. */
@@ -170,39 +170,27 @@ export function ExtractionPage() {
               </div>
             )}
             {paper && <RestoreSnapshotButton paper={paper} />}
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    render={<Link to="/papers/$paperId/review" params={{ paperId: String(paperId) }} />}
-                  >
-                    <ClipboardCheck className="h-4 w-4 mr-2" />
-                    Review Mode
-                    {paper?.signoff && (paper.signoff.total ?? 0) > 0 && (
-                      <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
-                        {paper.signoff.confirmed ?? 0}/{paper.signoff.total ?? 0}
-                      </span>
-                    )}
-                  </Button>
-                }
-              />
-              <TooltipContent>
-                Walk the paper's families beside the PDF, confirming each family's patient-variant occurrences
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button variant="outline" size="sm" onClick={handleExportPptx} disabled={!paper || isExporting}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    {isExporting ? 'Exporting...' : 'PPTX'}
-                  </Button>
-                }
-              />
-              <TooltipContent>Export curation summary as PPTX</TooltipContent>
-            </Tooltip>
+            <Hint label="Walk the paper's families beside the PDF, confirming each family's patient-variant occurrences">
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link to="/papers/$paperId/review" params={{ paperId: String(paperId) }} />}
+              >
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                Review Mode
+                {paper?.signoff && (paper.signoff.total ?? 0) > 0 && (
+                  <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+                    {paper.signoff.confirmed ?? 0}/{paper.signoff.total ?? 0}
+                  </span>
+                )}
+              </Button>
+            </Hint>
+            <Hint label="Export curation summary as PPTX">
+              <Button variant="outline" size="sm" onClick={handleExportPptx} disabled={!paper || isExporting}>
+                <FileText className="h-4 w-4 mr-2" />
+                {isExporting ? 'Exporting...' : 'PPTX'}
+              </Button>
+            </Hint>
           </div>
         </div>
 
@@ -238,10 +226,9 @@ export function ExtractionPage() {
                 <span className="ml-1 text-xs text-violet-700 dark:text-violet-400">({flags.open.length})</span>
               )}
             </TabsTrigger>
-            <Tooltip>
-              <TooltipTrigger render={<TabsTrigger value="figures">Figure Descriptions</TabsTrigger>} />
-              <TooltipContent className="max-w-xs">{FIGURE_DESCRIPTIONS_HINT}</TooltipContent>
-            </Tooltip>
+            <Hint label={FIGURE_DESCRIPTIONS_HINT}>
+              <TabsTrigger value="figures">Figure Descriptions</TabsTrigger>
+            </Hint>
             <TabsTrigger value="paper-metadata">Paper Metadata</TabsTrigger>
           </TabsList>
 
