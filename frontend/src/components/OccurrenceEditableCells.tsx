@@ -241,9 +241,13 @@ export function EditableDeNovoCell({
 export function EditableTestingMethodsCell({
   paperId,
   occurrence,
+  triggerClassName = 'max-w-56',
 }: {
   paperId: number
   occurrence: PatientVariantOccurrenceResp
+  /** The pills' box. The table caps it so a wide row stays a row; the
+   * Occurrence panel lets it fit its pills and sit against the icons. */
+  triggerClassName?: string
 }) {
   const mutation = useOccurrenceMutation(paperId, occurrence.id)
   const pending = usePendingEdit<string[]>((methods, note) =>
@@ -277,7 +281,7 @@ export function EditableTestingMethodsCell({
   return (
     <div className="flex items-center gap-1">
       <Popover open={open} onOpenChange={handleOpenChange}>
-        <PopoverTrigger className="flex flex-wrap gap-1 max-w-56 rounded p-0.5 hover:bg-muted cursor-pointer">
+        <PopoverTrigger className={`flex flex-wrap gap-1 rounded p-0.5 hover:bg-muted cursor-pointer ${triggerClassName}`}>
           {occurrence.testing_methods.length === 0 ? (
             <span className="text-xs text-muted-foreground">Select...</span>
           ) : (
