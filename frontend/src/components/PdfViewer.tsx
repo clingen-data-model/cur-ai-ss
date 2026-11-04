@@ -32,6 +32,7 @@ import {
   ZoomIn,
   ZoomOut,
   Download,
+  RotateCw,
   X,
 } from 'lucide-react'
 import type { GrobidAnnotation } from '@/api/generated/types.gen'
@@ -71,6 +72,8 @@ interface PageTextItem {
 interface PdfTextSource {
   numPages: number
   getPage(pageNumber: number): Promise<{
+    /** The page's own /Rotate, which pdf.js applies by default. */
+    rotate: number
     getTextContent(): Promise<{ items: unknown[] }>
     getViewport(params: { scale: number }): {
       convertToViewportPoint(x: number, y: number): number[]
@@ -129,6 +132,55 @@ function matchRectsInItem(item: PageTextItem, query: string): PageTextItem[] {
   }
 }
 
+interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** A rect in the page's default frame (W x H, /Rotate applied, where the
+ * backend's boxes and the text items above live), moved to where it lands
+ * after the page is turned a further `turn` degrees clockwise. A quarter
+ * turn swaps the frame to H x W. */
+function turnRect(rect: Rect, turn: number, page: { width: number; height: number }): Rect {
+  const { x, y, width, height } = rect
+  switch (turn) {
+    case 90:
+      return { x: page.height - y - height, y: x, width: height, height: width }
+    case 180:
+      return { x: page.width - x - width, y: page.height - y - height, width, height }
+    case 270:
+      return { x: y, y: page.width - x - width, width: height, height: width }
+    default:
+      return rect
+  }
+}
+
+/* A curator's turns are kept in the browser per PDF, so a page turned once
+ * stays turned on the next visit. Browser storage can be absent or throw
+ * (private windows, cleared site data), so both directions are guarded. */
+function turnsKey(url: string): string {
+  return `pdf-turns:${url}`
+}
+
+function readTurns(url: string): Record<number, number> {
+  try {
+    const raw = localStorage.getItem(turnsKey(url))
+    return raw ? (JSON.parse(raw) as Record<number, number>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeTurns(url: string, turns: Record<number, number>): void {
+  try {
+    localStorage.setItem(turnsKey(url), JSON.stringify(turns))
+  } catch {
+    // Nothing to do: the turn still holds for this visit.
+  }
+}
+
 interface PdfViewerProps {
   url: string
   filename?: string | null
@@ -153,6 +205,14 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
   // the highlight rects on whichever page is showing.
   const [pageItems, setPageItems] = useState<PageTextItem[][] | null>(null)
   const [query, setQuery] = useState('')
+  // The curator's quarter turns per page, on top of the page's own /Rotate.
+  // A landscape table drawn sideways on a portrait page with no /Rotate (60
+  // of dev-caa's 1396 pages on 2026-11-04) reads sideways until turned, and
+  // no viewer can tell from the file. The page's own rotation is read up
+  // front, since react-pdf's `rotate` is the whole rotation, not an extra.
+  const [turns, setTurns] = useState<Record<number, number>>(() => readTurns(url))
+  const [baseRotation, setBaseRotation] = useState<number[] | null>(null)
+  useEffect(() => writeTurns(url, turns), [url, turns])
 
   // GROBID numbers the pages it found the evidence on; open on the first.
   const targetPage = useMemo(
@@ -171,6 +231,11 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
     // Runs in the background; page rendering doesn't wait on it, and search
     // is simply unavailable (matchCount stays 0) until it resolves.
     void (async () => {
+      const rotations: number[] = []
+      for (let i = 1; i <= document.numPages; i++) {
+        rotations.push((await document.getPage(i)).rotate)
+      }
+      setBaseRotation(rotations)
       const pages: PageTextItem[][] = []
       for (let i = 1; i <= document.numPages; i++) {
         const page = await document.getPage(i)
@@ -220,9 +285,24 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
 
   // Bring the evidence on screen once its rects exist, so it's visible even
   // when it sits far down a long page.
+  const turn = turns[pageNumber] ?? 0
+  const turnPage = () => setTurns((prev) => ({ ...prev, [pageNumber]: (turn + 90) % 360 }))
+  // The frame the turned page is shown in, and where each box lands in it.
+  const frame = pageSize && (turn % 180 ? { width: pageSize.height, height: pageSize.width } : pageSize)
+  const place = (rect: Rect) => {
+    if (!pageSize || !frame) return undefined
+    const turned = turnRect(rect, turn, pageSize)
+    return {
+      left: `${(turned.x / frame.width) * 100}%`,
+      top: `${(turned.y / frame.height) * 100}%`,
+      width: `${(turned.width / frame.width) * 100}%`,
+      height: `${(turned.height / frame.height) * 100}%`,
+    }
+  }
+
   useEffect(() => {
     firstHighlightRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [pageNumber, pageSize, annotations])
+  }, [pageNumber, pageSize, annotations, turn])
 
   const normalizedQuery = query.trim().toLowerCase()
 
@@ -375,6 +455,11 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
           >
             <ZoomIn className="h-4 w-4" />
           </Button>
+          <Hint label="Rotate page">
+            <Button variant="ghost" size="sm" onClick={turnPage}>
+              <RotateCw className="h-4 w-4" />
+            </Button>
+          </Hint>
           <Hint label="Download PDF">
             <Button variant="ghost" size="sm" onClick={handleDownloadPdf}>
               <Download className="h-4 w-4" />
@@ -422,39 +507,28 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
             <Page
               pageNumber={pageNumber}
               scale={zoom / 100}
+              rotate={baseRotation ? ((baseRotation[pageNumber - 1] ?? 0) + turn) % 360 : undefined}
               onLoadSuccess={onPageLoadSuccess}
               renderTextLayer={false}
               renderAnnotationLayer={false}
             />
-            {pageSize &&
+            {frame &&
               pageAnnotations.map((annotation, index) => (
                 <div
                   key={`evidence-${annotation.page}-${annotation.x}-${annotation.y}-${index}`}
                   ref={index === 0 ? firstHighlightRef : undefined}
                   aria-hidden
                   className="absolute pointer-events-none mix-blend-multiply"
-                  style={{
-                    backgroundColor: HIGHLIGHT_COLOR,
-                    left: `${(annotation.x / pageSize.width) * 100}%`,
-                    top: `${(annotation.y / pageSize.height) * 100}%`,
-                    width: `${(annotation.width / pageSize.width) * 100}%`,
-                    height: `${(annotation.height / pageSize.height) * 100}%`,
-                  }}
+                  style={{ backgroundColor: HIGHLIGHT_COLOR, ...place(annotation) }}
                 />
               ))}
-            {pageSize &&
+            {frame &&
               currentPageMatches.map((item, index) => (
                 <div
                   key={`search-${pageNumber}-${item.x}-${item.y}-${index}`}
                   aria-hidden
                   className="absolute pointer-events-none mix-blend-multiply"
-                  style={{
-                    backgroundColor: SEARCH_MATCH_COLOR,
-                    left: `${(item.x / pageSize.width) * 100}%`,
-                    top: `${(item.y / pageSize.height) * 100}%`,
-                    width: `${(item.width / pageSize.width) * 100}%`,
-                    height: `${(item.height / pageSize.height) * 100}%`,
-                  }}
+                  style={{ backgroundColor: SEARCH_MATCH_COLOR, ...place(item) }}
                 />
               ))}
           </div>
