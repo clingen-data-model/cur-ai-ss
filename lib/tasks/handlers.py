@@ -179,6 +179,7 @@ from lib.models.patient import (
 )
 from lib.models.patient_variant_occurrences import PatientVariantOccurrenceOutput
 from lib.models.phenotype import HPOTerm
+from lib.models.signoff import clear_signoff
 from lib.models.variant import (
     HarmonizedVariant,
     Variant,
@@ -1857,6 +1858,7 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
                 # JSON columns require flag_modified to track changes
                 flag_modified(link_a, 'paired_variant_reasoning')
                 flag_modified(link_b, 'paired_variant_reasoning')
+                clear_signoff(session, paper_id, [link_a, link_b])
 
         session.flush()
 
@@ -2110,7 +2112,6 @@ async def handle_hpo_linking(task_id: int) -> None:
         # no edit history of its own, correctly reporting as agent-derived.
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
         session.add(hpo_to_db(phenotype_id, hpo_result))
-        phenotype_row = session.get(PhenotypeDB, phenotype_id)
         replace_flags(
             session,
             paper_id=task.paper_id,
@@ -2303,6 +2304,7 @@ async def handle_mondo_linking(task_id: int) -> None:
             occurrence.mondo_id = selected_mondo_id
             occurrence.mondo_term = selected_mondo_term
             occurrence.mondo_match_context = mondo_match_context
+            clear_signoff(session, target.paper_id, [occurrence])
 
 
 async def handle_extraction_verification(task_id: int) -> None:

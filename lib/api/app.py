@@ -84,6 +84,7 @@ from lib.misc.pdf.paths import (
     document_raw_path,
     document_thumbnail_path,
 )
+from lib.misc.review_cases import ReviewCaseResp, build_review_cases
 from lib.misc.snapshots import (
     InvalidSnapshotNameError,
     SnapshotIncompatibleError,
@@ -193,6 +194,16 @@ from lib.models.patient import (
     TwinType,
 )
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
+from lib.models.signoff import (
+    SignoffProgress,
+    SignoffRequest,
+    signoff_fields,
+    signoff_progress,
+    signoff_progress_by_paper,
+    stamp,
+    sync_review_status,
+    unstamp,
+)
 from lib.models.stats import (
     TaskStatsResp,
     TrackDurationStat,
@@ -992,6 +1003,7 @@ def _paper_summaries(
     open_flag_counts = _count_by_paper(
         session, FlagDB.paper_id, FlagDB.id, where=FlagDB.resolved_at.is_(None)
     )
+    signoff_by_paper = signoff_progress_by_paper(session)
 
     # The badge only asks which statuses a paper has, so DISTINCT lets SQLite
     # answer from the (paper_id, status) index with a few rows per paper
@@ -1057,6 +1069,7 @@ def _paper_summaries(
             variant_count=variant_counts.get(paper.id, 0),
             patient_variant_occurrences_count=occurrence_counts.get(paper.id, 0),
             open_flag_count=open_flag_counts.get(paper.id, 0),
+            signoff=signoff_by_paper.get(paper.id, SignoffProgress()),
             tasks_changed_at=tasks_changed_at.get(paper.id),
         )
         for paper in query.all()
@@ -1186,6 +1199,7 @@ def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
         proband_count=row.proband_count,
         variant_count=row.variant_count,
         patient_variant_occurrences_count=row.patient_variant_occurrences_count,
+        signoff=signoff_progress(session, row.id),
         title=row.title,
         first_author=row.first_author,
         journal_name=row.journal_name,
@@ -2376,6 +2390,7 @@ def _patient_variant_occurrence_to_resp(
     from lib.models.evidence_block import ReasoningBlock
 
     resp = PatientVariantOccurrenceResp(
+        **signoff_fields(row),
         id=row.id,
         paper_id=row.paper_id,
         patient_id=row.patient_id,
@@ -2913,6 +2928,75 @@ def resolve_flags(
         flag.resolution_note = request.note
     session.flush()
     return [_flag_resp(flag) for flag in flags]
+
+
+# ==============================
+# Curator sign-off
+# ==============================
+
+
+@app.get('/papers/{paper_id}/review-cases', response_model=list[ReviewCaseResp])
+def get_review_cases(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """The review walk's steps, ranked by attention (lib/misc/review_cases.py)."""
+    if session.get(PaperDB, paper_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    return build_review_cases(session, paper_id)
+
+
+@app.post('/papers/{paper_id}/signoff', response_model=SignoffProgress)
+def signoff_rows(
+    paper_id: int,
+    request: SignoffRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Stamp (or, with ``confirmed`` false, unstamp) the listed occurrences
+    as checked by the current user (lib/models/signoff.py), then move the
+    paper's review status to match (in progress on the first stamp, completed
+    on the last, back in progress on a take-back). An id that is not an
+    occurrence of this paper is a 404 for the whole request: nothing is
+    stamped."""
+    paper_db = session.get(PaperDB, paper_id)
+    if paper_db is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    ids = set(request.occurrence_ids)
+    rows = (
+        session.query(PatientVariantOccurrenceDB)
+        .filter(
+            PatientVariantOccurrenceDB.paper_id == paper_id,
+            PatientVariantOccurrenceDB.id.in_(ids),
+        )
+        .all()
+        if ids
+        else []
+    )
+    missing = ids - {row.id for row in rows}
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Occurrences not found on this paper: {sorted(missing)}',
+        )
+    for row in rows:
+        if request.confirmed:
+            stamp(row, current_user)
+        else:
+            unstamp(row)
+    _touch_paper(session, paper_id, current_user)
+    # The sessionmaker runs with autoflush off: the stamps have to reach the
+    # table before the status check counts them, and _touch_paper leaves a
+    # SQL expression in updated_at until the next flush.
+    session.flush()
+    sync_review_status(session, paper_db, current_user)
+    session.flush()
+    return signoff_progress(session, paper_id)
 
 
 # A task's scope column -> the flag column that holds the same id.

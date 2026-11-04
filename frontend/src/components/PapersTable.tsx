@@ -16,7 +16,7 @@ import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { DeletePaperButton, RerunTaskButton } from '@/components/PaperActions'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
-import { Flag } from 'lucide-react'
+import { ClipboardCheck, Flag } from 'lucide-react'
 
 /** Midnight starting the local calendar day of `date`. */
 function startOfDay(date: Date): number {
@@ -140,7 +140,22 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
       {
         accessorKey: 'review_status',
         header: 'Review Status',
-        cell: ({ row }) => <ReviewStatusCell paper={row.original} />,
+        cell: ({ row }) => (
+          <div className="flex items-center gap-2">
+            <ReviewStatusCell paper={row.original} />
+            {/* Curator sign-off: rows confirmed over rows extracted. */}
+            {row.original.signoff && (row.original.signoff.total ?? 0) > 0 && (
+              <Link
+                to="/papers/$paperId/review"
+                params={{ paperId: String(row.original.id) }}
+                className="text-xs text-muted-foreground tabular-nums hover:underline"
+                title="Rows a curator has confirmed; opens the review walk"
+              >
+                {row.original.signoff.confirmed ?? 0}/{row.original.signoff.total ?? 0}
+              </Link>
+            )}
+          </div>
+        ),
       },
       // The three counts link into the tab that lists what was counted:
       // patients to Families, variants to Occurrences, flags to Flags.
@@ -197,13 +212,23 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
       },
       {
         id: 'actions',
-        size: 80,
+        size: 108,
         enableSorting: false,
         header: () => null,
         // The same two controls the paper cards carry, so the action is in the
-        // same place whichever view you reached the paper from.
+        // same place whichever view you reached the paper from, plus the way
+        // into Review Mode, which is where a curator goes from this list.
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
+            <Link
+              to="/papers/$paperId/review"
+              params={{ paperId: String(row.original.id) }}
+              title="Review Mode: walk the paper's families and confirm their occurrences"
+              aria-label="Review Mode"
+              className="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <ClipboardCheck className="size-4" />
+            </Link>
             <RerunTaskButton paper={row.original} />
             <DeletePaperButton paper={row.original} />
           </div>

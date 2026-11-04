@@ -25,6 +25,9 @@ interface DataTableProps<TData, TValue> {
   filterPlaceholder?: string
   /** Extra controls on the search-box row, such as a view toggle. */
   toolbar?: React.ReactNode
+  /** No search-box row, and no pagination while everything fits on one
+   * page: for a table embedded in a narrow pane with a handful of rows. */
+  compact?: boolean
   pageSize?: number
   renderSubComponent?: (props: { row: TData }) => React.ReactNode
   getRowCanExpand?: (row: TData) => boolean
@@ -56,6 +59,7 @@ export function DataTable<TData, TValue>({
   data,
   filterPlaceholder = 'Filter...',
   toolbar,
+  compact = false,
   pageSize = 10,
   renderSubComponent,
   getRowCanExpand,
@@ -130,15 +134,17 @@ export function DataTable<TData, TValue>({
 
   return (
     <div ref={containerRef} className={cn('space-y-2', className)}>
-      <div className="flex items-center gap-4">
-        <Input
-          placeholder={filterPlaceholder}
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          className="max-w-sm"
-        />
-        {toolbar}
-      </div>
+      {!compact && (
+        <div className="flex items-center gap-4">
+          <Input
+            placeholder={filterPlaceholder}
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="max-w-sm"
+          />
+          {toolbar}
+        </div>
+      )}
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
@@ -217,6 +223,7 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
+      {!(compact && pageCount <= 1) && (
       <nav
         className="flex items-center justify-end gap-1"
         aria-label="Table pagination"
@@ -264,6 +271,7 @@ export function DataTable<TData, TValue>({
           <ChevronRight />
         </Button>
       </nav>
+      )}
     </div>
   )
 }

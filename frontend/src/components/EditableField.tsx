@@ -7,6 +7,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { EvidencePopover, type EvidenceLike } from '@/components/EvidencePopover'
+import { usePdfHighlightOptional } from '@/components/PdfHighlightProvider'
 import { HumanEditNoteDialog } from '@/components/HumanEditNoteDialog'
 import { usePendingEdit } from '@/hooks/usePendingEdit'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -28,9 +29,25 @@ function FieldRow({
   evidence?: EvidenceLike | null
   children: ReactNode
 }) {
+  // On the review page the viewer is beside the row, so the label itself
+  // highlights the field's evidence: one click, no popover.
+  const highlight = usePdfHighlightOptional()
+  const citations = evidence?.citations ?? []
+  const clickable = !!highlight?.inline && citations.length > 0
   return (
     <div className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0">
-      <span className="text-sm text-muted-foreground shrink-0 w-44">{label}</span>
+      {clickable ? (
+        <button
+          type="button"
+          className="text-sm text-muted-foreground shrink-0 w-44 text-left cursor-pointer hover:text-foreground hover:underline decoration-dotted underline-offset-2"
+          title="Show this field's evidence in the paper"
+          onClick={() => highlight?.openHighlight({ citations })}
+        >
+          {label}
+        </button>
+      ) : (
+        <span className="text-sm text-muted-foreground shrink-0 w-44">{label}</span>
+      )}
       <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
         {children}
         <EvidencePopover block={evidence} />

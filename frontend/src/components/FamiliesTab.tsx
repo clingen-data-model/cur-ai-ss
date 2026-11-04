@@ -20,6 +20,9 @@
  * structure and no segregation to speak of, but its identifier and
  * consanguinity are still editable here and flags about the family point at
  * this row, so hiding it left those with nowhere to go.
+ *
+ * With `only`, the same table lists just those families: the review walk
+ * shows the current family's row beneath its occurrences.
  */
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -422,7 +425,16 @@ function FamilyRow({
 /** The family or patient a flag's About chip asked to open. */
 export type FamilyFocus = { kind: 'family'; id: number } | { kind: 'patient'; id: number }
 
-export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: FamilyFocus | null }) {
+export function FamiliesTab({
+  paperId,
+  focus,
+  only,
+}: {
+  paperId: number
+  focus?: FamilyFocus | null
+  /** List these families alone. */
+  only?: Set<number>
+}) {
   const flags = usePaperFlags(paperId)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const familiesQuery = useQuery({
@@ -484,7 +496,7 @@ export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: Famil
   // Larger families first -- they are where structure and segregation live --
   // then by identifier, so the order does not shuffle as data reloads.
   const size = (id: number) => byFamily.get(id)?.length ?? 0
-  const ordered = [...families].sort(
+  const ordered = families.filter((f) => !only || only.has(f.id)).sort(
     (a, b) =>
       Number(size(b.id) > 1) - Number(size(a.id) > 1) ||
       a.identifier.localeCompare(b.identifier, undefined, { numeric: true }),

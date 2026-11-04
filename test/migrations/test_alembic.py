@@ -992,3 +992,66 @@ def test_onset_columns_read_back_as_none_for_old_rows(monkeypatch, tmp_path):
             r[1] for r in connection.execute(text('PRAGMA table_info(patients)'))
         }
     assert not columns & {'age_onset', 'age_onset_unit', 'onset_category'}
+
+
+def test_signoff_columns_read_back_unstamped_for_old_rows(monkeypatch, tmp_path):
+    """e5f1a7c3d9b8 adds the curator sign-off stamp to occurrences in place.
+    An occurrence from before it reads back unstamped through the ORM, and
+    the user reference is a real foreign key."""
+    from sqlalchemy import inspect
+
+    from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'c9d4e8f3a5b2')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        patient_id = _insert_patient(connection, paper_id, 'II-1')
+        variant_id = _insert_variant(connection, paper_id, 'c.1A>G')
+        # Not _insert_occurrence: that helper writes the de_novo column of
+        # the schema its own test upgrades to, which a4e7c2d9f1b3 replaced.
+        connection.execute(
+            text(
+                'INSERT INTO patient_variant_occurrences (paper_id, patient_id, '
+                'variant_id, zygosity, inheritance, testing_methods, '
+                'zygosity_evidence, inheritance_evidence, testing_methods_evidence) '
+                "VALUES (:paper_id, :patient_id, :variant_id, 'Heterozygous', "
+                "'Unknown', '[]', :ev, :ev, '[]')"
+            ),
+            {
+                'paper_id': paper_id,
+                'patient_id': patient_id,
+                'variant_id': variant_id,
+                'ev': json.dumps({'value': 'Heterozygous', 'reasoning': 'x'}),
+            },
+        )
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with Session(engine) as session:
+        occurrence = session.query(PatientVariantOccurrenceDB).one()
+        assert occurrence.reviewed_at is None
+        assert occurrence.reviewed_by_user_id is None
+    targets = {
+        (fk['constrained_columns'][0], fk['referred_table'])
+        for fk in inspect(engine).get_foreign_keys('patient_variant_occurrences')
+    }
+    assert ('reviewed_by_user_id', 'users') in targets
