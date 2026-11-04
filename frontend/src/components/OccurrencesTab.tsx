@@ -31,6 +31,7 @@ import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
+import { OccurrenceDetailPanel } from '@/components/OccurrenceDetailPanel'
 import { displayProteinChange } from '@/lib/hgvs'
 import { EntityLink } from '@/components/EntityLink'
 import { PatientIdCell, hasSeveralFamilies } from '@/components/PatientIdCell'
@@ -41,7 +42,7 @@ import { apiErrorMessage } from '@/lib/apiError'
 import { ProbandStatus } from '@/api/generated/types.gen'
 import { Switch } from '@/components/ui/switch'
 
-type ExpandedView = 'patient' | 'variant'
+type ExpandedView = 'patient' | 'variant' | 'occurrence'
 
 /** Same "any of patient/variant/occurrence was curator-created" check as
  * ManuallyCreatedIndicator, reused to tint the whole row -- the icon alone
@@ -101,8 +102,8 @@ export function OccurrencesTab({
    * zygosity, inheritance, de novo) and the row icons, without the count,
    * the search box, the proband toggle, the variant type, testing methods,
    * disease columns or the pair/delete actions, so a row fits half a
-   * viewport; the Patient and Variant panels behind the expander are the
-   * same. */
+   * viewport. The Patient and Variant panels behind the names are the same;
+   * the caret opens the Occurrence panel, which holds the dropped fields. */
   compact?: boolean
   /** An occurrence to open on arrival (from a flag's About chip), on the
    * panel the chip names. A new object is a new request, so the same row can
@@ -208,7 +209,9 @@ export function OccurrencesTab({
             expanded={expandedCell?.rowId === String(row.original.occurrence.id)}
             onToggle={() => {
               const rowId = String(row.original.occurrence.id)
-              setExpandedCell(expandedCell?.rowId === rowId ? null : { rowId, view: 'patient' })
+              setExpandedCell(
+                expandedCell?.rowId === rowId ? null : { rowId, view: compact ? 'occurrence' : 'patient' },
+              )
             }}
           />
         ),
@@ -399,6 +402,8 @@ export function OccurrencesTab({
         renderSubComponent={({ row }) =>
           expandedCell?.view === 'patient' ? (
             <PatientDetailPanel paperId={paperId} patient={row.patient} />
+          ) : expandedCell?.view === 'occurrence' ? (
+            <OccurrenceDetailPanel paperId={paperId} occurrence={row.occurrence} />
           ) : (
             <VariantDetailPanel paperId={paperId} variant={row.variant} />
           )
