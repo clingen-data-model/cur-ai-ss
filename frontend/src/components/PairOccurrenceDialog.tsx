@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { QuickRunCheckbox } from '@/components/QuickRunCheckbox'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
@@ -108,18 +109,24 @@ export function PairOccurrenceDialog({
 
   return (
     <>
-      <button
-        type="button"
-        title={hasExistingPairing ? 'Change pairing' : 'Pair variant'}
-        onClick={(e) => {
-          e.stopPropagation()
-          reset()
-          setOpen(true)
-        }}
-        className="inline-flex items-center justify-center size-7 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
-      >
-        {hasExistingPairing ? <RefreshCw className="size-3.5" /> : <Link2 className="size-3.5" />}
-      </button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                reset()
+                setOpen(true)
+              }}
+              className="inline-flex items-center justify-center size-7 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+            />
+          }
+        >
+          {hasExistingPairing ? <RefreshCw className="size-3.5" /> : <Link2 className="size-3.5" />}
+        </TooltipTrigger>
+        <TooltipContent>{hasExistingPairing ? 'Change pairing' : 'Pair variant'}</TooltipContent>
+      </Tooltip>
       <Dialog
         open={open}
         onOpenChange={(next) => {

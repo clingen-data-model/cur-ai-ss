@@ -43,6 +43,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { HpoCombobox } from '@/components/HpoCombobox'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
@@ -118,18 +119,24 @@ export function RelinkHpoDialog({
 
   return (
     <>
-      <button
-        type="button"
-        title={hasExistingLink ? 'Re-link HPO term' : 'Link HPO term'}
-        onClick={(e) => {
-          e.stopPropagation()
-          reset()
-          setOpen(true)
-        }}
-        className="inline-flex items-center justify-center size-7 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
-      >
-        {hasExistingLink ? <RefreshCw className="size-3.5" /> : <Pencil className="size-3.5" />}
-      </button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                reset()
+                setOpen(true)
+              }}
+              className="inline-flex items-center justify-center size-7 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+            />
+          }
+        >
+          {hasExistingLink ? <RefreshCw className="size-3.5" /> : <Pencil className="size-3.5" />}
+        </TooltipTrigger>
+        <TooltipContent>{hasExistingLink ? 'Re-link HPO term' : 'Link HPO term'}</TooltipContent>
+      </Tooltip>
       <Dialog
         open={open}
         onOpenChange={(next) => {

@@ -17,6 +17,7 @@ import {
   listTasksPapersPaperIdTasksGet,
 } from '@/api/generated'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { TaskTimeline } from '@/components/TaskTimeline'
 import { RerunTaskDialog } from '@/components/PaperActions'
 import type { PaperSummaryResp, TaskStatsResp } from '@/api/generated/types.gen'
@@ -48,14 +49,20 @@ function PaperRow({ paper, stats }: { paper: PaperSummaryResp; stats?: TaskStats
         >
           {paper.title ?? paper.filename}
         </Link>
-        <button
-          type="button"
-          title="Re-run agents"
-          onClick={() => setRerunOpen(true)}
-          className="flex items-center justify-center size-6 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
-        >
-          <RefreshCw className="size-3.5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                onClick={() => setRerunOpen(true)}
+                className="flex items-center justify-center size-6 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+              />
+            }
+          >
+            <RefreshCw className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Re-run agents</TooltipContent>
+        </Tooltip>
       </div>
       <TaskTimeline tasks={data ?? []} stats={stats} />
       <RerunTaskDialog paper={paper} open={rerunOpen} onOpenChange={setRerunOpen} />

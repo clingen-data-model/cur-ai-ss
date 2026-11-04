@@ -94,9 +94,12 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
             <ul className="space-y-1">
               {citations.map((citation, index) => (
                 <li key={`${citation.anchor}-${index}`} className="flex items-start gap-1.5">
-                  <Badge variant="outline" className="shrink-0 font-normal" title={citation.anchor}>
-                    {describeAnchor(citation.anchor, anchorPage(citation.anchor))}
-                  </Badge>
+                  <Tooltip>
+                    <TooltipTrigger render={<Badge variant="outline" className="shrink-0 font-normal" />}>
+                      {describeAnchor(citation.anchor, anchorPage(citation.anchor))}
+                    </TooltipTrigger>
+                    <TooltipContent>{citation.anchor}</TooltipContent>
+                  </Tooltip>
                   {/* min-w-0 lets the flex item shrink below its content width and
                       overflow-wrap:anywhere breaks a quote with no spaces (an HGVS
                       string, an accession), which break-words alone leaves overflowing

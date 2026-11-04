@@ -56,17 +56,23 @@ function AboutChip({
   const className =
     'inline-flex max-w-56 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium'
   return onClick ? (
-    <button
-      type="button"
-      className={`${className} hover:bg-muted hover:underline underline-offset-2 cursor-pointer`}
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick()
-      }}
-      title={`Open ${kind}`}
-    >
-      {inner}
-    </button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className={`${className} hover:bg-muted hover:underline underline-offset-2 cursor-pointer`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onClick()
+            }}
+          />
+        }
+      >
+        {inner}
+      </TooltipTrigger>
+      <TooltipContent>Open {kind}</TooltipContent>
+    </Tooltip>
   ) : (
     <span className={className}>{inner}</span>
   )
@@ -317,9 +323,16 @@ export function FlagsTab({
                 <Button size="sm" variant="outline" onClick={() => setResolving(flag)}>
                   Resolve
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setRerunning(flag)} title="Re-run the agent">
-                  <RefreshCw className="size-3.5" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button size="sm" variant="ghost" onClick={() => setRerunning(flag)}>
+                        <RefreshCw className="size-3.5" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>Re-run the agent</TooltipContent>
+                </Tooltip>
               </div>
             )
           }

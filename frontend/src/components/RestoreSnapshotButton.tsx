@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { apiErrorMessage } from '@/lib/apiError'
 import { paperBusyMessage } from '@/lib/taskState'
 import type { PaperResp, SnapshotMeta } from '@/api/generated/types.gen'
@@ -163,17 +164,19 @@ function RestoreSnapshotDialog({
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel
                 </Button>
-                <Button
-                  onClick={() => chosenName && mutation.mutate(chosenName)}
-                  disabled={!chosenName || !!chosen?.matches_current || mutation.isPending}
-                  title={
-                    chosen?.matches_current
-                      ? 'The paper already matches this snapshot'
-                      : undefined
-                  }
-                >
-                  {mutation.isPending ? 'Restoring...' : 'Restore'}
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex" />}>
+                    <Button
+                      onClick={() => chosenName && mutation.mutate(chosenName)}
+                      disabled={!chosenName || !!chosen?.matches_current || mutation.isPending}
+                    >
+                      {mutation.isPending ? 'Restoring...' : 'Restore'}
+                    </Button>
+                  </TooltipTrigger>
+                  {chosen?.matches_current && (
+                    <TooltipContent>The paper already matches this snapshot</TooltipContent>
+                  )}
+                </Tooltip>
               </div>
             </>
           )}
@@ -189,16 +192,17 @@ export function RestoreSnapshotButton({ paper }: { paper: PaperResp }) {
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setOpen(true)}
-        disabled={!!busy}
-        title={busy ?? 'Restore a saved extraction snapshot'}
-      >
-        <History className="h-4 w-4 mr-2" />
-        Restore Snapshot
-      </Button>
+      {/* The trigger is a span around the button so the reason still shows
+          while the paper is busy and the button disabled. */}
+      <Tooltip>
+        <TooltipTrigger render={<span className="inline-flex" />}>
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)} disabled={!!busy}>
+            <History className="h-4 w-4 mr-2" />
+            Restore Snapshot
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{busy ?? 'Restore a saved extraction snapshot'}</TooltipContent>
+      </Tooltip>
       <RestoreSnapshotDialog paper={paper} open={open} onOpenChange={setOpen} />
     </>
   )

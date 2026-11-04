@@ -288,14 +288,16 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
               >
                 <ZoomIn className="h-4 w-4" />
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDownloadPdf}
-                title="Download PDF"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button variant="ghost" size="sm" onClick={handleDownloadPdf}>
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>Download PDF</TooltipContent>
+              </Tooltip>
             </div>
           </div>
 

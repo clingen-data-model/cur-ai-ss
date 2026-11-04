@@ -170,30 +170,39 @@ export function ExtractionPage() {
               </div>
             )}
             {paper && <RestoreSnapshotButton paper={paper} />}
-            <Button
-              variant="outline"
-              size="sm"
-              render={<Link to="/papers/$paperId/review" params={{ paperId: String(paperId) }} />}
-              title="Walk the paper's families beside the PDF, confirming each family's patient-variant occurrences"
-            >
-              <ClipboardCheck className="h-4 w-4 mr-2" />
-              Review Mode
-              {paper?.signoff && (paper.signoff.total ?? 0) > 0 && (
-                <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
-                  {paper.signoff.confirmed ?? 0}/{paper.signoff.total ?? 0}
-                </span>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportPptx}
-              disabled={!paper || isExporting}
-              title="Export curation summary as PPTX"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              {isExporting ? 'Exporting...' : 'PPTX'}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<Link to="/papers/$paperId/review" params={{ paperId: String(paperId) }} />}
+                  >
+                    <ClipboardCheck className="h-4 w-4 mr-2" />
+                    Review Mode
+                    {paper?.signoff && (paper.signoff.total ?? 0) > 0 && (
+                      <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+                        {paper.signoff.confirmed ?? 0}/{paper.signoff.total ?? 0}
+                      </span>
+                    )}
+                  </Button>
+                }
+              />
+              <TooltipContent>
+                Walk the paper's families beside the PDF, confirming each family's patient-variant occurrences
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button variant="outline" size="sm" onClick={handleExportPptx} disabled={!paper || isExporting}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    {isExporting ? 'Exporting...' : 'PPTX'}
+                  </Button>
+                }
+              />
+              <TooltipContent>Export curation summary as PPTX</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 

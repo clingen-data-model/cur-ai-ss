@@ -49,7 +49,14 @@ export function FlagCard({
         <div className="min-w-0 flex-1">
           <p className="font-medium break-words">{flag.subject}</p>
           <p className="text-xs text-muted-foreground">
-            <span title={FLAG_KIND_LABELS[flag.kind]?.hint}>{flagKindLabel(flag)}</span>
+            {FLAG_KIND_LABELS[flag.kind]?.hint ? (
+              <Tooltip>
+                <TooltipTrigger render={<span className="cursor-help" />}>{flagKindLabel(flag)}</TooltipTrigger>
+                <TooltipContent className="max-w-xs">{FLAG_KIND_LABELS[flag.kind]?.hint}</TooltipContent>
+              </Tooltip>
+            ) : (
+              flagKindLabel(flag)
+            )}
             {' · '}
             {flagSourceLabel(flag)}
           </p>
@@ -60,9 +67,12 @@ export function FlagCard({
         <ul className="space-y-1">
           {citations.map((citation, index) => (
             <li key={`${citation.anchor}-${index}`} className="flex items-start gap-1.5">
-              <Badge variant="outline" className="shrink-0 font-normal" title={citation.anchor}>
-                {describeAnchor(citation.anchor, anchorPage(citation.anchor))}
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger render={<Badge variant="outline" className="shrink-0 font-normal" />}>
+                  {describeAnchor(citation.anchor, anchorPage(citation.anchor))}
+                </TooltipTrigger>
+                <TooltipContent>{citation.anchor}</TooltipContent>
+              </Tooltip>
               {citation.quote && <span className="min-w-0 [overflow-wrap:anywhere]">“{citation.quote}”</span>}
             </li>
           ))}
