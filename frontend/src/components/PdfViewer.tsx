@@ -391,7 +391,22 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto bg-muted/50 flex items-start justify-center p-4">
+      {/* Focusable, so a click into the PDF takes the arrow keys: ← and →
+          turn the page, ↑ and ↓ keep scrolling it. The two page keys stop
+          here, so a walk on the page outside (Review Mode steps families
+          with the same keys) does not move as well. */}
+      <div
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.metaKey || event.ctrlKey || event.altKey) return
+          if (event.key === 'ArrowRight') goToPage(pageNumber + 1)
+          else if (event.key === 'ArrowLeft') goToPage(pageNumber - 1)
+          else return
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        className="flex-1 overflow-auto bg-muted/50 flex items-start justify-center p-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
+      >
         <Document
           file={url}
           onLoadSuccess={onDocumentLoadSuccess}
