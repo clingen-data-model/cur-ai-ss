@@ -21,6 +21,7 @@ import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/Hint'
 import { Copy, Download } from 'lucide-react'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -183,14 +184,15 @@ export function PhenotypesTable({
         header: () => (
           <div className="flex items-center gap-1.5">
             <span>HPO ID</span>
-            <button
-              type="button"
-              onClick={copyAllHpoIds}
-              title="Copy all HPO IDs"
-              className="inline-flex items-center justify-center size-5 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
-            >
-              <Copy className="size-3.5" />
-            </button>
+            <Hint label="Copy all HPO IDs">
+              <button
+                type="button"
+                onClick={copyAllHpoIds}
+                className="inline-flex items-center justify-center size-5 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+              >
+                <Copy className="size-3.5" />
+              </button>
+            </Hint>
           </div>
         ),
         enableSorting: false,

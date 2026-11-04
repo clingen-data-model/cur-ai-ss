@@ -38,6 +38,7 @@ import type { GrobidAnnotation } from '@/api/generated/types.gen'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { Hint } from '@/components/Hint'
 
 // Matches Streamlit's default highlight color (lib/ui/paper/shared.py COLORS[0]).
 const HIGHLIGHT_COLOR = '#FFF59D'
@@ -334,24 +335,26 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
         </div>
 
         <div className="flex shrink-0 items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => goToMatchPage(-1)}
-            disabled={matches.pages.length === 0}
-            title="Previous match"
-          >
-            <ChevronUp className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => goToMatchPage(1)}
-            disabled={matches.pages.length === 0}
-            title="Next match"
-          >
-            <ChevronDown className="h-4 w-4" />
-          </Button>
+          <Hint label="Previous match">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => goToMatchPage(-1)}
+              disabled={matches.pages.length === 0}
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+          </Hint>
+          <Hint label="Next match">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => goToMatchPage(1)}
+              disabled={matches.pages.length === 0}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </Hint>
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -372,14 +375,18 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
           >
             <ZoomIn className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleDownloadPdf} title="Download PDF">
-            <Download className="h-4 w-4" />
-          </Button>
-          {onClose && (
-            <Button variant="ghost" size="sm" onClick={onClose} title="Close">
-              <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
+          <Hint label="Download PDF">
+            <Button variant="ghost" size="sm" onClick={handleDownloadPdf}>
+              <Download className="h-4 w-4" />
             </Button>
+          </Hint>
+          {onClose && (
+            <Hint label="Close">
+              <Button variant="ghost" size="sm" onClick={onClose}>
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </Button>
+            </Hint>
           )}
         </div>
       </div>

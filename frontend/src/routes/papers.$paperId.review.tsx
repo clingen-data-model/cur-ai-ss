@@ -51,6 +51,7 @@ import { OccurrencesTab } from '@/components/OccurrencesTab'
 import { EvidencePanes, PdfHighlightProvider, type HighlightTarget } from '@/components/PdfHighlightProvider'
 import { ReviewStatusBadge } from '@/components/ReviewStatusCell'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
+import { Hint } from '@/components/Hint'
 import { usePaperFlags } from '@/hooks/usePaperFlags'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
 import { caseRows, useReviewCases, useSignoff, type ReviewCaseResp } from '@/hooks/useSignoff'
@@ -285,18 +286,21 @@ export function ReviewPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="outline" size="sm" onClick={() => step(-1)} disabled={currentIndex <= 0} title="Previous case (←)">
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => step(1)}
-                  disabled={currentIndex >= cases.length - 1}
-                  title="Next case (→)"
-                >
-                  <ArrowRight className="size-4" />
-                </Button>
+                <Hint label="Previous family (←)">
+                  <Button variant="outline" size="sm" onClick={() => step(-1)} disabled={currentIndex <= 0}>
+                    <ChevronLeft className="size-4" />
+                  </Button>
+                </Hint>
+                <Hint label="Next family (→)">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => step(1)}
+                    disabled={currentIndex >= cases.length - 1}
+                  >
+                    <ArrowRight className="size-4" />
+                  </Button>
+                </Hint>
               </div>
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>
@@ -344,21 +348,24 @@ export function ReviewPage() {
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {current.confirmed ? (
-                        <Button variant="outline" size="sm" onClick={unconfirmCurrent} disabled={signoff.isPending} title="Take back (u)">
-                          <Undo2 className="size-3.5 mr-1" />
-                          Confirmed
-                        </Button>
+                        <Hint label="Take back (u)">
+                          <Button variant="outline" size="sm" onClick={unconfirmCurrent} disabled={signoff.isPending}>
+                            <Undo2 className="size-3.5 mr-1" />
+                            Confirmed
+                          </Button>
+                        </Hint>
                       ) : (
-                        <Button
-                          size="sm"
-                          className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
-                          onClick={confirmCurrent}
-                          disabled={signoff.isPending}
-                          title="Confirm this family (Enter)"
-                        >
-                          <Check className="size-3.5 mr-1" />
-                          Confirm family
-                        </Button>
+                        <Hint label="Confirm this family (Enter)">
+                          <Button
+                            size="sm"
+                            className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
+                            onClick={confirmCurrent}
+                            disabled={signoff.isPending}
+                          >
+                            <Check className="size-3.5 mr-1" />
+                            Confirm family
+                          </Button>
+                        </Hint>
                       )}
                     </div>
                   </div>
@@ -411,10 +418,12 @@ export function ReviewPage() {
               target={target}
               toolbar={
                 narrowed ? (
-                  <Button variant="outline" size="sm" onClick={() => setNarrowed(null)} title="Back to every field of this case">
-                    <Highlighter className="size-3.5 mr-1" />
-                    Highlight all case fields
-                  </Button>
+                  <Hint label="Back to every field of this case">
+                    <Button variant="outline" size="sm" onClick={() => setNarrowed(null)}>
+                      <Highlighter className="size-3.5 mr-1" />
+                      Highlight all case fields
+                    </Button>
+                  </Hint>
                 ) : (
                   <span className="text-xs text-muted-foreground">
                     {defaultTarget ? 'Every field of this case' : 'Nothing cited'}

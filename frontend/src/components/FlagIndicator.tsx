@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { usePdfHighlight } from '@/components/PdfHighlightProvider'
 import { ResolveFlagDialog } from '@/components/ResolveFlagDialog'
 import { RerunFromFlagDialog } from '@/components/RerunFromFlagDialog'
+import { Hint } from '@/components/Hint'
 import { useRerunFromFlag, useResolveFlag } from '@/hooks/usePaperFlags'
 import { describeAnchor, isSupplementAnchor } from '@/lib/anchors'
 import { FLAG_KIND_LABELS, flagKindLabel, flagSourceLabel, sortFlags } from '@/lib/flags'
@@ -49,7 +50,9 @@ export function FlagCard({
         <div className="min-w-0 flex-1">
           <p className="font-medium break-words">{flag.subject}</p>
           <p className="text-xs text-muted-foreground">
-            <span title={FLAG_KIND_LABELS[flag.kind]?.hint}>{flagKindLabel(flag)}</span>
+            <Hint label={FLAG_KIND_LABELS[flag.kind]?.hint}>
+              <span className="cursor-help">{flagKindLabel(flag)}</span>
+            </Hint>
             {' · '}
             {flagSourceLabel(flag)}
           </p>
@@ -60,9 +63,11 @@ export function FlagCard({
         <ul className="space-y-1">
           {citations.map((citation, index) => (
             <li key={`${citation.anchor}-${index}`} className="flex items-start gap-1.5">
-              <Badge variant="outline" className="shrink-0 font-normal" title={citation.anchor}>
-                {describeAnchor(citation.anchor, anchorPage(citation.anchor))}
-              </Badge>
+              <Hint label={citation.anchor}>
+                <Badge variant="outline" className="shrink-0 font-normal">
+                  {describeAnchor(citation.anchor, anchorPage(citation.anchor))}
+                </Badge>
+              </Hint>
               {citation.quote && <span className="min-w-0 [overflow-wrap:anywhere]">“{citation.quote}”</span>}
             </li>
           ))}

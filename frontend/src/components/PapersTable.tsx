@@ -15,6 +15,7 @@ import { PaperProgressPopover } from '@/components/PaperProgressPopover'
 import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { DeletePaperButton, RerunTaskButton } from '@/components/PaperActions'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Hint } from '@/components/Hint'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
 import { ClipboardCheck, Flag } from 'lucide-react'
 
@@ -145,14 +146,15 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
             <ReviewStatusCell paper={row.original} />
             {/* Curator sign-off: rows confirmed over rows extracted. */}
             {row.original.signoff && (row.original.signoff.total ?? 0) > 0 && (
-              <Link
-                to="/papers/$paperId/review"
-                params={{ paperId: String(row.original.id) }}
-                className="text-xs text-muted-foreground tabular-nums hover:underline"
-                title="Rows a curator has confirmed; opens the review walk"
-              >
-                {row.original.signoff.confirmed ?? 0}/{row.original.signoff.total ?? 0}
-              </Link>
+              <Hint label="Occurrences a curator has confirmed; opens Review Mode">
+                <Link
+                  to="/papers/$paperId/review"
+                  params={{ paperId: String(row.original.id) }}
+                  className="text-xs text-muted-foreground tabular-nums hover:underline"
+                >
+                  {row.original.signoff.confirmed ?? 0}/{row.original.signoff.total ?? 0}
+                </Link>
+              </Hint>
             )}
           </div>
         ),
@@ -202,12 +204,11 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
         accessorKey: 'updated_at',
         header: 'Updated',
         cell: ({ getValue }) => (
-          <span
-            className="text-muted-foreground whitespace-nowrap"
-            title={fullTime(getValue() as string)}
-          >
-            {relativeTime(getValue() as string)}
-          </span>
+          <Hint label={fullTime(getValue() as string)}>
+            <span className="text-muted-foreground whitespace-nowrap cursor-help">
+              {relativeTime(getValue() as string)}
+            </span>
+          </Hint>
         ),
       },
       {
@@ -220,15 +221,16 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
         // into Review Mode, which is where a curator goes from this list.
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
-            <Link
-              to="/papers/$paperId/review"
-              params={{ paperId: String(row.original.id) }}
-              title="Review Mode: walk the paper's families and confirm their occurrences"
-              aria-label="Review Mode"
-              className="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            >
-              <ClipboardCheck className="size-4" />
-            </Link>
+            <Hint label="Review Mode: walk the paper's families and confirm their occurrences">
+              <Link
+                to="/papers/$paperId/review"
+                params={{ paperId: String(row.original.id) }}
+                aria-label="Review Mode"
+                className="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <ClipboardCheck className="size-4" />
+              </Link>
+            </Hint>
             <RerunTaskButton paper={row.original} />
             <DeletePaperButton paper={row.original} />
           </div>

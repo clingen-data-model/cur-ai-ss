@@ -4,21 +4,15 @@
  */
 import type { FlagResp } from '@/api/generated/types.gen'
 import { Badge } from '@/components/ui/badge'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Hint } from '@/components/Hint'
 import { FLAG_KIND_LABELS, flagKindLabel } from '@/lib/flags'
 
 export function FlagKindBadge({ flag, className }: { flag: Pick<FlagResp, 'kind'>; className?: string }) {
-  const hint = FLAG_KIND_LABELS[flag.kind]?.hint
-  const badge = (
-    <Badge variant="outline" className={`font-normal text-muted-foreground ${className ?? ''}`}>
-      {flagKindLabel(flag)}
-    </Badge>
-  )
-  if (!hint) return badge
   return (
-    <Tooltip>
-      <TooltipTrigger render={badge} />
-      <TooltipContent className="max-w-xs">{hint}</TooltipContent>
-    </Tooltip>
+    <Hint label={FLAG_KIND_LABELS[flag.kind]?.hint}>
+      <Badge variant="outline" className={`font-normal text-muted-foreground ${className ?? ''}`}>
+        {flagKindLabel(flag)}
+      </Badge>
+    </Hint>
   )
 }

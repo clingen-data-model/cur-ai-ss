@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Hint } from '@/components/Hint'
 import { apiErrorMessage } from '@/lib/apiError'
 import { paperBusyMessage } from '@/lib/taskState'
 import type { PaperResp, SnapshotMeta } from '@/api/generated/types.gen'
@@ -163,17 +164,14 @@ function RestoreSnapshotDialog({
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel
                 </Button>
-                <Button
-                  onClick={() => chosenName && mutation.mutate(chosenName)}
-                  disabled={!chosenName || !!chosen?.matches_current || mutation.isPending}
-                  title={
-                    chosen?.matches_current
-                      ? 'The paper already matches this snapshot'
-                      : undefined
-                  }
-                >
-                  {mutation.isPending ? 'Restoring...' : 'Restore'}
-                </Button>
+                <Hint label={chosen?.matches_current ? 'The paper already matches this snapshot' : undefined} wrap>
+                  <Button
+                    onClick={() => chosenName && mutation.mutate(chosenName)}
+                    disabled={!chosenName || !!chosen?.matches_current || mutation.isPending}
+                  >
+                    {mutation.isPending ? 'Restoring...' : 'Restore'}
+                  </Button>
+                </Hint>
               </div>
             </>
           )}
@@ -189,16 +187,14 @@ export function RestoreSnapshotButton({ paper }: { paper: PaperResp }) {
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setOpen(true)}
-        disabled={!!busy}
-        title={busy ?? 'Restore a saved extraction snapshot'}
-      >
-        <History className="h-4 w-4 mr-2" />
-        Restore Snapshot
-      </Button>
+      {/* `wrap`: the reason has to show while the paper is busy and the
+          button disabled. */}
+      <Hint label={busy ?? 'Restore a saved extraction snapshot'} wrap>
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)} disabled={!!busy}>
+          <History className="h-4 w-4 mr-2" />
+          Restore Snapshot
+        </Button>
+      </Hint>
       <RestoreSnapshotDialog paper={paper} open={open} onOpenChange={setOpen} />
     </>
   )

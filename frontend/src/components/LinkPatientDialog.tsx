@@ -28,6 +28,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
+import { Hint } from '@/components/Hint'
 import { apiErrorMessage } from '@/lib/apiError'
 
 export function LinkPatientDialog({
@@ -85,17 +86,18 @@ export function LinkPatientDialog({
 
   return (
     <>
-      <button
-        type="button"
-        title="Link to patient"
-        onClick={(e) => {
-          e.stopPropagation()
-          setOpen(true)
-        }}
-        className="inline-flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
-      >
-        <Link2 className="size-4" />
-      </button>
+      <Hint label="Link to patient">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            setOpen(true)
+          }}
+          className="inline-flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+        >
+          <Link2 className="size-4" />
+        </button>
+      </Hint>
       <Dialog
         open={open}
         onOpenChange={(next) => {

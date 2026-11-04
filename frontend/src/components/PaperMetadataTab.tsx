@@ -20,6 +20,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { EditableSelectRow, EditableTextRow, SimpleMultiSelectRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Hint } from '@/components/Hint'
 import { updatePaperPapersPaperIdPatch } from '@/api/generated'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
@@ -288,14 +289,11 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
               >
                 <ZoomIn className="h-4 w-4" />
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDownloadPdf}
-                title="Download PDF"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
+              <Hint label="Download PDF">
+                <Button variant="ghost" size="sm" onClick={handleDownloadPdf}>
+                  <Download className="h-4 w-4" />
+                </Button>
+              </Hint>
             </div>
           </div>
 
