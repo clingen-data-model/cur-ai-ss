@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
-import { EvidencePopover, type EvidenceLike } from '@/components/EvidencePopover'
+import { EvidencePopover, ViewEvidenceButton, type EvidenceLike } from '@/components/EvidencePopover'
 import { usePdfHighlightOptional } from '@/components/PdfHighlightProvider'
 import { HumanEditNoteDialog } from '@/components/HumanEditNoteDialog'
 import { usePendingEdit } from '@/hooks/usePendingEdit'
@@ -53,6 +53,7 @@ function FieldRow({
       <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
         {children}
         <EvidencePopover block={evidence} />
+        <ViewEvidenceButton block={evidence} />
       </div>
     </div>
   )

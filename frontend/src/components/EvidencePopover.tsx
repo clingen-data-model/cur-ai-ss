@@ -44,6 +44,27 @@ function formatEvidenceValue(value: unknown): string {
   return String(value)
 }
 
+/** The popover's "View in PDF" as an icon beside it, for the detail rows:
+ * one click to the evidence without opening the popover first. Disabled,
+ * like the info button, when the field cites nothing. */
+export function ViewEvidenceButton({ block }: { block?: EvidenceLike | null }) {
+  const { openHighlight } = usePdfHighlight()
+  const citations = block?.citations ?? []
+  const viewInPdf = citations.some((citation) => !isSupplementAnchor(citation.anchor))
+  return (
+    <Hint label={viewInPdf ? 'View in PDF' : 'View in Markdown'}>
+      <button
+        type="button"
+        disabled={citations.length === 0}
+        className={TRIGGER_CLASSNAME}
+        onClick={() => openHighlight({ citations })}
+      >
+        <FileSearch className="size-3.5" />
+      </button>
+    </Hint>
+  )
+}
+
 export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const { openHighlight, anchorPage } = usePdfHighlight()
   const citations = block?.citations ?? []
