@@ -28,22 +28,30 @@ const NONE_VALUE = '__none__'
 function FieldRow({
   label,
   evidence,
+  noEvidence,
   children,
 }: {
   label: string
   evidence?: EvidenceLike | null
+  noEvidence?: boolean
   children: ReactNode
 }) {
   // The two icons at the end of the row are the way to a field's evidence:
   // the popover, and the viewer. On the review page the viewer is beside
-  // the row and the second icon narrows its highlight to this field.
+  // the row and the second icon narrows its highlight to this field. A row
+  // whose value never has evidence (a looked-up annotation) leaves them out
+  // rather than showing two disabled icons.
   return (
     <div className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0">
       <span className="text-sm text-muted-foreground shrink-0 w-44">{label}</span>
       <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
         {children}
-        <EvidencePopover block={evidence} />
-        <ViewEvidenceButton block={evidence} />
+        {!noEvidence && (
+          <>
+            <EvidencePopover block={evidence} />
+            <ViewEvidenceButton block={evidence} />
+          </>
+        )}
       </div>
     </div>
   )
@@ -469,13 +477,16 @@ export function ReadOnlyRow({
   label,
   value,
   evidence,
+  noEvidence,
 }: {
   label: string
   value: ReactNode
   evidence?: EvidenceLike | null
+  /** The value is looked up, not extracted: no evidence icons at all. */
+  noEvidence?: boolean
 }) {
   return (
-    <FieldRow label={label} evidence={evidence}>
+    <FieldRow label={label} evidence={evidence} noEvidence={noEvidence}>
       <span className="text-sm text-right truncate max-w-64">{value}</span>
     </FieldRow>
   )
