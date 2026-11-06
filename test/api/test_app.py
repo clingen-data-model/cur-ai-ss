@@ -1740,6 +1740,65 @@ def test_send_chat_message_queues_task(client, seeded_paper):
     assert reply['content'] == 'Queued the "Variant Extraction" task.'
 
 
+def test_send_chat_message_holds_no_write_lock_while_the_agent_runs(
+    client, db_session, seeded_paper
+):
+    """The endpoint flushed the user's message and kept that transaction
+    open through the agent run, so the queue_task tool, writing through a
+    connection of its own, waited out SQLite's busy timeout and failed with
+    "database is locked" on every queue from chat (paper 127, 2026-11-06).
+    This runs the real tool inside the run, the way the agent does."""
+    from agents.tool_context import ToolContext
+
+    from lib.agents.chat_agent import _make_queue_task_tool
+
+    # The tool reads and writes through a connection of its own, so the
+    # seeded rows must be committed for it to see the paper at all.
+    db_session.commit()
+    mock_result = MagicMock()
+    mock_result.final_output = 'ignored -- the confirmation wins'
+    captured = {}
+
+    async def fake_run(agent, message, *, context=None, **kwargs):
+        tool = _make_queue_task_tool(seeded_paper.id, 1)
+        args = '{"task_type": "Variant Extraction"}'
+        captured['reply'] = await tool.on_invoke_tool(
+            ToolContext(
+                context=context,
+                tool_name='queue_task',
+                tool_call_id='call-1',
+                tool_arguments=args,
+            ),
+            args,
+        )
+        return mock_result
+
+    with (
+        patch('agents.Runner.run', side_effect=fake_run),
+        patch('lib.agents.chat_agent.write_snapshot_safe'),
+    ):
+        response = client.post(
+            f'/papers/{seeded_paper.id}/chat/messages',
+            json={'message': 're-run variant extraction'},
+        )
+    assert response.status_code == 200
+    assert captured['reply'].startswith('Queued the "Variant Extraction" task')
+    assert response.json()['content'] == captured['reply']
+
+    db_session.expire_all()
+    task = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.VARIANT_EXTRACTION,
+        )
+        .one()
+    )
+    assert task.status == TaskStatus.PENDING
+    messages = client.get(f'/papers/{seeded_paper.id}/chat/messages').json()
+    assert [m['role'] for m in messages] == ['user', 'assistant']
+
+
 def test_send_chat_message_uses_full_chat_instructions_and_all_tools(
     client, seeded_paper
 ):

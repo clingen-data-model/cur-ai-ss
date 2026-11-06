@@ -1371,7 +1371,12 @@ async def send_chat_message(
         created_by_user_id=current_user.id,
     )
     session.add(user_message)
-    session.flush()
+    # Committed before the agent runs, not flushed: a flushed insert holds
+    # SQLite's one write lock on this connection for the whole run, and the
+    # queue_task tool writes through a connection of its own, so every queue
+    # from chat failed with "database is locked" (paper 127, 2026-11-06). The
+    # commit also keeps the user's message when the model call fails.
+    session.commit()
 
     context = build_paper_chat_context(paper_id)
     run_context = ChatRunContext()
