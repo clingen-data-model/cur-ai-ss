@@ -163,7 +163,7 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
       // patients to Families, variants to Occurrences, flags to Flags.
       {
         accessorKey: 'patient_count',
-        header: 'Patients',
+        header: 'Individuals',
         cell: ({ row, getValue }) => (
           <CountLink paperId={row.original.id} tab="families" count={getValue() as number | undefined} />
         ),

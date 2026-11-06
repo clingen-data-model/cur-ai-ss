@@ -18,6 +18,7 @@ import {
 } from '@/api/generated'
 import type { FlagResp } from '@/api/generated/types.gen'
 import { apiErrorMessage } from '@/lib/apiError'
+import { taskLabel } from '@/lib/taskLabel'
 
 export type { FlagResp }
 
@@ -168,7 +169,7 @@ export function useRerunFromFlag(paperId: number) {
       // and the progress popover render.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
-      toast.success(`${task.type} queued`)
+      toast.success(`${taskLabel(task.type)} queued`)
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue re-run')),
   })

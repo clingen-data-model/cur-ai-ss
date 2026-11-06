@@ -2194,7 +2194,7 @@ def get_patient_occurrences(
     patient_db = session.get(PatientDB, patient_id)
     if not patient_db or patient_db.paper_id != paper_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
         )
     from lib.models.patient import PatientDB
 
@@ -2322,7 +2322,7 @@ def pair_occurrence(
         if occurrence_b.patient_id != occurrence_a.patient_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail='Paired occurrences must belong to the same patient',
+                detail='Paired occurrences must belong to the same individual',
             )
 
         if occurrence_a.paired_variant_link_id not in (None, occurrence_b.id):
@@ -2552,7 +2552,7 @@ def delete_patient(
     patient_db = session.get(PatientDB, patient_id)
     if not patient_db or patient_db.paper_id != paper_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
         )
 
     record_deletion(
@@ -2715,7 +2715,7 @@ def create_occurrence(
     patient_db = session.get(PatientDB, create_request.patient_id)
     if not patient_db or patient_db.paper_id != paper_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
         )
 
     variant_db = session.get(VariantDB, create_request.variant_id)
@@ -3137,7 +3137,7 @@ def get_phenotypes(
     )
     if not patient_db:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
         )
     phenotypes = (
         session.query(PhenotypeDB)
@@ -3176,7 +3176,7 @@ def create_phenotype(
     )
     if not patient_db:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
         )
 
     hpo_name: str | None = None
@@ -3333,7 +3333,7 @@ def update_patient(
     )
     if not patient_db:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
         )
     patch_request.apply_to(patient_db, current_user, session)
     _touch_paper(session, paper_id, current_user)

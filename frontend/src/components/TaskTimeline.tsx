@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import type { TaskResp, TaskStatsResp } from '@/api/generated/types.gen'
 import type { TaskRowProgress } from '@/lib/taskTimeline'
 import { QUICK_RUN_LABEL } from '@/components/QuickRunCheckbox'
+import { taskLabel } from '@/lib/taskLabel'
 
 // Same palette PipelineProgress used, keyed by the track ids in
 // lib/tasks/tracks.py -- one colour per track so the list reads as four
@@ -73,7 +74,7 @@ function TaskRow({ row }: { row: TaskRowProgress }) {
           row.status === 'running' && 'shimmer-text',
         )}
       >
-        {row.type}
+        {taskLabel(row.type)}
         {row.instanceCount > 1 && (
           <span className="text-muted-foreground"> ({row.instanceCount})</span>
         )}

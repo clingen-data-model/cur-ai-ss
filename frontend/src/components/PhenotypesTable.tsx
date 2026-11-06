@@ -35,7 +35,7 @@ function toCsvField(value: string): string {
  * produced (it used to wait for the patient to have a variant, and this
  * table had a note explaining the unlinked terms that left behind). */
 const RERUN_TEXT =
-  'Re-runs phenotype extraction for this patient. When it completes, every existing phenotype for this patient -- including any added or edited manually -- is replaced with the new results, and HPO linking runs for each new phenotype.'
+  'Re-runs phenotype extraction for this individual. When it completes, every existing phenotype for this individual -- including any added or edited manually -- is replaced with the new results, and HPO linking runs for each new phenotype.'
 
 /* The pipeline does not extract phenotypes for a patient its demographics
  * marked Unaffected (lib/tasks/misc.py, enqueue_successors), and leaves no
@@ -43,7 +43,7 @@ const RERUN_TEXT =
  * table says so rather than letting "No phenotypes extracted" read as a
  * miss. Re-extract Phenotypes runs it regardless. */
 const UNAFFECTED_NOTE =
-  'Phenotype extraction did not run for this patient: the pipeline skips patients marked Unaffected, since their features are not evidence for the gene. Re-extract Phenotypes runs it anyway, with HPO linking.'
+  'Phenotype extraction did not run for this individual: the pipeline skips individuals marked Unaffected, since their features are not evidence for the gene. Re-extract Phenotypes runs it anyway, with HPO linking.'
 
 function additionalInfo(phenotype: PhenotypeResp): string {
   return [

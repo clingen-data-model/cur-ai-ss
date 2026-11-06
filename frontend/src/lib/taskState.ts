@@ -15,6 +15,7 @@
  */
 import { TaskStatus, TaskType } from '@/api/generated/types.gen'
 import type { TaskResp } from '@/api/generated/types.gen'
+import { taskLabel } from '@/lib/taskLabel'
 
 export type TaskState = 'not-started' | 'waiting' | 'running' | 'failed' | 'complete'
 
@@ -77,28 +78,29 @@ export function isTaskComplete(
 export function taskStateMessage(
   state: TaskState,
   type: TaskType,
-  label: string = type,
+  label: string = taskLabel(type),
 ): { title: string; description: string } {
+  const name = taskLabel(type)
   switch (state) {
     case 'not-started':
       return {
         title: `${label} hasn't run yet`,
-        description: `This paper has no ${type} task. Queue one from Rerun Agents to populate this section.`,
+        description: `This paper has no ${name} task. Queue one from Rerun Agents to populate this section.`,
       }
     case 'waiting':
       return {
         title: `${label} hasn't run yet`,
-        description: `${type} is queued behind earlier steps. This section fills in once it completes.`,
+        description: `${name} is queued behind earlier steps. This section fills in once it completes.`,
       }
     case 'running':
       return {
         title: `${label} is running`,
-        description: `${type} is in progress. This section fills in once it completes.`,
+        description: `${name} is in progress. This section fills in once it completes.`,
       }
     case 'failed':
       return {
         title: `${label} failed`,
-        description: `${type} did not complete, so this section has no data. Re-run it from Rerun Agents to try again.`,
+        description: `${name} did not complete, so this section has no data. Re-run it from Rerun Agents to try again.`,
       }
     case 'complete':
       return { title: '', description: '' }
@@ -123,7 +125,7 @@ export function paperBusyMessage(tasks: TaskResp[], action: string): string | nu
   const total = [...counts.values()].reduce((a, b) => a + b, 0)
   const inFlight = [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
-    .map(([type, n]) => (n > 1 ? `${type} ×${n}` : type))
+    .map(([type, n]) => (n > 1 ? `${taskLabel(type)} ×${n}` : taskLabel(type)))
     .join(', ')
   return (
     `${total} task${total !== 1 ? 's' : ''} still pending or running (${inFlight}). ` +

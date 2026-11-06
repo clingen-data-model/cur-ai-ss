@@ -101,7 +101,7 @@ function PaperCard({ paper }: { paper: PaperSummaryResp }) {
           <div className="text-xs truncate">{paper.filename}</div>
         </div>
         {([
-          ['Patients', paper.patient_count ?? '—'],
+          ['Individuals', paper.patient_count ?? '—'],
           ['Variants', paper.variant_count ?? '—'],
           ['Occurrences', paper.patient_variant_occurrences_count ?? '—'],
           ['Status', (
@@ -213,7 +213,7 @@ export function GeneTable({ rows, papersByGene }: GeneTableProps) {
       cell: ({ getValue }) => <span className="font-medium">{getValue() as string}</span>,
     },
     { accessorKey: 'paper_count', header: 'Papers' },
-    { accessorKey: 'patient_count', header: 'Patients' },
+    { accessorKey: 'patient_count', header: 'Individuals' },
     { accessorKey: 'variant_count', header: 'Variants' },
     { accessorKey: 'occurrences_count', header: 'Occurrences' },
     {

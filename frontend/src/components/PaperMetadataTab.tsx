@@ -231,7 +231,7 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
             {/* Metadata Summary */}
             <div className="space-y-2 border-t pt-3 text-xs text-muted-foreground">
               <div className="flex justify-between">
-                <span>Patients</span>
+                <span>Individuals</span>
                 <span>{paper.patient_count}</span>
               </div>
               <div className="flex justify-between">

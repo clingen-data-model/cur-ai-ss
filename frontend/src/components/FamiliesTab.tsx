@@ -98,7 +98,7 @@ function FamilyMembers({
         <TableRow>
           <TableHead className="w-8" />
           <TableHead className="w-8" />
-          <TableHead>Patient</TableHead>
+          <TableHead>Individual</TableHead>
           <TableHead>Relationship</TableHead>
           <TableHead>
             {/* The field is obligate-carrier status, not carrier status: a
@@ -227,7 +227,7 @@ function SegregationSection({
 
       {computed ? (
         <div className="max-w-2xl pt-2">
-          <p className="text-xs text-muted-foreground pb-1">Computed from this family's patients and variants</p>
+          <p className="text-xs text-muted-foreground pb-1">Computed from this family's individuals and variants</p>
           <ReadOnlyRow
             label="Meets minimum criteria"
             value={

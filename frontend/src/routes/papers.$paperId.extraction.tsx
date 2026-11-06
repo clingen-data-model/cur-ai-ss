@@ -170,7 +170,7 @@ export function ExtractionPage() {
               </div>
             )}
             {paper && <RestoreSnapshotButton paper={paper} />}
-            <Hint label="Walk the paper's families beside the PDF, confirming each family's patient-variant occurrences">
+            <Hint label="Walk the paper's families beside the PDF, confirming each family's individual-variant occurrences">
               <Button
                 variant="outline"
                 size="sm"
@@ -209,7 +209,7 @@ export function ExtractionPage() {
             <TabsTrigger value="occurrences">Occurrences</TabsTrigger>
             <TabsTrigger value="families">Families</TabsTrigger>
             <TabsTrigger value="unassociated-patients">
-              Unassociated Patients
+              Unassociated Individuals
               {unassociatedPatients.length > 0 && (
                 <span className="ml-1 text-xs text-muted-foreground">({unassociatedPatients.length})</span>
               )}
@@ -236,7 +236,7 @@ export function ExtractionPage() {
             <PipelineGate
               tasks={tasks}
               task={TaskType.PATIENT_VARIANT_OCCURRENCES}
-              label="Patient/variant linking"
+              label="Individual/variant linking"
             >
               <OccurrencesTab
                 paperId={paperId}
@@ -247,7 +247,7 @@ export function ExtractionPage() {
             </PipelineGate>
           </TabsContent>
           <TabsContent value="families" className="pt-3">
-            <PipelineGate tasks={tasks} task={TaskType.PATIENT_EXTRACTION} label="Patient extraction">
+            <PipelineGate tasks={tasks} task={TaskType.PATIENT_EXTRACTION} label="Individual extraction">
               <FamiliesTab
                 paperId={paperId}
                 focus={focus?.kind === 'family' || focus?.kind === 'patient' ? focus : null}

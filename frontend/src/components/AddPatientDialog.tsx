@@ -91,18 +91,18 @@ export function AddPatientDialog({ paperId }: { paperId: number }) {
       queryClient.invalidateQueries({ queryKey: ['patients', paperId] })
       queryClient.invalidateQueries({ queryKey: ['families', paperId] })
       queryClient.invalidateQueries({ queryKey: ['papers'] })
-      toast.success('Patient added')
+      toast.success('Individual added')
       setOpen(false)
       reset()
     },
-    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add patient')),
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add individual')),
   })
 
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
         <Plus className="size-4 mr-1.5" />
-        Add Patient
+        Add Individual
       </Button>
       <Dialog
         open={open}
@@ -113,9 +113,9 @@ export function AddPatientDialog({ paperId }: { paperId: number }) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Patient</DialogTitle>
+            <DialogTitle>Add Individual</DialogTitle>
             <DialogDescription>
-              Manually add a patient extraction didn't find. Demographic fields default to
+              Manually add an individual extraction didn't find. Demographic fields default to
               "Unknown" and can be edited afterward.
             </DialogDescription>
           </DialogHeader>
@@ -127,7 +127,7 @@ export function AddPatientDialog({ paperId }: { paperId: number }) {
                 autoFocus
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="e.g. Patient 3, II-2"
+                placeholder="e.g. Individual 3, II-2"
               />
             </div>
             <div className="space-y-1.5">
@@ -165,7 +165,7 @@ export function AddPatientDialog({ paperId }: { paperId: number }) {
               onClick={() => mutation.mutate()}
               disabled={!identifier.trim() || mutation.isPending}
             >
-              {mutation.isPending ? 'Adding...' : 'Add Patient'}
+              {mutation.isPending ? 'Adding...' : 'Add Individual'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -877,7 +877,7 @@ def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_pap
     )
 
     assert response.status_code == 404
-    assert response.json()['detail'] == 'Patient not found'
+    assert response.json()['detail'] == 'Individual not found'
     db_session.refresh(patient)
     assert patient.identifier == 'P-other'
 
