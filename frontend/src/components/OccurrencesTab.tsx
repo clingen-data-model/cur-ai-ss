@@ -216,6 +216,21 @@ export function OccurrencesTab({
           />
         ),
       },
+    ]
+    if (!compact) {
+      // Its own column so the family sorts and the filter box matches it;
+      // sorting by it puts a family's rows together. The compact table in
+      // Review Mode is one family already.
+      cols.push({
+        id: 'family',
+        header: 'Family',
+        accessorFn: (row) => row.patient.family_identifier,
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground truncate">{row.original.patient.family_identifier}</span>
+        ),
+      })
+    }
+    cols.push(
       {
         id: 'patient',
         header: 'Individual',
@@ -226,7 +241,7 @@ export function OccurrencesTab({
             <PatientIdCell
               paperId={paperId}
               patient={patient}
-              showFamily={severalFamilies}
+              showFamily={compact && severalFamilies}
               onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}
             />
           )
@@ -248,7 +263,7 @@ export function OccurrencesTab({
           </EntityLink>
         ),
       },
-    ]
+    )
     if (!compact) {
       cols.push({
         id: 'variant_type',
