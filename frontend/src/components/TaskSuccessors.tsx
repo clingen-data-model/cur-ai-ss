@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { listTaskTypesTaskTypesGet } from '@/api/generated'
 import type { TaskType, TaskTypeResp } from '@/api/generated/types.gen'
 import { Hint } from '@/components/Hint'
+import { taskLabel } from '@/lib/taskLabel'
 
 /** The pipeline's task types with descriptions and successors; fixed for the
  * life of a deploy, so fetched once and kept. */
@@ -67,7 +68,7 @@ export function TaskSuccessors({ taskType, skipped = false }: { taskType: TaskTy
             <span key={t}>
               {j > 0 && ', '}
               <Hint label={describe(t)}>
-                <span className="cursor-help">{t}</span>
+                <span className="cursor-help">{taskLabel(t)}</span>
               </Hint>
             </span>
           ))}

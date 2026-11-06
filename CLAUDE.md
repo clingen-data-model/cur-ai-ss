@@ -277,6 +277,7 @@ def upgrade() -> None:
 5. Document response model
 
 **Modifying UI:**
+0. Curators see "Individual" wherever the code says patient (since 2026-11-06): visible strings, table headers and API error details say Individual, while models, API fields, routes, component names and the `TaskType` values keep patient. Task type names are shown through `taskLabel` (`frontend/src/lib/taskLabel.ts`), which rewrites the word for display; requests still send the value
 1. Edit the relevant component in `frontend/src/components/` or the route in `frontend/src/routes/`
 2. Reuse the editable rows in `EditableField.tsx` for user input (they force a human-edit note)
 3. Call the generated API client; regenerate it after changing API models

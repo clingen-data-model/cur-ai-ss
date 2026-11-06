@@ -61,9 +61,9 @@ export function UnassociatedPatientsTab({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients', paperId] })
       queryClient.invalidateQueries({ queryKey: ['papers'] })
-      toast.success('Patient deleted')
+      toast.success('Individual deleted')
     },
-    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete patient')),
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete individual')),
   })
 
   const severalFamilies = useMemo(() => hasSeveralFamilies(allPatients), [allPatients])
@@ -78,7 +78,7 @@ export function UnassociatedPatientsTab({
           <ManuallyCreatedIndicator
             sources={[
               {
-                label: 'Patient',
+                label: 'Individual',
                 createdByUserId: row.original.created_by_user_id,
                 createdBy: row.original.created_by,
               },
@@ -104,7 +104,7 @@ export function UnassociatedPatientsTab({
       },
       {
         id: 'identifier',
-        header: 'Patient',
+        header: 'Individual',
         accessorFn: (row) => row.identifier,
         cell: ({ row }) => (
           <PatientIdCell
@@ -128,7 +128,7 @@ export function UnassociatedPatientsTab({
               patientIdentifier={row.original.identifier}
             />
             <DeleteIconButton
-              title="Delete patient?"
+              title="Delete individual?"
               description={
                 <>
                   This will permanently delete{' '}
@@ -149,7 +149,7 @@ export function UnassociatedPatientsTab({
     <PipelineGate
       tasks={tasks}
       task={TaskType.PATIENT_VARIANT_OCCURRENCES}
-      label="Patient/variant linking"
+      label="Individual/variant linking"
     >
       {patients.length === 0 ? (
         <Empty className="border">
@@ -157,9 +157,9 @@ export function UnassociatedPatientsTab({
             <EmptyMedia variant="icon">
               <UserPlus />
             </EmptyMedia>
-            <EmptyTitle>Every extracted patient is linked to a variant</EmptyTitle>
+            <EmptyTitle>Every extracted individual is linked to a variant</EmptyTitle>
             <EmptyDescription>
-              Add a patient manually if extraction missed one.
+              Add an individual manually if extraction missed one.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -177,7 +177,7 @@ export function UnassociatedPatientsTab({
             compact={compact}
             columns={columns}
             data={patients}
-            filterPlaceholder="Filter patients..."
+            filterPlaceholder="Filter individuals..."
             getRowId={(row) => String(row.id)}
             getRowCanExpand={() => true}
             reveal={reveal}

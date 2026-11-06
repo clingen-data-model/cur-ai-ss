@@ -316,9 +316,9 @@ export function ReviewPage() {
                     Families with an occurrence
                   </TooltipTrigger>
                   <TooltipContent className="max-w-72 text-left">
-                    Review Mode walks the families that have at least one patient-variant occurrence, in the
+                    Review Mode walks the families that have at least one individual-variant occurrence, in the
                     paper's order. Confirming a family confirms its occurrences; the paper's review completes when
-                    every occurrence is confirmed. Patients with no linked variant, variants linked to no patient
+                    every occurrence is confirmed. Individuals with no linked variant, variants linked to no individual
                     and flags about nothing extracted are not part of the review and stay on the paper page's
                     tabs.
                   </TooltipContent>
@@ -329,7 +329,7 @@ export function ReviewPage() {
             <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
               {!current ? (
                 <p className="text-sm text-muted-foreground">
-                  Nothing to review yet: Review Mode walks the families with at least one patient-variant
+                  Nothing to review yet: Review Mode walks the families with at least one individual-variant
                   occurrence, and this paper has none.
                 </p>
               ) : (

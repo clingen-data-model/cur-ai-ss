@@ -27,6 +27,7 @@ import { CONTEXT_NOTE, TaskSuccessors } from '@/components/TaskSuccessors'
 import { QuickRunCheckbox } from '@/components/QuickRunCheckbox'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
+import { taskLabel } from '@/lib/taskLabel'
 
 interface TaskScope {
   family_id?: number
@@ -74,7 +75,7 @@ export function ScopedRerunButton({
       // happens to refetch it.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
-      toast.success(`${taskType} queued`)
+      toast.success(`${taskLabel(taskType)} queued`)
       setOpen(false)
       setContext('')
       setBudgetModel(false)

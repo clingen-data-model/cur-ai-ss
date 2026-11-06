@@ -128,7 +128,7 @@ export function UnassociatedVariantsTab({
     <PipelineGate
       tasks={tasks}
       task={TaskType.PATIENT_VARIANT_OCCURRENCES}
-      label="Patient/variant linking"
+      label="Individual/variant linking"
     >
       {variants.length === 0 ? (
         <Empty className="border">
@@ -136,7 +136,7 @@ export function UnassociatedVariantsTab({
             <EmptyMedia variant="icon">
               <Dna />
             </EmptyMedia>
-            <EmptyTitle>Every extracted variant is linked to a patient</EmptyTitle>
+            <EmptyTitle>Every extracted variant is linked to an individual</EmptyTitle>
             <EmptyDescription>
               Add a variant manually if extraction missed one.
             </EmptyDescription>

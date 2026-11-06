@@ -146,7 +146,7 @@ export function FlagsTab({
         : null
     return [
       flag.family_id != null && (familiesById.get(flag.family_id) ?? `Family #${flag.family_id}`),
-      flag.patient_id != null && (patientsById.get(flag.patient_id) ?? `Patient #${flag.patient_id}`),
+      flag.patient_id != null && (patientsById.get(flag.patient_id) ?? `Individual #${flag.patient_id}`),
       variant && partner ? `${variant} + ${partner}` : variant,
       flag.phenotype_id != null && 'phenotype',
     ]
@@ -202,10 +202,10 @@ export function FlagsTab({
                 <Info className="size-3.5 text-muted-foreground" />
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
-                The extracted rows the flag concerns: a family, a patient, a variant, a patient-variant link
+                The extracted rows the flag concerns: a family, an individual, a variant, an individual-variant link
                 (both halves of a compound-het pair), or a phenotype. Click one to open it. "Whole paper"
                 means there is no row: the flag is about something the agent left out, or about a decision
-                extraction verification found raised for several patients and folded into one.
+                extraction verification found raised for several individuals and folded into one.
               </TooltipContent>
             </Tooltip>
           </span>
@@ -234,7 +234,7 @@ export function FlagsTab({
               <AboutChip
                 key="patient"
                 kind="patient"
-                label={patientsById.get(id) ?? `Patient #${id}`}
+                label={patientsById.get(id) ?? `Individual #${id}`}
                 onClick={onNavigate && (() => go(linkTarget ?? { kind: 'patient', id }))}
               />,
             )

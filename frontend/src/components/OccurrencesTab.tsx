@@ -165,7 +165,7 @@ export function OccurrencesTab({
           <ManuallyCreatedIndicator
             sources={[
               {
-                label: 'Patient',
+                label: 'Individual',
                 createdByUserId: row.original.patient.created_by_user_id,
                 createdBy: row.original.patient.created_by,
               },
@@ -218,7 +218,7 @@ export function OccurrencesTab({
       },
       {
         id: 'patient',
-        header: 'Patient',
+        header: 'Individual',
         accessorFn: (row) => row.patient.identifier,
         cell: ({ row }) => {
           const { patient } = row.original
@@ -346,7 +346,7 @@ export function OccurrencesTab({
             />
             <DeleteIconButton
               title="Delete occurrence?"
-              description="This will permanently delete this patient/variant link. This cannot be undone."
+              description="This will permanently delete this individual/variant link. This cannot be undone."
               onDelete={() => deleteMutation.mutate(occurrence.id)}
             />
           </div>
@@ -360,7 +360,7 @@ export function OccurrencesTab({
   if (rows.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        Linking ran but connected no patient to a variant.
+        Linking ran but connected no individual to a variant.
       </p>
     )
   }

@@ -134,7 +134,7 @@ export function PairOccurrenceDialog({
             <DialogTitle>{hasExistingPairing ? 'Change Pairing' : 'Pair Variant'}</DialogTitle>
             <DialogDescription>
               Mark this occurrence as compound heterozygous with another occurrence of the same
-              patient.
+              individual.
             </DialogDescription>
           </DialogHeader>
           <Tabs defaultValue="pick">
@@ -147,7 +147,7 @@ export function PairOccurrenceDialog({
                 <Label>Partner Occurrence</Label>
                 {siblingOccurrences.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    No other occurrences for this patient.
+                    No other occurrences for this individual.
                   </p>
                 ) : (
                   <Select
@@ -210,7 +210,7 @@ export function PairOccurrenceDialog({
               </div>
               <QuickRunCheckbox checked={budgetModel} onChange={setBudgetModel} />
               <p className="text-xs text-muted-foreground">
-                Re-runs compound-het evaluation for this patient in the background. The result
+                Re-runs compound-het evaluation for this individual in the background. The result
                 will show up here once it's done.
               </p>
               {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}

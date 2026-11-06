@@ -22,6 +22,7 @@ import { CONTEXT_NOTE, TaskSuccessors, useTaskTypes } from '@/components/TaskSuc
 import { QuickRunCheckbox } from '@/components/QuickRunCheckbox'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
 import { apiErrorMessage } from '@/lib/apiError'
+import { taskLabel } from '@/lib/taskLabel'
 
 /* The fields RerunTaskDialog actually needs -- narrower than PaperSummaryResp
  * so it can also take a PaperResp (the paper-detail page's shape, which has
@@ -160,7 +161,7 @@ function RerunTaskDialog({
                       showed a slice that did not include the selection. */}
                   <SelectContent className="max-h-64" alignItemWithTrigger={false}>
                     {RERUNNABLE_TASK_TYPES.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                      <SelectItem key={t} value={t}>{taskLabel(t)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

@@ -77,16 +77,16 @@ export function LinkPatientDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['occurrences', paperId] })
       queryClient.invalidateQueries({ queryKey: ['papers'] })
-      toast.success('Linked to patient')
+      toast.success('Linked to individual')
       setOpen(false)
       reset()
     },
-    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to link patient')),
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to link individual')),
   })
 
   return (
     <>
-      <Hint label="Link to patient">
+      <Hint label="Link to individual">
         <button
           type="button"
           onClick={(e) => {
@@ -107,15 +107,15 @@ export function LinkPatientDialog({
       >
         <DialogContent onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
-            <DialogTitle>Link to Patient</DialogTitle>
+            <DialogTitle>Link to Individual</DialogTitle>
             <DialogDescription>
               Link <span className="font-medium text-foreground">{variantDescription}</span> to
-              an existing patient. Zygosity, inheritance, and other occurrence fields default
+              an existing individual. Zygosity, inheritance, and other occurrence fields default
               and can be edited afterward.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
-            <Label>Patient</Label>
+            <Label>Individual</Label>
             <Combobox
               value={patientId}
               itemToStringLabel={labelFor}
@@ -126,7 +126,7 @@ export function LinkPatientDialog({
               }}
               onInputValueChange={(next: string | null) => setDraft(next ?? '')}
             >
-              <ComboboxInput placeholder="Search patients..." showClear autoFocus />
+              <ComboboxInput placeholder="Search individuals..." showClear autoFocus />
               <ComboboxContent>
                 <ComboboxList>
                   {visible.map((p) => (
@@ -134,7 +134,7 @@ export function LinkPatientDialog({
                       {p.identifier}
                     </ComboboxItem>
                   ))}
-                  <ComboboxEmpty>No matching patients.</ComboboxEmpty>
+                  <ComboboxEmpty>No matching individuals.</ComboboxEmpty>
                 </ComboboxList>
               </ComboboxContent>
             </Combobox>
