@@ -777,6 +777,30 @@ says what to project instead. A position with no residue to check against on a
 GenBank-numbered transcript is not projected at all: State 4 if there is a
 protein change, else every normalized field null and an unresolved flag.
 
+Description inference. A variant can also arrive with every notation field
+null and the variant string describing the change in words: "deletion of
+exon 2", "a 4-bp deletion at codon 120", "arginine 66 replaced by
+tryptophan", "IVS3+1G>A". Before leaving this state, infer the conceivable
+set of terms the words could mean and carry them into the states below as if
+they were the input fields they stand in for:
+    - a nucleotide change with a position and bases -> hgvs_c candidates, for
+      State 3 ("G to A at nucleotide 598" -> c.598G>A);
+    - a protein change -> hgvs_p in its forms, for State 4 ("arginine 66 to
+      tryptophan" -> p.Arg66Trp, R66W);
+    - an identifier quoted in words -> rsid or caid, for State 2;
+    - a change named by exons, introns or a legacy name -> the names ClinVar
+      titles and aliases such changes by, as search terms for State 4
+      ("deletion of exon 2" -> "exon 2 deletion", "EX2DEL"; "IVS3+1G>A" as
+      written, since ClinVar keeps legacy names in aliases).
+The terms carry only what the words say -- the numbers, bases and residues in
+the text; an exon's bounds are not written from memory, and words about the
+individual (heterozygous, homozygous, de novo, maternal) are not part of the
+change. Try candidates in state order; the lookups are the check, as above.
+Say in basis which terms were inferred from which words. A resolution that
+rests on an inferred term rather than the paper's own notation is confidence
+low; when no candidate resolves, every normalized field is null with an
+unresolved flag naming the terms tried.
+
 Proceed to State 1.
 
 ============================================================
@@ -916,10 +940,11 @@ STATE 4 — CLINVAR & DBSNP LOOKUP
 Condition:
 Previous projections failed AND a protein change is available, either as hgvs_p
 or as a protein change written into the variant string -- "C331Y", "Cys331Tyr",
-"Trp66Gly". Older papers frequently report changes only that way, and a variant
-whose protein change sits in the variant string is as searchable as one whose
-sits in hgvs_p: the query below is built from the amino acids and the position,
-and both forms carry them.
+"Trp66Gly" -- or State 0 inferred search terms from a description. Older papers
+frequently report changes only that way, and a variant whose protein change
+sits in the variant string is as searchable as one whose sits in hgvs_p: the
+query below is built from the amino acids and the position, and both forms
+carry them.
 
 Do not skip this state because hgvs_p is null. That is the difference between
 returning a normalized allele and returning nothing, for a whole class of paper.
@@ -941,6 +966,11 @@ Examples:
     "BRCA1 AND (Arg157Ser OR p.Arg157Ser OR R157S)"
     "TP53 AND (Arg175His OR p.Arg175His OR R175H OR p.R175H)"
     "CFTR AND (Phe508del OR p.Phe508del OR F508del OR p.F508del)"
+
+Terms State 0 inferred from a description take the place of the protein
+forms: the gene AND the inferred names.
+    "DMD AND (exon 45 deletion OR deletion of exon 45 OR EX45DEL)"
+    "CFTR AND (IVS8-5T OR 5T allele)"
 
 
 Step 5B — Call clinvar_lookup(query)
@@ -1036,6 +1066,7 @@ medium:
 
 low:
     - Partial recovery only
+    - Resolution resting on a term inferred from a description (State 0)
     - No resolution possible
 
 ============================================================
