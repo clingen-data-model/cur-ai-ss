@@ -2042,6 +2042,10 @@ async def handle_hpo_linking(task_id: int) -> None:
 
         candidates = find_matching_hpo_terms(str(phenotype_row.concept))
 
+        # Everything the rest of the handler needs from the row is copied out
+        # here: the session commits on exit and expires the row, so reading
+        # an attribute of it later raises DetachedInstanceError.
+        patient_id = phenotype_row.patient_id
         phenotype_data = {
             'phenotype_id': phenotype_row.id,
             'concept': phenotype_row.concept,
@@ -2117,14 +2121,7 @@ async def handle_hpo_linking(task_id: int) -> None:
             paper_id=task.paper_id,
             source=TaskType.HPO_LINKING.name,
             flags=flags_of(hpo_result),
-            scope={
-                'phenotype_id': phenotype_id,
-                **(
-                    {'patient_id': phenotype_row.patient_id}
-                    if phenotype_row is not None
-                    else {}
-                ),
-            },
+            scope={'phenotype_id': phenotype_id, 'patient_id': patient_id},
         )
 
     # A no-match is left out so one failed walk is not replayed onto every
