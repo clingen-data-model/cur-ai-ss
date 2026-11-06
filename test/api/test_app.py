@@ -3643,6 +3643,44 @@ def test_hpo_linking_prompt_carries_an_inherited_note_last(db_session, seeded_pa
     assert 'supplied to Phenotype Extraction' in message
 
 
+def test_hpo_linking_stores_the_link_after_its_first_session_closed(
+    db_session, seeded_paper
+):
+    """The handler reads the phenotype in one session and stores the link in
+    another. Everything it needs from the row has to be copied out of the
+    first, which commits and expires the row on exit: reading an attribute
+    of it from the second raised DetachedInstanceError (seen on dev-caa as
+    a failed HPO Linking task)."""
+    from lib.models.evidence_block import ReasoningBlock
+    from lib.models.phenotype import HPOTerm
+    from lib.tasks.handlers import handle_hpo_linking
+
+    patient = _seed_patient(db_session, seeded_paper, 'Stored Patient')
+    phenotype = _seed_phenotype(db_session, patient)
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.HPO_LINKING,
+        phenotype_id=phenotype.id,
+        status=TaskStatus.RUNNING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    result = MagicMock()
+    result.final_output = ReasoningBlock[HPOTerm](
+        value=HPOTerm(id='HP:0001250', name='Seizure'), reasoning='exact match'
+    )
+    with (
+        patch('lib.tasks.handlers.find_matching_hpo_terms', return_value=[]),
+        patch('lib.tasks.handlers.Runner.run', return_value=result),
+        patch('lib.tasks.handlers.remember_hpo_link'),
+    ):
+        asyncio.run(handle_hpo_linking(task.id))
+
+    link = db_session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype.id).one()
+    assert (link.hpo_id, link.hpo_name) == ('HP:0001250', 'Seizure')
+
+
 def test_hpo_link_cache_reloads_after_interval(db_session, seeded_paper, monkeypatch):
     """A curator's relink lands in the API process; the worker's cache only
     sees it by reloading from the database."""
