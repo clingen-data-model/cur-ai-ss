@@ -100,3 +100,23 @@ def test_an_uncheckable_position_on_a_genbank_sequence_is_not_projected():
     rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
     assert 'is not projected at all' in rules
     assert 'other than the one the paper names' in rules
+
+
+def test_state_0_infers_terms_from_a_description_for_the_states_to_consume():
+    """A variant arriving as words alone ("deletion of exon 2") met no state's
+    condition and came back all null. State 0 now infers the terms the words
+    could mean, and the states take them as the fields they stand in for."""
+    rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
+    state_0 = rules[rules.index('STATE 0') : rules.index('STATE 1')]
+    assert 'Description inference' in state_0
+    assert 'as if\nthey were the input fields they stand in for' in state_0
+    assert 'hgvs_c candidates' in state_0 and 'search terms for State 4' in state_0
+    assert "an exon's bounds are not written from memory" in state_0
+    assert 'heterozygous, homozygous, de novo, maternal' in state_0
+    assert state_0.index('The lookups are\nthe check') < state_0.index(
+        'Description inference'
+    )
+    state_4 = rules[rules.index('STATE 4') : rules.index('STATE 5')]
+    assert 'or State 0 inferred search terms from a description' in state_4
+    assert 'take the place of the protein\nforms' in state_4
+    assert 'Resolution resting on a term inferred from a description' in rules
