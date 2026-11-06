@@ -34,7 +34,9 @@ export interface EvidenceLike {
   previous_value?: unknown
 }
 
-const TRIGGER_CLASSNAME =
+/** The small icon button at the end of a detail row; the evidence icons,
+ * and any other row-end icon that should sit level with them. */
+export const TRIGGER_CLASSNAME =
   'inline-flex items-center justify-center size-6 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-colors'
 
 function formatEvidenceValue(value: unknown): string {

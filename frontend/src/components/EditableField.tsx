@@ -5,8 +5,14 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Check } from 'lucide-react'
-import { EvidencePopover, ViewEvidenceButton, type EvidenceLike } from '@/components/EvidencePopover'
+import { Check, ExternalLink } from 'lucide-react'
+import {
+  EvidencePopover,
+  TRIGGER_CLASSNAME,
+  ViewEvidenceButton,
+  type EvidenceLike,
+} from '@/components/EvidencePopover'
+import { Hint } from '@/components/Hint'
 import { HumanEditNoteDialog } from '@/components/HumanEditNoteDialog'
 import { usePendingEdit } from '@/hooks/usePendingEdit'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -136,6 +142,7 @@ export function EditableTextRow({
   onSave,
   isSaving,
   disabled,
+  link,
 }: {
   label: string
   value: string
@@ -143,6 +150,9 @@ export function EditableTextRow({
   onSave: (value: string, note: string) => void
   isSaving?: boolean
   disabled?: boolean
+  /** Where the value points outside the app, as an icon after the input: a
+   * PMID to its PubMed page. Shown only while the saved value is non-empty. */
+  link?: { href: string; label: string }
 }) {
   const [draft, setDraft] = useState(value)
   const pending = usePendingEdit<string>(onSave)
@@ -164,6 +174,13 @@ export function EditableTextRow({
         disabled={disabled}
         className="h-7 text-xs"
       />
+      {link && value && (
+        <Hint label={link.label}>
+          <a href={link.href} target="_blank" rel="noreferrer" className={TRIGGER_CLASSNAME}>
+            <ExternalLink className="size-3.5" />
+          </a>
+        </Hint>
+      )}
       <HumanEditNoteDialog
         open={pending.isOpen}
         onOpenChange={(open) => {
