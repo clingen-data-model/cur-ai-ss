@@ -1,5 +1,5 @@
 /* Paper metadata display with resizable PDF viewer on the right.
- * Left side shows title, author, publication year, journal, abstract, and
+ * Left side shows title, author, publication year, journal, PMID, abstract, and
  * disease-related fields. Right side shows a PDF viewer with zoom/navigation.
  */
 import { useState } from 'react'
@@ -151,6 +151,18 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
                 isSaving={updateMutation.isPending}
                 onSave={(value, note) =>
                   save({ journal_name: value || null, journal_name_human_edit_note: note })
+                }
+              />
+              <EditableTextRow
+                label="PMID"
+                value={paper.pmid || ''}
+                isSaving={updateMutation.isPending}
+                link={{
+                  href: `https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(paper.pmid ?? '')}/`,
+                  label: 'Open in PubMed',
+                }}
+                onSave={(value, note) =>
+                  save({ pmid: value.trim() || null, pmid_human_edit_note: note })
                 }
               />
               <SimpleMultiSelectRow

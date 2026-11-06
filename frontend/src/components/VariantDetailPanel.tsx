@@ -5,7 +5,8 @@
  * - Harmonized: editable, backed by one shared reasoning block (no per-field
  *   evidence/note -- matches VariantUpdateRequest.harmonized_variant)
  * - Properties: editable, each with its own evidence + human-edit-note
- * - Annotations: read-only ClinVar/gnomAD/in-silico display
+ * - Annotations: read-only ClinVar/gnomAD/in-silico display, looked up
+ *   rather than extracted, so no evidence icons
  */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -223,30 +224,33 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
           ) : (
             <>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-1 mb-1">ClinVar</p>
-              <ReadOnlyRow label="Pathogenicity" value={annotated.pathogenicity ?? 'N/A'} />
-              <ReadOnlyRow label="Submissions" value={annotated.submissions ?? 'N/A'} />
-              <ReadOnlyRow label="Review Status" value={annotated.stars != null ? '⭐'.repeat(annotated.stars) || '0⭐' : 'N/A'} />
+              <ReadOnlyRow label="Pathogenicity" value={annotated.pathogenicity ?? 'N/A'} noEvidence />
+              <ReadOnlyRow label="Submissions" value={annotated.submissions ?? 'N/A'} noEvidence />
+              <ReadOnlyRow label="Review Status" value={annotated.stars != null ? '⭐'.repeat(annotated.stars) || '0⭐' : 'N/A'} noEvidence />
 
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-3 mb-1">In Silico</p>
-              <ReadOnlyRow label="REVEL" value={annotated.revel != null ? annotated.revel.toFixed(3) : 'N/A'} />
-              <ReadOnlyRow label="AlphaMissense Class" value={annotated.alphamissense_class ?? 'N/A'} />
+              <ReadOnlyRow label="REVEL" value={annotated.revel != null ? annotated.revel.toFixed(3) : 'N/A'} noEvidence />
+              <ReadOnlyRow label="AlphaMissense Class" value={annotated.alphamissense_class ?? 'N/A'} noEvidence />
               <ReadOnlyRow
+                noEvidence
                 label="AlphaMissense Score"
                 value={annotated.alphamissense_score != null ? annotated.alphamissense_score.toFixed(3) : 'N/A'}
               />
-              <ReadOnlyRow label="SpliceAI" value={formatSpliceAI(annotated.spliceai) ?? 'N/A'} />
-              <ReadOnlyRow label="Exon" value={annotated.exon ?? 'N/A'} />
-              <ReadOnlyRow label="VEP Consequence" value={annotated.vep_consequence ?? 'N/A'} />
+              <ReadOnlyRow label="SpliceAI" value={formatSpliceAI(annotated.spliceai) ?? 'N/A'} noEvidence />
+              <ReadOnlyRow label="Exon" value={annotated.exon ?? 'N/A'} noEvidence />
+              <ReadOnlyRow label="VEP Consequence" value={annotated.vep_consequence ?? 'N/A'} noEvidence />
 
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-3 mb-1">gnomAD</p>
-              <ReadOnlyRow label="Top-level AF" value={annotated.gnomad_top_level_af ?? 'N/A'} />
+              <ReadOnlyRow label="Top-level AF" value={annotated.gnomad_top_level_af ?? 'N/A'} noEvidence />
               <ReadOnlyRow
+                noEvidence
                 label="Top-level Alleles (AC / AN)"
                 value={formatAlleleCounts(annotated.gnomad_ac, annotated.gnomad_an)}
               />
-              <ReadOnlyRow label="Popmax AF" value={annotated.gnomad_popmax_af ?? 'N/A'} />
-              <ReadOnlyRow label="Popmax Population" value={formatGnomadPopulation(annotated.gnomad_popmax_population)} />
+              <ReadOnlyRow label="Popmax AF" value={annotated.gnomad_popmax_af ?? 'N/A'} noEvidence />
+              <ReadOnlyRow label="Popmax Population" value={formatGnomadPopulation(annotated.gnomad_popmax_population)} noEvidence />
               <ReadOnlyRow
+                noEvidence
                 label="Popmax Alleles (AC / AN)"
                 value={formatAlleleCounts(annotated.gnomad_popmax_ac, annotated.gnomad_popmax_an)}
               />

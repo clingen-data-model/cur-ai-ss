@@ -5,8 +5,14 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Check } from 'lucide-react'
-import { EvidencePopover, ViewEvidenceButton, type EvidenceLike } from '@/components/EvidencePopover'
+import { Check, ExternalLink } from 'lucide-react'
+import {
+  EvidencePopover,
+  TRIGGER_CLASSNAME,
+  ViewEvidenceButton,
+  type EvidenceLike,
+} from '@/components/EvidencePopover'
+import { Hint } from '@/components/Hint'
 import { HumanEditNoteDialog } from '@/components/HumanEditNoteDialog'
 import { usePendingEdit } from '@/hooks/usePendingEdit'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -22,22 +28,30 @@ const NONE_VALUE = '__none__'
 function FieldRow({
   label,
   evidence,
+  noEvidence,
   children,
 }: {
   label: string
   evidence?: EvidenceLike | null
+  noEvidence?: boolean
   children: ReactNode
 }) {
   // The two icons at the end of the row are the way to a field's evidence:
   // the popover, and the viewer. On the review page the viewer is beside
-  // the row and the second icon narrows its highlight to this field.
+  // the row and the second icon narrows its highlight to this field. A row
+  // whose value never has evidence (a looked-up annotation) leaves them out
+  // rather than showing two disabled icons.
   return (
     <div className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0">
       <span className="text-sm text-muted-foreground shrink-0 w-44">{label}</span>
       <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
         {children}
-        <EvidencePopover block={evidence} />
-        <ViewEvidenceButton block={evidence} />
+        {!noEvidence && (
+          <>
+            <EvidencePopover block={evidence} />
+            <ViewEvidenceButton block={evidence} />
+          </>
+        )}
       </div>
     </div>
   )
@@ -136,6 +150,7 @@ export function EditableTextRow({
   onSave,
   isSaving,
   disabled,
+  link,
 }: {
   label: string
   value: string
@@ -143,6 +158,9 @@ export function EditableTextRow({
   onSave: (value: string, note: string) => void
   isSaving?: boolean
   disabled?: boolean
+  /** Where the value points outside the app, as an icon after the input: a
+   * PMID to its PubMed page. Shown only while the saved value is non-empty. */
+  link?: { href: string; label: string }
 }) {
   const [draft, setDraft] = useState(value)
   const pending = usePendingEdit<string>(onSave)
@@ -164,6 +182,13 @@ export function EditableTextRow({
         disabled={disabled}
         className="h-7 text-xs"
       />
+      {link && value && (
+        <Hint label={link.label}>
+          <a href={link.href} target="_blank" rel="noreferrer" className={TRIGGER_CLASSNAME}>
+            <ExternalLink className="size-3.5" />
+          </a>
+        </Hint>
+      )}
       <HumanEditNoteDialog
         open={pending.isOpen}
         onOpenChange={(open) => {
@@ -452,13 +477,16 @@ export function ReadOnlyRow({
   label,
   value,
   evidence,
+  noEvidence,
 }: {
   label: string
   value: ReactNode
   evidence?: EvidenceLike | null
+  /** The value is looked up, not extracted: no evidence icons at all. */
+  noEvidence?: boolean
 }) {
   return (
-    <FieldRow label={label} evidence={evidence}>
+    <FieldRow label={label} evidence={evidence} noEvidence={noEvidence}>
       <span className="text-sm text-right truncate max-w-64">{value}</span>
     </FieldRow>
   )
