@@ -114,6 +114,7 @@ class RateLimitError(Exception):
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.core.memory import release_freed_memory
 from lib.misc.pdf.anchors import (
     AnchorKind,
     block_texts,
@@ -505,9 +506,16 @@ async def handle_pdf_parsing(task_id: int) -> None:
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
 
-    await parse_content(paper_id, force=True)
-    if supplement_format:
-        await parse_content(paper_id, force=True, supplement_format=supplement_format)
+    try:
+        await parse_content(paper_id, force=True)
+        if supplement_format:
+            await parse_content(
+                paper_id, force=True, supplement_format=supplement_format
+            )
+    finally:
+        # The parse's buffers are freed by now but glibc keeps the pages; this
+        # is the 600 MB a worker otherwise carries for life (lib/core/memory.py).
+        release_freed_memory()
 
 
 async def handle_paper_classifier(task_id: int) -> None:

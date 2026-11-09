@@ -843,3 +843,57 @@ async def test_the_classifier_stores_its_basis_beside_the_verdict(
     }
     assert PaperTag.FailedPaperRelevancy.value in paper.tags
     assert db_session.get(TaskDB, task.id).skip_successors is True
+
+
+async def test_pdf_parsing_hands_the_parses_freed_memory_back(
+    db_session, paper, monkeypatch
+):
+    """The parse's buffers are freed when it ends but glibc keeps the pages,
+    so the handler trims the heap after the parse (lib/core/memory.py), and
+    after a parse that failed too, since that one freed just as much."""
+    from lib.tasks import handlers
+    from lib.tasks.models import TaskDB, TaskStatus, TaskType
+
+    events: list[str] = []
+
+    async def fake_parse(paper_id: int, **kwargs) -> None:
+        events.append(f'parse {paper_id}')
+
+    monkeypatch.setattr(handlers, 'parse_content', fake_parse)
+    monkeypatch.setattr(
+        handlers, 'release_freed_memory', lambda: events.append('trim') or True
+    )
+    task = TaskDB(
+        paper_id=paper.id, type=TaskType.PDF_PARSING, status=TaskStatus.RUNNING
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    await handlers.handle_pdf_parsing(task.id)
+
+    assert events == [f'parse {paper.id}', 'trim']
+
+
+async def test_pdf_parsing_trims_the_heap_when_the_parse_fails(
+    db_session, paper, monkeypatch
+):
+    from lib.tasks import handlers
+    from lib.tasks.models import TaskDB, TaskStatus, TaskType
+
+    trimmed: list[bool] = []
+
+    async def failing_parse(paper_id: int, **kwargs) -> None:
+        raise RuntimeError('the parsing service refused the document')
+
+    monkeypatch.setattr(handlers, 'parse_content', failing_parse)
+    monkeypatch.setattr(handlers, 'release_freed_memory', lambda: trimmed.append(True))
+    task = TaskDB(
+        paper_id=paper.id, type=TaskType.PDF_PARSING, status=TaskStatus.RUNNING
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    with pytest.raises(RuntimeError):
+        await handlers.handle_pdf_parsing(task.id)
+
+    assert trimmed == [True]
