@@ -60,16 +60,21 @@ module "dev-caa" {
   subnetwork_self_link = data.terraform_remote_state.shared_network.outputs.subnetwork.self_link
 
   # The machine since the 2026-11 replacement (step 3 above): the address,
-  # service account and secrets are still named dev-caa. e2-highmem-2 (2 vCPU,
-  # 16 GB) since 2026-11-09, from e2-medium (4 GB): the playbook runs four
-  # worker processes (infrastructure/ansible, worker_count), each ~470 MB
-  # resident at start and growing over days, beside the API; they spend their
-  # time waiting on model and lookup calls, so memory is the dimension to buy,
-  # not cores. Changing the type stops and starts the instance in place
-  # (allow_stopping_for_update in ../vm): a few minutes of downtime, nothing
-  # on the disk or the address changes.
+  # service account and secrets are still named dev-caa. e2-standard-2 (2 vCPU,
+  # 8 GB): the playbook runs four worker processes (infrastructure/ansible,
+  # worker_count) beside the API, and they spend their time waiting on model
+  # and lookup calls, so memory is the dimension that sizes the machine, not
+  # cores. Measured 2026-11-09: a worker is ~470 MB resident at start and
+  # ~700 MB once its first parse has run and the heap been trimmed
+  # (lib/core/memory.py), creeping ~16 MB a parse; the API is ~580 MB; a
+  # deploy's frontend build spikes 1-2 GB, which the playbook's 2 GB swap
+  # file absorbs. About 3.5 GB steady, so 8 GB over the 4 GB of e2-medium
+  # (too tight) and under the 16 GB of e2-highmem-2 (tried for a day,
+  # ~$19 a month more than this). Changing the type stops and starts the
+  # instance in place (allow_stopping_for_update in ../vm): a few minutes of
+  # downtime, nothing on the disk or the address changes.
   instance_name     = "dev-caa-2"
-  machine_type      = "e2-highmem-2"
+  machine_type      = "e2-standard-2"
   boot_disk_type    = "pd-balanced"
   boot_disk_size_gb = 50
   boot_image        = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
