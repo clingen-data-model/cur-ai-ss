@@ -6,7 +6,7 @@ import os
 import signal
 from collections import Counter
 
-from sqlalchemy import or_
+from sqlalchemy import ColumnElement, or_
 from sqlalchemy.orm import Session
 
 from lib.api.db import session_scope
@@ -59,11 +59,14 @@ RETRY_DELAY_S = 30
 # task is claimed only when a slot is free, and claiming it is starting it.
 GLOBAL_CONCURRENCY = 30
 TASK_CONCURRENCY: dict[TaskType, int] = {
-    # One Docling run already uses the whole VM CPU. Converting on the
-    # pdf-parsing service instead, the parse is a request held open, and the
-    # service takes two at once (infrastructure/terraform/pdf-parsing,
-    # var.concurrency): more than two would queue there against the lease.
-    TaskType.PDF_PARSING: 2 if env.PDF_PARSING_SERVICE_URL else 1,
+    # The parse is a request held open on the pdf-parsing service, which
+    # takes two at once per instance and runs up to two instances
+    # (infrastructure/terraform/pdf-parsing, var.concurrency and
+    # var.max_instances). One per worker, four workers: four in flight, which
+    # is what the service has room for; more would queue there against the
+    # lease. (Docling ran on the VM until 2026-11-02, one run using its whole
+    # CPU, so the cap was already 1.)
+    TaskType.PDF_PARSING: 1,
     TaskType.VARIANT_HARMONIZATION: 10,
     TaskType.VARIANT_ANNOTATION: 10,
 }
@@ -88,6 +91,20 @@ try:
 except Exception:
     # Loads lazily on first use instead.
     logger.warning('Failed to load the HPO link cache at startup', exc_info=True)
+
+
+def shard_filter() -> ColumnElement[bool]:
+    """The rows this worker owns: the tasks of the papers whose id falls in
+    its shard. Every query over the tasks table in this module carries it,
+    so WORKER_COUNT processes share the table without a row ever being seen
+    by two of them: the sweeps release and retire only this worker's
+    attempts, admission counts only this worker's running rows against the
+    limits (which are therefore per worker), and a paper's whole pipeline,
+    including its fan-out gate, lives in one process. Sharding by paper
+    rather than claiming per task is what makes the sweeps exact without
+    recording which process holds which row. With the default settings the
+    one worker owns every paper."""
+    return TaskDB.paper_id % env.WORKER_COUNT == env.WORKER_ID
 
 
 # Set by the shutdown signal. The poller stops claiming on it, execute_task
@@ -132,12 +149,14 @@ def _cancel_attempt(task_id: int, attempt: int) -> bool:
 async def _sweep_claimed_tasks(event: str) -> int:
     """Release every RUNNING task, on shutdown and again on startup.
 
-    This is the only worker process, so at either moment a RUNNING row can
-    belong to no live run: on shutdown they are all this process's, and it is
-    about to exit; on startup they are whatever the last process left, which
-    is nothing when it shut down in order and everything it held when it was
-    killed outright. Resetting them all is therefore exact, and it needs no
-    bookkeeping of which rows this process holds.
+    This is the only worker process for its shard, so at either moment a
+    RUNNING row of the shard can belong to no live run: on shutdown they are
+    all this process's, and it is about to exit; on startup they are whatever
+    the last process of this shard left, which is nothing when it shut down
+    in order and everything it held when it was killed outright. Resetting
+    them all is therefore exact, and it needs no bookkeeping of which rows
+    this process holds. Another shard's RUNNING rows are another process's
+    live attempts and are not touched.
 
     Same reset, and same PENDING-vs-abandon retry check, that the lease
     timeout applies: PENDING with a cleared session, so the retry starts from
@@ -150,7 +169,9 @@ async def _sweep_claimed_tasks(event: str) -> int:
     swept = 0
     with session_scope() as session:
         running = (
-            session.query(TaskDB).filter(TaskDB.status == TaskStatus.RUNNING).all()
+            session.query(TaskDB)
+            .filter(TaskDB.status == TaskStatus.RUNNING, shard_filter())
+            .all()
         )
         for task in running:
             swept += 1
@@ -433,8 +454,9 @@ async def poll_and_schedule_tasks() -> None:
 
 async def _poll_and_schedule_tasks() -> None:
     """Everything the scheduler knows is in the tasks table, and a poll is
-    one transaction over it. Admission is decided from counts of RUNNING rows
-    against the limits above, so a task is claimed only when it can start,
+    one transaction over it. Admission is decided from counts of this
+    worker's RUNNING rows against the limits above (per worker: see
+    shard_filter), so a task is claimed only when it can start,
     and claiming it is starting it (start_attempt): there is no in-process
     queue, nothing waits for a slot, and an attempt's lease runs from the
     moment it actually began. A freed slot is refilled on the next poll, up
@@ -465,6 +487,7 @@ async def _poll_and_schedule_tasks() -> None:
             .filter(
                 TaskDB.status == TaskStatus.RUNNING,
                 TaskDB.started_at < expired_cutoff,
+                shard_filter(),
             )
             .all()
         )
@@ -499,6 +522,7 @@ async def _poll_and_schedule_tasks() -> None:
                 TaskDB.status == TaskStatus.FAILED,
                 TaskDB.tries <= MAX_RETRIES,
                 TaskDB.updated_at < retry_cutoff,
+                shard_filter(),
             )
             .all()
         )
@@ -514,7 +538,9 @@ async def _poll_and_schedule_tasks() -> None:
         session.flush()
 
         # Admission: what is running, and which batches are warm.
-        running = session.query(TaskDB).filter(TaskDB.status == TaskStatus.RUNNING)
+        running = session.query(TaskDB).filter(
+            TaskDB.status == TaskStatus.RUNNING, shard_filter()
+        )
         total = 0
         by_type: Counter[TaskType] = Counter()
         running_batches: set[tuple[int, TaskType]] = set()
@@ -529,6 +555,7 @@ async def _poll_and_schedule_tasks() -> None:
             .filter(
                 TaskDB.status.in_((TaskStatus.COMPLETED, TaskStatus.FAILED)),
                 TaskDB.updated_at >= warm_since,
+                shard_filter(),
             )
             .distinct()
         }
@@ -542,7 +569,11 @@ async def _poll_and_schedule_tasks() -> None:
                 continue
             pending = (
                 session.query(TaskDB)
-                .filter(TaskDB.type == task_type, TaskDB.status == TaskStatus.PENDING)
+                .filter(
+                    TaskDB.type == task_type,
+                    TaskDB.status == TaskStatus.PENDING,
+                    shard_filter(),
+                )
                 .order_by(TaskDB.id)
             )
             for task in pending:
@@ -576,7 +607,10 @@ async def main_async() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _handle_shutdown_signal, sig)
 
-    logger.info('Starting task worker')
+    logger.info(
+        f'Starting task worker {env.WORKER_ID} of {env.WORKER_COUNT} '
+        f'(papers with id % {env.WORKER_COUNT} == {env.WORKER_ID})'
+    )
     # Whatever the last process left claimed is nobody's now (see the sweep).
     await _sweep_claimed_tasks('restarted')
     while True:

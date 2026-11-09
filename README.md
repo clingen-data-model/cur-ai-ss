@@ -221,8 +221,9 @@ the service account, the certificate and the secrets -- stays put.
 | `/api/` | FastAPI on `127.0.0.1:8000` | Proxied; the `/api` prefix is stripped before it reaches FastAPI |
 | `/` | `frontend/dist/` on disk | Static files. Unknown paths fall back to `/index.html` so the SPA router can resolve deep links. |
 
-The API and worker run as systemd **user** services (`api`, `worker`) under the `caa`
-user. (A host deployed before Streamlit was retired also had a `ui` service; the playbook
+The API and workers run as systemd **user** services (`api`, and `worker@0` .. `worker@3`
+from the `worker@` template unit, each owning a quarter of the papers; `worker_count` in
+the playbook) under the `caa` user. (A host deployed before Streamlit was retired also had a `ui` service; the playbook
 stops, disables and removes it.) TLS is a Let's Encrypt wildcard managed by certbot on the
 VM, renewed twice-daily by cron via a Porkbun DNS-01 challenge.
 

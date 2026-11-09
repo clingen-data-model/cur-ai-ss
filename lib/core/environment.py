@@ -58,6 +58,17 @@ class Env(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
+    # The worker shards the tasks table by paper: a worker process owns the
+    # tasks of the papers whose id % WORKER_COUNT is its WORKER_ID, and reads
+    # or writes no other row (lib/bin/worker.py, shard_filter). The defaults
+    # are one worker that owns everything, which is what a developer runs;
+    # the deployment runs WORKER_COUNT instances of worker@.service, each with
+    # its instance number as WORKER_ID (infrastructure/ansible/playbook.yml,
+    # worker_count). Every worker must be started with the same WORKER_COUNT,
+    # or two of them own one paper's tasks and run them twice.
+    WORKER_ID: int = 0
+    WORKER_COUNT: int = 1
+
     # SMTP (optional — if unset, registration emails are logged but not sent)
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 587
@@ -102,6 +113,17 @@ class Env(BaseSettings):
 
     # Feature Flags
     SKIP_DATA_MIGRATIONS: bool = False
+
+    @model_validator(mode='after')
+    def validate_worker_shard(self) -> 'Env':
+        if self.WORKER_COUNT < 1:
+            raise ValueError('WORKER_COUNT must be at least 1')
+        if not 0 <= self.WORKER_ID < self.WORKER_COUNT:
+            raise ValueError(
+                f'WORKER_ID must be between 0 and WORKER_COUNT - 1 '
+                f'({self.WORKER_COUNT - 1}), got {self.WORKER_ID}'
+            )
+        return self
 
     @model_validator(mode='after')
     def validate_ncbi_settings(self) -> 'Env':

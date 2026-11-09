@@ -54,20 +54,23 @@ skill) — local uncommitted code is not there. Deploy first if the script is ne
 
 ## Services
 
-`api`, `ui`, and `worker` are systemd *user* units for the `caa` user:
+`api` and the worker instances `worker@0` .. `worker@3` (one per paper shard, from
+the `worker@` template unit) are systemd *user* units for the `caa` user:
 
 ```bash
-sudo -u caa XDG_RUNTIME_DIR=/run/user/$(id -u caa) systemctl --user status worker
-sudo -u caa XDG_RUNTIME_DIR=/run/user/$(id -u caa) systemctl --user restart worker
-sudo -u caa XDG_RUNTIME_DIR=/run/user/$(id -u caa) journalctl --user -u worker -n 100
+sudo -u caa XDG_RUNTIME_DIR=/run/user/$(id -u caa) systemctl --user status 'worker@*'
+sudo -u caa XDG_RUNTIME_DIR=/run/user/$(id -u caa) systemctl --user restart 'worker@*'
+sudo -u caa XDG_RUNTIME_DIR=/run/user/$(id -u caa) journalctl --user -u worker@2 -n 100
 ```
+
+A paper's tasks are handled by the instance whose number is `paper_id % 4`.
 
 ## Cautions
 
 - **Back up before schema changes or bulk writes:**
   `sudo -u caa cp /var/caa/sqllite/app.db /var/caa/sqllite/app.db.bak-$(date +%Y%m%d)`
-- Stop or pause the `worker` before manual DB surgery — it polls every 10s and
-  holds lease-based task state.
+- Stop the `worker@*` instances before manual DB surgery — they poll every 5 s and
+  hold lease-based task state.
 - The dev DB's alembic stamp tracks whichever branch last migrated it; if
   `alembic` can't find a revision, the DB may need re-stamping.
 - Migrations on tables with CASCADE FKs must follow the PRAGMA
