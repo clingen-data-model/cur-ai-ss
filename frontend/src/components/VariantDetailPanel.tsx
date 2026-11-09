@@ -26,6 +26,7 @@ import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { VARIANT_TYPE_OPTIONS } from '@/lib/variantType'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
+import { formatAf } from '@/lib/alleleFrequency'
 import { formatSpliceAI } from '@/lib/spliceai'
 import { harmonizationWarning } from '@/lib/harmonization'
 import { apiErrorMessage } from '@/lib/apiError'
@@ -241,13 +242,13 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
               <ReadOnlyRow label="VEP Consequence" value={annotated.vep_consequence ?? 'N/A'} noEvidence />
 
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-3 mb-1">gnomAD</p>
-              <ReadOnlyRow label="Top-level AF" value={annotated.gnomad_top_level_af ?? 'N/A'} noEvidence />
+              <ReadOnlyRow label="Top-level AF" value={formatAf(annotated.gnomad_top_level_af) ?? 'N/A'} noEvidence />
               <ReadOnlyRow
                 noEvidence
                 label="Top-level Alleles (AC / AN)"
                 value={formatAlleleCounts(annotated.gnomad_ac, annotated.gnomad_an)}
               />
-              <ReadOnlyRow label="Popmax AF" value={annotated.gnomad_popmax_af ?? 'N/A'} noEvidence />
+              <ReadOnlyRow label="Popmax AF" value={formatAf(annotated.gnomad_popmax_af) ?? 'N/A'} noEvidence />
               <ReadOnlyRow label="Popmax Population" value={formatGnomadPopulation(annotated.gnomad_popmax_population)} noEvidence />
               <ReadOnlyRow
                 noEvidence

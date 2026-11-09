@@ -5,11 +5,7 @@ import type { VariantResp } from '@/api/generated/types.gen'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
 import { formatSpliceAI } from '@/lib/spliceai'
-
-function formatAf(af: number | null | undefined): string | null {
-  if (af == null) return null
-  return af === 0 ? '0' : af.toExponential(2)
-}
+import { formatAf } from '@/lib/alleleFrequency'
 
 export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
   const harmonized = variant.harmonized_variant.value
