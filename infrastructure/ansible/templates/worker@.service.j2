@@ -1,5 +1,9 @@
+# A template unit: worker@0 ... worker@{{ worker_count - 1 }} run at once, each
+# owning the papers whose id % WORKER_COUNT is its instance number
+# (lib/bin/worker.py, shard_filter). The count is written into every instance
+# so they agree on the sharding; a change to worker_count restarts them all.
 [Unit]
-Description=Curator AI Background Worker
+Description=Curator AI Background Worker %i of {{ worker_count }}
 After=network-online.target curator-api.service
 Wants=network-online.target curator-api.service
 
@@ -10,6 +14,8 @@ EnvironmentFile=/opt/{{ caa_user }}/.env
 Environment=PATH="/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
 Environment=PROTOCOL="https://"
 Environment=API_ENDPOINT="{{ domain }}/api"
+Environment=WORKER_ID=%i
+Environment=WORKER_COUNT={{ worker_count }}
 
 ExecStart=/opt/{{ caa_user }}/bin/worker
 
@@ -23,7 +29,7 @@ RestartSec=5
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=curator-worker
+SyslogIdentifier=curator-worker-%i
 
 [Install]
 WantedBy=default.target

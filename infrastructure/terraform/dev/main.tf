@@ -60,9 +60,16 @@ module "dev-caa" {
   subnetwork_self_link = data.terraform_remote_state.shared_network.outputs.subnetwork.self_link
 
   # The machine since the 2026-11 replacement (step 3 above): the address,
-  # service account and secrets are still named dev-caa.
+  # service account and secrets are still named dev-caa. e2-highmem-2 (2 vCPU,
+  # 16 GB) since 2026-11-09, from e2-medium (4 GB): the playbook runs four
+  # worker processes (infrastructure/ansible, worker_count), each ~470 MB
+  # resident at start and growing over days, beside the API; they spend their
+  # time waiting on model and lookup calls, so memory is the dimension to buy,
+  # not cores. Changing the type stops and starts the instance in place
+  # (allow_stopping_for_update in ../vm): a few minutes of downtime, nothing
+  # on the disk or the address changes.
   instance_name     = "dev-caa-2"
-  machine_type      = "e2-medium"
+  machine_type      = "e2-highmem-2"
   boot_disk_type    = "pd-balanced"
   boot_disk_size_gb = 50
   boot_image        = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"

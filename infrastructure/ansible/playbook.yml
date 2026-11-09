@@ -27,6 +27,8 @@
 #   letsencrypt_propagation_seconds - DNS-01 propagation wait (default: 900, from group_vars/all.yml)
 #   git_repo              - Git repository URL (default: https://github.com/clingen-data-model/cur-ai-ss.git)
 #   git_version           - Git ref to deploy (default: main)
+#   worker_count          - Worker processes to run, as worker@0 ... worker@N-1, each
+#                           owning the papers whose id % N is its number (default: 4)
 #
 # Examples (run from the repo root):
 #   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml
@@ -100,6 +102,15 @@
     # Git repository settings
     git_repo: https://github.com/clingen-data-model/cur-ai-ss.git
     git_version: main
+    # Worker processes, run as the systemd template instances worker@0 ... worker@N-1;
+    # each owns the papers whose id % N is its number (lib/bin/worker.py, shard_filter)
+    # and applies the concurrency limits in that module to its own shard, so the
+    # PDF Parsing cap of 1 per worker is 4 parses in flight against the pdf-parsing
+    # service's 2 instances x 2 (infrastructure/terraform/pdf-parsing). Each process
+    # starts at ~470 MB resident (the parsing toolchain's imports and the HPO lookup),
+    # and the machine type is sized for that (infrastructure/terraform/dev).
+    worker_count: 4
+    worker_units: "{{ range(worker_count) | map('string') | map('regex_replace', '^', 'worker@') | list }}"
     # Secret Manager secret names (can be overridden via -e)
     openai_api_key_secret: caa-openai-api-key
     anthropic_api_key_secret: caa-anthropic-api-key
@@ -431,14 +442,32 @@
         mode: "0644"
       notify: Restart services
 
-    - name: Deploy worker systemd service
+    - name: Deploy worker systemd template unit
       template:
-        src: templates/worker.service.j2
-        dest: /home/{{ caa_user }}/.config/systemd/user/worker.service
+        src: templates/worker@.service.j2
+        dest: /home/{{ caa_user }}/.config/systemd/user/worker@.service
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
         mode: "0644"
       notify: Restart services
+
+    # The single `worker` unit became the `worker@` template on 2026-11-09. A host
+    # deployed before that still runs it, and left running beside the instances it
+    # would sweep their live tasks back to PENDING on every restart (it owns every
+    # paper). Same shape as the Streamlit retirement below.
+    - name: Stop and disable the retired single worker service
+      become_user: "{{ caa_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
+      command: systemctl --user disable --now worker.service
+      register: retire_worker
+      failed_when: false
+      changed_when: retire_worker.rc == 0
+
+    - name: Remove the retired single worker unit
+      file:
+        path: /home/{{ caa_user }}/.config/systemd/user/worker.service
+        state: absent
 
     # Streamlit is retired. A host deployed before that still has the unit, enabled and
     # running; stop and disable it, then delete the file. Safe on a host that never had
@@ -474,9 +503,7 @@
         enabled: yes
         state: started
         scope: user
-      loop:
-        - api
-        - worker
+      loop: "{{ ['api'] + worker_units }}"
 
     # --- TLS Certificate (certbot + DNS-01 via Porkbun) ---
     #
@@ -828,9 +855,7 @@
         name: "{{ item }}"
         state: restarted
         scope: user
-      loop:
-        - api
-        - worker
+      loop: "{{ ['api'] + worker_units }}"
 
     - name: Reload nginx
       systemd:
