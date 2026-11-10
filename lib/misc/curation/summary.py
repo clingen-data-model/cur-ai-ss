@@ -1,3 +1,5 @@
+import math
+
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -19,6 +21,23 @@ from lib.models.variant import (
     VariantDB,
     get_variant_description,
 )
+
+# Seven significant figures, the count the UI shows (formatAf in
+# frontend/src/lib/alleleFrequency.ts).
+AF_SIGNIFICANT_FIGURES = 7
+
+
+def format_af(af: float) -> str:
+    """A gnomAD allele frequency as a plain decimal, never scientific notation.
+
+    Fixed decimals round the rare frequencies curation cares about to zero
+    (1.86e-6 printed as 0.00000 on the slide), which reads as absent from
+    gnomAD. A true zero is a real value (counted, never seen) and stays "0".
+    """
+    if af == 0:
+        return '0'
+    decimals = AF_SIGNIFICANT_FIGURES - 1 - math.floor(math.log10(abs(af)))
+    return f'{af:.{max(decimals, 0)}f}'
 
 
 def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryRow]:
@@ -315,7 +334,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                 if variant.annotated_variant:
                     if variant.annotated_variant.gnomad_top_level_af is not None:
                         variant_parts.append(
-                            f'gnomAD MAF: {variant.annotated_variant.gnomad_top_level_af:.5f}'
+                            f'gnomAD MAF: {format_af(variant.annotated_variant.gnomad_top_level_af)}'
                         )
                     else:
                         variant_parts.append('gnomAD: MISSING')
