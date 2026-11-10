@@ -11,6 +11,7 @@ from lib.models import (
     PatientDB,
     PatientVariantOccurrenceDB,
     PhenotypeDB,
+    UserDB,
     VariantDB,
 )
 from lib.models.paper import ReviewStatus
@@ -202,7 +203,7 @@ def test_signoff_stamps_occurrences_and_reports_progress(
     assert listed['signoff'] == {'total': 2, 'confirmed': 1}
     # The first stamp starts the review, under whoever stamped.
     assert listed['review_status'] == 'in_progress'
-    assert listed['review_assignee']['id'] == test_user.id
+    assert [u['id'] for u in listed['review_assignees']] == [test_user.id]
 
 
 def test_signoff_can_be_taken_back_and_the_review_reopens(
@@ -227,7 +228,7 @@ def test_signoff_can_be_taken_back_and_the_review_reopens(
     body = client.get(f'/papers/{paper.id}').json()
     assert body['review_status'] == 'in_progress'
     # The assignee stays: the paper is still theirs to finish.
-    assert body['review_assignee']['id'] == test_user.id
+    assert [u['id'] for u in body['review_assignees']] == [test_user.id]
 
     # Taking the last one back leaves it in progress, not unassigned.
     resp = client.post(url, json={'occurrence_ids': [other.id], 'confirmed': False})
@@ -269,7 +270,81 @@ def test_review_completes_itself_once_every_occurrence_is_stamped(
     body = client.get(f'/papers/{paper.id}').json()
     assert body['review_status'] == 'completed'
     # Nobody was assigned, so the curator who finished is.
-    assert body['review_assignee']['id'] == test_user.id
+    assert [u['id'] for u in body['review_assignees']] == [test_user.id]
+
+
+def _user(db_session, first_name):
+    user = UserDB(
+        email=f'{first_name.lower()}@example.com',
+        hashed_password='not-a-real-hash',
+        first_name=first_name,
+        last_name='Curator',
+    )
+    db_session.add(user)
+    db_session.flush()
+    return user
+
+
+def test_a_paper_can_be_assigned_to_several_curators(
+    client, db_session, paper, test_user
+):
+    zoe = _user(db_session, 'Zoe')
+    url = f'/papers/{paper.id}/review'
+    resp = client.patch(
+        url,
+        json={'review_status': 'assigned', 'assignee_user_ids': [zoe.id, test_user.id]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['review_status'] == 'assigned'
+    # By name, in the paper and in the list alike.
+    assert [u['id'] for u in body['review_assignees']] == [test_user.id, zoe.id]
+    listed = next(p for p in client.get('/papers').json() if p['id'] == paper.id)
+    assert [u['id'] for u in listed['review_assignees']] == [test_user.id, zoe.id]
+
+    # The list is the whole set: leaving someone out takes them off.
+    resp = client.patch(
+        url, json={'review_status': 'in_progress', 'assignee_user_ids': [zoe.id]}
+    )
+    assert [u['id'] for u in resp.json()['review_assignees']] == [zoe.id]
+
+    resp = client.patch(url, json={'review_status': 'not_assigned'})
+    assert resp.json()['review_assignees'] == []
+    assert resp.json()['review_status'] == 'not_assigned'
+
+
+def test_review_status_and_assignees_are_validated_together(client, paper, test_user):
+    url = f'/papers/{paper.id}/review'
+    assert client.patch(url, json={'review_status': 'assigned'}).status_code == 422
+    resp = client.patch(
+        url,
+        json={'review_status': 'not_assigned', 'assignee_user_ids': [test_user.id]},
+    )
+    assert resp.status_code == 422
+    resp = client.patch(
+        url,
+        json={'review_status': 'assigned', 'assignee_user_ids': [test_user.id, 99999]},
+    )
+    assert resp.status_code == 404
+    assert client.get(f'/papers/{paper.id}').json()['review_assignees'] == []
+
+
+def test_a_stamp_by_someone_else_leaves_the_assignees_as_they_are(
+    client, db_session, paper, case
+):
+    zoe = _user(db_session, 'Zoe')
+    yan = _user(db_session, 'Yan')
+    paper.review_status = ReviewStatus.ASSIGNED
+    paper.review_assignees = [zoe, yan]
+    _occurrence(db_session, paper, case['relative'], case['variant'])
+    db_session.commit()
+
+    client.post(
+        f'/papers/{paper.id}/signoff', json={'occurrence_ids': [case['occurrence'].id]}
+    )
+    body = client.get(f'/papers/{paper.id}').json()
+    assert body['review_status'] == 'in_progress'
+    assert [u['first_name'] for u in body['review_assignees']] == ['Yan', 'Zoe']
 
 
 def test_an_agent_rewrite_unstamps_the_occurrence_and_reopens_a_completed_review(
@@ -277,7 +352,7 @@ def test_an_agent_rewrite_unstamps_the_occurrence_and_reopens_a_completed_review
 ):
     stamp(case['occurrence'], test_user)
     paper.review_status = ReviewStatus.COMPLETED
-    paper.review_assignee_user_id = test_user.id
+    paper.review_assignees = [test_user]
     db_session.flush()
 
     clear_signoff(db_session, paper.id, [None])
@@ -288,7 +363,7 @@ def test_an_agent_rewrite_unstamps_the_occurrence_and_reopens_a_completed_review
     assert case['occurrence'].reviewed_at is None
     assert case['occurrence'].reviewed_by_user_id is None
     assert paper.review_status == ReviewStatus.IN_PROGRESS
-    assert paper.review_assignee_user_id == test_user.id
+    assert paper.review_assignees == [test_user]
 
 
 def test_review_cases_are_the_families_in_order_with_their_flags(

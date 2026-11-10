@@ -63,7 +63,9 @@ export function usePapers(
       .filter((p) => (status ? STATE_OF[p.status] === status : true))
       .filter((p) => (review_status ? p.review_status === review_status : true))
       .filter((p) =>
-        review_assignee !== undefined ? p.review_assignee?.id === review_assignee : true,
+        review_assignee !== undefined
+          ? (p.review_assignees ?? []).some((a) => a.id === review_assignee)
+          : true,
       )
     return [...matching].sort((a, b) =>
       (b.updated_at ?? '').localeCompare(a.updated_at ?? ''),

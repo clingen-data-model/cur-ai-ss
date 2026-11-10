@@ -1,9 +1,13 @@
-/* A paper's review status and assignee, editable inline from the table cell.
+/* A paper's review status and assignees, editable inline from the table cell.
  *
  * Popover rather than a dialog: this is a two-field edit (who, and how far
  * along), which a click-to-open menu handles without leaving the table the
  * way the rerun/delete dialogs need to for a destructive or multi-field
  * action.
+ *
+ * A paper can be assigned to several people, who share its one status: each
+ * name in the list is a toggle, and the menu stays open while names are
+ * ticked so a second person does not cost a second trip.
  */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -37,15 +41,20 @@ const IN_PROGRESS_STATUSES = [
 
 export function ReviewStatusBadge({
   status,
-  assignee,
+  assignees = [],
 }: {
   status: ReviewStatus
-  assignee?: UserSummaryResp | null
+  assignees?: UserSummaryResp[]
 }) {
   const { variant, className } = REVIEW_STATUS_BADGE[status]
   return (
-    <Badge variant={variant} className={className}>
-      {reviewStatusLabel(status, assignee)}
+    <Badge
+      variant={variant}
+      className={className}
+      // The label abbreviates past two people; the full list is here.
+      title={assignees.length > 1 ? assignees.map((a) => a.name).join(', ') : undefined}
+    >
+      {reviewStatusLabel(status, assignees)}
     </Badge>
   )
 }
@@ -54,7 +63,7 @@ export function ReviewStatusBadge({
  * shape) satisfies it directly too -- both models carry these same three
  * fields with the same (optional) types. Mirrors PaperProgressPopover's
  * ProgressPaper. */
-type ReviewablePaper = Pick<PaperSummaryResp, 'id' | 'review_status' | 'review_assignee'>
+type ReviewablePaper = Pick<PaperSummaryResp, 'id' | 'review_status' | 'review_assignees'>
 
 export function ReviewStatusCell({ paper }: { paper: ReviewablePaper }) {
   const { users } = useUsers()
@@ -64,17 +73,18 @@ export function ReviewStatusCell({ paper }: { paper: ReviewablePaper }) {
   // Both default to their "nothing assigned yet" value: the API always sends
   // them, but the generated type treats server-defaulted fields as optional.
   const status = paper.review_status ?? ReviewStatus.NOT_ASSIGNED
-  const assignee = paper.review_assignee ?? null
+  const assignees = paper.review_assignees ?? []
+  const assigneeIds = assignees.map((a) => a.id)
 
   const mutation = useMutation({
-    mutationFn: (body: { review_status: ReviewStatus; assignee_user_id: number | null }) =>
+    mutationFn: (body: { review_status: ReviewStatus; assignee_user_ids: number[] }) =>
       updatePaperReviewPapersPaperIdReviewPatch({
         path: { paper_id: paper.id },
         body,
         throwOnError: true,
       }),
     // The papers list and the paper-detail page (['paper', id]) both embed
-    // review_status/review_assignee now, so both need invalidating.
+    // review_status/review_assignees now, so both need invalidating.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper', paper.id] })
@@ -82,28 +92,43 @@ export function ReviewStatusCell({ paper }: { paper: ReviewablePaper }) {
     onError: () => toast.error('Failed to update review status'),
   })
 
-  const assignTo = (userId: number) => {
-    // A fresh assignment always starts at ASSIGNED, even when reassigning a
-    // paper that was already in progress -- the new person has not started.
-    mutation.mutate({ review_status: ReviewStatus.ASSIGNED, assignee_user_id: userId })
-    setOpen(false)
+  /** Put a person on the paper or take them off. The status is the paper's,
+   * not the person's, so it only moves at the ends: the first assignee makes
+   * an unassigned paper Assigned, the last one leaving makes it Not assigned,
+   * and anyone joining or leaving in between keeps it where it is. */
+  const toggle = (userId: number) => {
+    // The next set is built from the last response, so a second tick before
+    // the first has come back would send a list without it.
+    if (mutation.isPending) return
+    const next = assigneeIds.includes(userId)
+      ? assigneeIds.filter((id) => id !== userId)
+      : [...assigneeIds, userId]
+    mutation.mutate({
+      review_status:
+        next.length === 0
+          ? ReviewStatus.NOT_ASSIGNED
+          : status === ReviewStatus.NOT_ASSIGNED
+            ? ReviewStatus.ASSIGNED
+            : status,
+      assignee_user_ids: next,
+    })
   }
 
   const unassign = () => {
-    mutation.mutate({ review_status: ReviewStatus.NOT_ASSIGNED, assignee_user_id: null })
+    mutation.mutate({ review_status: ReviewStatus.NOT_ASSIGNED, assignee_user_ids: [] })
     setOpen(false)
   }
 
   const setStatus = (review_status: ReviewStatus) => {
-    if (!assignee) return
-    mutation.mutate({ review_status, assignee_user_id: assignee.id })
+    if (assigneeIds.length === 0) return
+    mutation.mutate({ review_status, assignee_user_ids: assigneeIds })
     setOpen(false)
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger className="cursor-pointer rounded focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-        <ReviewStatusBadge status={status} assignee={assignee} />
+        <ReviewStatusBadge status={status} assignees={assignees} />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-0 gap-0">
         {/* Every item that reacts to typing -- status changes and the
@@ -119,9 +144,9 @@ export function ReviewStatusCell({ paper }: { paper: ReviewablePaper }) {
                 <CommandGroup>
                   <CommandItem
                     value="Assign to me"
-                    onSelect={() => assignTo(user.id)}
+                    onSelect={() => toggle(user.id)}
                   >
-                    <Check className={assignee?.id === user.id ? 'ml-auto size-4' : 'opacity-0'} />
+                    <Check className={assigneeIds.includes(user.id) ? 'ml-auto size-4' : 'opacity-0'} />
                     Assign to me
                   </CommandItem>
                 </CommandGroup>
@@ -147,22 +172,22 @@ export function ReviewStatusCell({ paper }: { paper: ReviewablePaper }) {
                     className="text-muted-foreground"
                   >
                     <UserX />
-                    Unassign
+                    {assignees.length > 1 ? 'Unassign everyone' : 'Unassign'}
                   </CommandItem>
                 </CommandGroup>
                 <CommandSeparator />
               </>
             )}
-            <CommandGroup heading="Assignee">
+            <CommandGroup heading="Assignees">
               {users.map((user) => (
                 <CommandItem
                   key={user.id}
                   value={user.name}
-                  onSelect={() => assignTo(user.id)}
+                  onSelect={() => toggle(user.id)}
                 >
                   <UserAvatar user={user} size="sm" />
                   {user.name}
-                  {assignee?.id === user.id && <Check className="ml-auto size-4" />}
+                  {assigneeIds.includes(user.id) && <Check className="ml-auto size-4" />}
                 </CommandItem>
               ))}
             </CommandGroup>

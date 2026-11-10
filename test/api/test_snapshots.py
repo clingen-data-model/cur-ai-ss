@@ -64,7 +64,12 @@ def test_snapshot_covers_every_paper_scoped_table():
     # along with it -- see _INSERT_ORDER. (deletion_log has no FK of its own,
     # see its docstring, so it was never "reachable" by the walk below in the
     # first place; it's listed here only for symmetry with edits.)
-    excluded: set[str] = {'chat_messages', 'snapshots'}
+    #
+    # paper_review_assignees is excluded with the review status it goes with:
+    # who is reviewing a paper is the team's workflow, not extraction output,
+    # and a restore leaves papers.review_status alone too (it is not in
+    # _PAPER_RESTORE_COLUMNS).
+    excluded: set[str] = {'chat_messages', 'snapshots', 'paper_review_assignees'}
     snapshotted = {model.__table__.name for _, model in _INSERT_ORDER} | {'papers'}
 
     reachable = {'papers'}

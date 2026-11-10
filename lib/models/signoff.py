@@ -116,7 +116,7 @@ def clear_signoff(
 ) -> None:
     """An agent rewrote ``rows`` in place: drop their stamps, and if that
     makes a completed paper incomplete, put its review back in progress.
-    The assignee is kept; the paper is still theirs to finish."""
+    The assignees are kept; the paper is still theirs to finish."""
     from lib.models.paper import PaperDB, ReviewStatus
 
     cleared = False
@@ -166,8 +166,8 @@ def sync_review_status(session: Session, paper: PaperDB, user: UserDB) -> bool:
     """Bring the paper's review status in line with its stamps, after a
     stamp or a take-back by ``user``. Every occurrence stamped: completed.
     A completed paper with one taken back: in progress again. A stamp on a
-    paper nobody has started: in progress. The assignee is kept when there
-    is one, else ``user`` becomes it (in-progress and completed reviews
+    paper nobody has started: in progress. The assignees are kept when there
+    are any, else ``user`` becomes the one (in-progress and completed reviews
     always name someone). A paper left in progress with every stamp taken
     back stays in progress: the curator is still on it. Returns whether the
     status changed."""
@@ -187,7 +187,6 @@ def sync_review_status(session: Session, paper: PaperDB, user: UserDB) -> bool:
     if wanted == status:
         return False
     paper.review_status = wanted
-    if paper.review_assignee_user_id is None:
-        paper.review_assignee_user_id = user.id
-        paper.review_assignee = user
+    if not paper.review_assignees:
+        paper.review_assignees.append(user)
     return True
