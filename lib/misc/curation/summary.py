@@ -1,5 +1,3 @@
-import math
-
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -22,22 +20,23 @@ from lib.models.variant import (
     get_variant_description,
 )
 
-# Seven significant figures, the count the UI shows (formatAf in
+# Eight decimal places, the count the UI shows (formatAf in
 # frontend/src/lib/alleleFrequency.ts).
-AF_SIGNIFICANT_FIGURES = 7
+AF_DECIMAL_PLACES = 8
 
 
 def format_af(af: float) -> str:
     """A gnomAD allele frequency as a plain decimal, never scientific notation.
 
-    Fixed decimals round the rare frequencies curation cares about to zero
-    (1.86e-6 printed as 0.00000 on the slide), which reads as absent from
-    gnomAD. A true zero is a real value (counted, never seen) and stays "0".
+    Eight fixed decimals, so every frequency on a slide has the same width
+    and the rarest gnomAD can report (one allele in about 1.6 million,
+    6e-7) still shows two digits; five decimals printed that as 0.00000,
+    which reads as absent from gnomAD. A true zero is a real value (counted,
+    never seen) and stays "0".
     """
     if af == 0:
         return '0'
-    decimals = AF_SIGNIFICANT_FIGURES - 1 - math.floor(math.log10(abs(af)))
-    return f'{af:.{max(decimals, 0)}f}'
+    return f'{af:.{AF_DECIMAL_PLACES}f}'
 
 
 def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryRow]:
