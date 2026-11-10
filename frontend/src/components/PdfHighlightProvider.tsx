@@ -33,12 +33,16 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PdfViewer } from '@/components/PdfViewer'
 import { DocumentEvidenceViewer } from '@/components/DocumentEvidenceViewer'
+import { Hint } from '@/components/Hint'
 
 type ViewerTab = 'pdf' | 'markdown'
 
 // Matches Streamlit's default palette (lib/ui/paper/shared.py's COLORS[0]) --
 // this viewer is read-only, so there's no picker, just one fixed color.
 const HIGHLIGHT_COLOR = '#FFF59D'
+
+const VIEW_SWITCH_HINT =
+  'Evidence from a supplement can only be shown as Markdown, and highlights on the PDF are occasionally misaligned. The Markdown view shows the same text with the cited passage marked.'
 
 export interface HighlightTarget {
   citations: Citation[]
@@ -130,14 +134,18 @@ export function EvidencePanes({
       className="flex-1 min-h-0 flex flex-col gap-0"
     >
       <div className="mx-4 mt-3 flex items-center justify-between gap-2">
-        <TabsList className="w-fit">
-          <TabsTrigger value="pdf" disabled={supplementOnly}>
-            PDF
-          </TabsTrigger>
-          <TabsTrigger value="markdown" disabled={target === null}>
-            Markdown
-          </TabsTrigger>
-        </TabsList>
+        {/* Why there are two views of one paper: curators asked what the
+            switch was for. `wrap`, since a disabled tab takes no pointer. */}
+        <Hint label={VIEW_SWITCH_HINT} wrap>
+          <TabsList className="w-fit">
+            <TabsTrigger value="pdf" disabled={supplementOnly}>
+              PDF
+            </TabsTrigger>
+            <TabsTrigger value="markdown" disabled={target === null}>
+              Markdown
+            </TabsTrigger>
+          </TabsList>
+        </Hint>
         {toolbar}
       </div>
       <TabsContent value="pdf" className="flex-1 min-h-0">
