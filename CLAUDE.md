@@ -19,6 +19,14 @@ uv run pytest test --cov=lib --cov-report=term-missing  # Run all tests with cov
 uv run pytest test/path/to/test_file.py  # Run a specific test
 ```
 
+**Commits are Conventional Commits** (`feat: ...`, `fix(worker): ...`; types build, bump, chore, ci, docs, feat, fix, perf, refactor, revert, style, test), and so are PR titles, since a squash merge puts the title on `main`. commitizen checks them (`[tool.commitizen]` in `pyproject.toml`) in three places that run the same rule: the `commit-msg` hook, `bin/check-commits`, and the Conventional Commits workflow on every pull request.
+```bash
+git config core.hooksPath .githooks   # once per clone: turns the commit-msg hook on
+bin/check-commits                     # every commit on this branch since origin/main
+bin/check-commits --message 'feat: a PR title'
+uv run cz commit                      # optional: prompts for the parts of the message
+```
+
 **Run the application (three terminals):**
 ```bash
 ./bin/api       # FastAPI backend (port 8000)
