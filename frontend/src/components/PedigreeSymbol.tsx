@@ -34,7 +34,11 @@ export function PedigreeSymbol({
       <svg width="20" height="20" viewBox="0 0 20 20" className="text-muted-foreground" aria-label={title}>
         {shape}
       </svg>
-      {patient.proband_status === 'Proband' && <span className="text-xs text-muted-foreground">*</span>}
+      {/* 30% over text-xs (0.75rem), which curators found easy to miss; the
+          line height stays at text-xs's 1rem so rows keep their height. */}
+      {patient.proband_status === 'Proband' && (
+        <span className="text-[0.975rem] leading-4 text-muted-foreground">*</span>
+      )}
     </span>
   )
 }
