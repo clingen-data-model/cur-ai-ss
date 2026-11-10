@@ -23,8 +23,6 @@ export interface OccurrenceRow {
   occurrence: PatientVariantOccurrenceResp
   patient: PatientResp
   variant: VariantResp
-  /** The other half of a compound-het pair, when this occurrence is paired. */
-  pairedVariant: VariantResp | null
 }
 
 export function usePaperOccurrences(paperId: number) {
@@ -90,7 +88,6 @@ export function usePaperOccurrences(paperId: number) {
 
     const patientsById = new Map(patients.map((p) => [p.id, p]))
     const variantsById = new Map(variants.map((v) => [v.id, v]))
-    const occurrencesById = new Map(occurrences.map((o) => [o.id, o]))
 
     const result: OccurrenceRow[] = []
     for (const occurrence of occurrences) {
@@ -98,19 +95,11 @@ export function usePaperOccurrences(paperId: number) {
       const variant = variantsById.get(occurrence.variant_id)
       if (!patient || !variant) continue
 
-      let pairedVariant: VariantResp | null = null
-      if (occurrence.paired_variant_link_id != null) {
-        const pairedOccurrence = occurrencesById.get(occurrence.paired_variant_link_id)
-        if (pairedOccurrence) {
-          pairedVariant = variantsById.get(pairedOccurrence.variant_id) ?? null
-        }
-      }
-
-      result.push({ occurrence, patient, variant, pairedVariant })
+      result.push({ occurrence, patient, variant })
     }
 
-    // Group by patient, and keep a pair's two occurrences adjacent -- mirrors
-    // the Streamlit Occurrences tab's sort order.
+    // Group by patient, and keep a pair's two occurrences adjacent; the
+    // Occurrences table then draws each pair as one row (mergePairs there).
     result.sort((a, b) => {
       if (a.occurrence.patient_id !== b.occurrence.patient_id) {
         return a.occurrence.patient_id - b.occurrence.patient_id
