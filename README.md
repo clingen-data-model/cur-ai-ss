@@ -86,6 +86,20 @@ uv run pytest test --cov=lib --cov-report=term-missing   # Tests with coverage
 uv run pytest test/models/test_converters.py             # A specific test file
 ```
 
+### Commit Messages
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org):
+`feat: ...`, `fix(worker): ...`, `docs: ...`. So do pull request titles, because a
+squash merge puts the title on `main`. [commitizen](https://commitizen-tools.github.io/commitizen/)
+checks both, and CI runs the same check on every pull request.
+
+```bash
+git config core.hooksPath .githooks              # Once per clone: reject a bad message at commit time
+bin/check-commits                                # Check this branch's commits since origin/main
+bin/check-commits --message 'feat: a PR title'   # Check one message
+uv run cz commit                                 # Optional: be prompted for the parts of a message
+```
+
 ### Running the Full Application
 
 Start the backend, worker and frontend in separate terminals:

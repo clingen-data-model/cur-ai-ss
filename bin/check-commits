@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Checks that every commit in a range is a Conventional Commit, the same check
+# the commit-msg hook (.githooks/commit-msg) makes one message at a time and
+# the Conventional Commits workflow makes on every pull request.
+#
+#     bin/check-commits                     # this branch's commits, origin/main..HEAD
+#     bin/check-commits <rev-range>         # any range
+#     bin/check-commits --message '<text>'  # one message, e.g. a PR title
+set -euo pipefail
+
+cz() {
+    uv run --frozen --only-group commits cz "$@"
+}
+
+if [[ "${1:-}" == "--message" ]]; then
+    cz check --message "${2:?--message needs the text to check}"
+    exit
+fi
+
+range="${1:-origin/main..HEAD}"
+if [[ -z "$(git rev-list "$range")" ]]; then
+    echo "No commits in $range"
+    exit
+fi
+cz check --rev-range "$range"

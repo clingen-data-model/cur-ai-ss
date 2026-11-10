@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Rejects a commit whose message is not a Conventional Commit
+# (https://www.conventionalcommits.org), as configured under [tool.commitizen]
+# in pyproject.toml. Enable once per clone (worktrees share the setting):
+#
+#     git config core.hooksPath .githooks
+#
+# --only-group keeps this to commitizen alone, so a fresh worktree does not
+# sync the whole project to make its first commit.
+set -euo pipefail
+
+exec uv run --frozen --only-group commits cz check --allow-abort --commit-msg-file "$1"

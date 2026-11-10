@@ -1,0 +1,38 @@
+# Every commit of a pull request, and its title, must be a Conventional Commit
+# (https://www.conventionalcommits.org; rules under [tool.commitizen] in
+# pyproject.toml). The title is checked because a squash merge of several
+# commits takes it as the commit subject on main. Locally: bin/check-commits.
+name: Conventional Commits
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+
+    - name: Check the pull request's commits
+      run: bin/check-commits "$BASE_SHA..$HEAD_SHA"
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+    - name: Check the pull request's title
+      run: bin/check-commits --message "$PR_TITLE"
+      env:
+        PR_TITLE: ${{ github.event.pull_request.title }}

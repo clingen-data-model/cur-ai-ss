@@ -49,6 +49,12 @@ dev = [
     "pytest-cov==5.0.0",
     "watchdog>=6.0.0",
     "python-docx>=0.8.11",
+    {include-group = "commits"},
+]
+# On its own so the commit-msg hook and the commit check can run it without
+# syncing the whole project: `uv run --only-group commits cz ...`.
+commits = [
+    "commitizen==4.19.3",
 ]
 
 [tool.uv]
@@ -61,6 +67,9 @@ select = ["I"]
 
 [tool.ruff.format]
 quote-style = "single"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
 
 [tool.setuptools]
 packages = ["lib"]
