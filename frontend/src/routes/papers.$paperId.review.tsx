@@ -270,7 +270,7 @@ export function ReviewPage() {
                   <ArrowLeft className="size-3.5 shrink-0" />
                   <span className="truncate">{paper?.title ?? paper?.filename}</span>
                 </Link>
-                <ReviewStatusBadge status={reviewStatus} assignee={paper?.review_assignee} />
+                <ReviewStatusBadge status={reviewStatus} assignees={paper?.review_assignees} />
               </div>
               <div className="flex items-center gap-2">
                 <Select value={current?.key ?? ''} onValueChange={(key) => key && goTo(String(key))}>

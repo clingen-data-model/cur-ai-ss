@@ -9,7 +9,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator, Optional, TypeVar
+from typing import Any, AsyncGenerator, Iterable, Optional, TypeVar
 
 from agents import Runner
 from fastapi import (
@@ -182,6 +182,7 @@ from lib.models.flag import (
     FlagResp,
 )
 from lib.models.mondo import MondoComponentMapping, MondoTerm
+from lib.models.paper import paper_review_assignees
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
@@ -877,14 +878,21 @@ def update_paper_review(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    if request.assignee_user_id is not None:
-        assignee = session.get(UserDB, request.assignee_user_id)
-        if assignee is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail='Assignee not found'
-            )
+    assignee_ids = set(request.assignee_user_ids)
+    assignees = (
+        session.query(UserDB).filter(UserDB.id.in_(assignee_ids)).all()
+        if assignee_ids
+        else []
+    )
+    if len(assignees) != len(assignee_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Assignee not found'
+        )
     paper_db.review_status = request.review_status
-    paper_db.review_assignee_user_id = request.assignee_user_id
+    paper_db.review_assignees = assignees
+    # Sessions do not autoflush, and the list endpoint reads the association
+    # table directly rather than through this relationship.
+    session.flush()
     paper_db.patient_count = len(paper_db.patients)
     paper_db.proband_count = len(
         [
@@ -1031,6 +1039,12 @@ def _paper_summaries(
         for user in session.query(UserDB).all()
     }
 
+    assignee_ids: dict[int, list[int]] = defaultdict(list)
+    for paper_id, user_id in session.query(
+        paper_review_assignees.c.paper_id, paper_review_assignees.c.user_id
+    ):
+        assignee_ids[paper_id].append(user_id)
+
     query = session.query(PaperDB).options(selectinload(PaperDB.gene))
     if paper_ids is not None:
         if not paper_ids:
@@ -1059,10 +1073,8 @@ def _paper_summaries(
                 else None
             ),
             review_status=paper.review_status,
-            review_assignee=(
-                users.get(paper.review_assignee_user_id)
-                if paper.review_assignee_user_id is not None
-                else None
+            review_assignees=_by_name(
+                users[uid] for uid in assignee_ids.get(paper.id, []) if uid in users
             ),
             patient_count=patient_counts.get(paper.id, 0),
             proband_count=proband_counts.get(paper.id, 0),
@@ -1191,7 +1203,9 @@ def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
         updated_by_user_id=row.updated_by_user_id,
         updated_by=_user_summary(row.updated_by),
         review_status=row.review_status,
-        review_assignee=_user_summary(row.review_assignee),
+        review_assignees=_by_name(
+            UserSummaryResp.model_validate(user) for user in row.review_assignees
+        ),
         tasks=[
             TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
         ],
@@ -1427,6 +1441,11 @@ async def clear_chat_messages(
 
 def _user_summary(user: UserDB | None) -> UserSummaryResp | None:
     return UserSummaryResp.model_validate(user) if user else None
+
+
+def _by_name(users: Iterable[UserSummaryResp]) -> list[UserSummaryResp]:
+    """A paper's assignees in one order wherever they are listed."""
+    return sorted(users, key=lambda user: (user.name.lower(), user.id))
 
 
 def _decode_edit_value(raw: str | None, current_value: Any) -> Any:

@@ -47,7 +47,8 @@ export interface IndexSearch {
   /** A ReviewState, or absent for every review state. */
   review_status?: ReviewState
   /** A specific reviewer's user id, independent of review_status -- the two
-   * compose (e.g. "In progress" + this) rather than one replacing the other. */
+   * compose (e.g. "In progress" + this) rather than one replacing the other.
+   * Matches every paper that person is one of the assignees of. */
   review_assignee?: number
   /** Which of the two Curations-home tabs was last open. Absent means
    * 'genes' -- the default is left out of the URL rather than written

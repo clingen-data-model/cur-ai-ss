@@ -27,14 +27,18 @@ export const REVIEW_STATUS_SHORT_LABEL: Record<ReviewStatus, string> = {
   [ReviewStatus.COMPLETED]: 'Completed',
 }
 
-/** "Not assigned" / "Assigned to Pat" / "In progress by Pat" / "Completed by Pat". */
+/** "Not assigned" / "Assigned to Pat" / "In progress by Pat, Sam" /
+ * "Completed by Pat +2": first names, and past two a count, so the badge
+ * stays one table cell wide however many people share the paper. */
 export function reviewStatusLabel(
   status: ReviewStatus,
-  assignee?: UserSummaryResp | null,
+  assignees: UserSummaryResp[] = [],
 ): string {
   const verb = REVIEW_STATUS_VERB[status]
-  if (status === ReviewStatus.NOT_ASSIGNED || !assignee) return verb
-  return `${verb} ${assignee.first_name || assignee.name}`
+  if (status === ReviewStatus.NOT_ASSIGNED || assignees.length === 0) return verb
+  const names = assignees.map((a) => a.first_name || a.name)
+  const shown = names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(', ')
+  return `${verb} ${shown}`
 }
 
 export const REVIEW_STATUS_BADGE: Record<

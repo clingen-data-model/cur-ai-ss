@@ -32,11 +32,13 @@ from typing import Literal, TypeAlias
 
 from sqlalchemy import (
     Boolean,
+    Column,
     DateTime,
     ForeignKey,
     Index,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
     func,
@@ -130,15 +132,37 @@ class ReviewStatus(StrEnum):
     `PaperTaskStatus`. Extraction tracks whether the agent pipeline has run;
     review tracks whether a human has signed off on the result.
 
-    ASSIGNED, IN_PROGRESS and COMPLETED always carry a `review_assignee`.
-    NOT_ASSIGNED never does -- the two travel together and are validated as a
-    pair in `PaperReviewUpdateRequest`.
+    ASSIGNED, IN_PROGRESS and COMPLETED always carry at least one of
+    `review_assignees`. NOT_ASSIGNED never does -- the two travel together and
+    are validated as a pair in `PaperReviewUpdateRequest`. The status is the
+    paper's, shared by everyone assigned to it: several curators on one paper
+    are working one review, not one each.
     """
 
     NOT_ASSIGNED = 'not_assigned'
     ASSIGNED = 'assigned'
     IN_PROGRESS = 'in_progress'
     COMPLETED = 'completed'
+
+
+# Who is on the hook for a paper's review: any number of curators, one shared
+# review_status on the paper. A plain association, nothing of its own to say.
+paper_review_assignees = Table(
+    'paper_review_assignees',
+    Base.metadata,
+    Column(
+        'paper_id',
+        Integer,
+        ForeignKey('papers.id', ondelete='CASCADE'),
+        primary_key=True,
+    ),
+    Column(
+        'user_id',
+        Integer,
+        ForeignKey('users.id', ondelete='CASCADE'),
+        primary_key=True,
+    ),
+)
 
 
 class PaperDB(Base):
@@ -204,14 +228,18 @@ class PaperDB(Base):
         # GET /papers -- see the data-repair migration this bug produced.
         server_default=ReviewStatus.NOT_ASSIGNED.name,
     )
+    # Retired: a paper had one assignee until migration f6a2b8d4c1e9 moved
+    # them to paper_review_assignees. Nothing reads or writes this column; it
+    # is still mapped because dropping a foreign-key column from papers on
+    # SQLite means rebuilding the table every other table cascades from.
     review_assignee_user_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey('users.id', ondelete='SET NULL'),
         nullable=True,
         index=True,
     )
-    review_assignee: Mapped['UserDB | None'] = relationship(
-        'UserDB', foreign_keys=[review_assignee_user_id]
+    review_assignees: Mapped[List['UserDB']] = relationship(
+        'UserDB', secondary=lambda: paper_review_assignees
     )
 
     # Paper extraction metadata (populated asynchronously by extraction agent)
@@ -371,7 +399,7 @@ class PaperResp(PaperExtractionOutput):
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
     review_status: ReviewStatus = ReviewStatus.NOT_ASSIGNED
-    review_assignee: UserSummaryResp | None = None
+    review_assignees: list[UserSummaryResp] = []
     tasks: list['TaskResp'] = []
     patient_count: int = 0
     proband_count: int = 0
@@ -455,7 +483,7 @@ class PaperSummaryResp(BaseModel):
     # is everyone who has touched anything under it.
     updated_by: 'UserSummaryResp | None' = None
     review_status: ReviewStatus = ReviewStatus.NOT_ASSIGNED
-    review_assignee: 'UserSummaryResp | None' = None
+    review_assignees: list['UserSummaryResp'] = []
     patient_count: int = 0
     proband_count: int = 0
     variant_count: int = 0
@@ -480,24 +508,26 @@ class PaperSummaryResp(BaseModel):
 class PaperReviewUpdateRequest(BaseModel):
     """Body for PATCH /papers/{paper_id}/review.
 
-    review_status and assignee_user_id always travel together: NOT_ASSIGNED
+    review_status and assignee_user_ids always travel together: NOT_ASSIGNED
     means no one is on the hook for review, so it must not carry an assignee,
-    and every other status is meaningless without one.
+    and every other status is meaningless without at least one. The list is
+    the paper's whole set of assignees, replacing whoever was there.
     """
 
     review_status: ReviewStatus
-    assignee_user_id: int | None = None
+    assignee_user_ids: list[int] = []
 
     @model_validator(mode='after')
-    def assignee_matches_status(self) -> Self:
+    def assignees_match_status(self) -> Self:
         if self.review_status == ReviewStatus.NOT_ASSIGNED:
-            if self.assignee_user_id is not None:
+            if self.assignee_user_ids:
                 raise ValueError(
-                    'assignee_user_id must be omitted when review_status is not_assigned'
+                    'assignee_user_ids must be empty when review_status is not_assigned'
                 )
-        elif self.assignee_user_id is None:
+        elif not self.assignee_user_ids:
             raise ValueError(
-                'assignee_user_id is required unless review_status is not_assigned'
+                'assignee_user_ids needs at least one user unless review_status '
+                'is not_assigned'
             )
         return self
 

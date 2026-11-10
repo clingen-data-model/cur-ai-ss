@@ -1055,3 +1055,71 @@ def test_signoff_columns_read_back_unstamped_for_old_rows(monkeypatch, tmp_path)
         for fk in inspect(engine).get_foreign_keys('patient_variant_occurrences')
     }
     assert ('reviewed_by_user_id', 'users') in targets
+
+
+def test_single_review_assignee_becomes_the_assignee_set(monkeypatch, tmp_path):
+    """f6a2b8d4c1e9 moves each paper's one assignee into
+    paper_review_assignees. A paper assigned before it reads back through the
+    ORM with that one assignee, an unassigned paper with none, and the
+    downgrade puts one of the set back in the old column."""
+    from lib.models.paper import PaperDB, ReviewStatus
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'e5f1a7c3d9b8')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        user_id = connection.execute(
+            text(
+                'INSERT INTO users (email, hashed_password, first_name, last_name) '
+                "VALUES ('a@example.com', 'x', 'Ann', 'Author') RETURNING id"
+            )
+        ).scalar_one()
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        assigned_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types, '
+                'review_status, review_assignee_user_id) '
+                "VALUES (:gene_id, 'h1', 'f.pdf', '[]', 'IN_PROGRESS', :user_id) "
+                'RETURNING id'
+            ),
+            {'gene_id': gene_id, 'user_id': user_id},
+        ).scalar_one()
+        unassigned_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h2', 'g.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with Session(engine) as session:
+        assigned = session.get(PaperDB, assigned_id)
+        assert assigned.review_status == ReviewStatus.IN_PROGRESS
+        assert [user.id for user in assigned.review_assignees] == [user_id]
+        assert session.get(PaperDB, unassigned_id).review_assignees == []
+
+    with engine.begin() as connection:
+        connection.execute(
+            text('UPDATE papers SET review_assignee_user_id = NULL WHERE id = :id'),
+            {'id': assigned_id},
+        )
+    command.downgrade(cfg, 'e5f1a7c3d9b8')
+    with engine.begin() as connection:
+        rows = dict(
+            connection.execute(
+                text('SELECT id, review_assignee_user_id FROM papers')
+            ).all()
+        )
+    assert rows == {assigned_id: user_id, unassigned_id: None}
