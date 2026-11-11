@@ -247,6 +247,30 @@ def dbsnp_lookup(query: str) -> List[str]:
     return hgvs_results
 
 
+def _registry_query(
+    rsid: str | None,
+    caid: str | None,
+    hgvs_c: str | None,
+    hgvs_g: str | None,
+) -> str | None:
+    """The Allele Registry path to ask: CAID, then coding HGVS, then genomic
+    HGVS, then rsID; None when there is nothing to ask with."""
+    # Only a registry ID goes to allele/<id>. Anything else in the CAID field
+    # (extraction has put ClinVar submission accessions there) is an HTTP 4xx
+    # or 5xx from the registry, and since it outranks the HGVS, the HGVS was
+    # never tried.
+    caid = well_formed_caid(caid)
+    if caid:
+        return f'allele/{quote(caid)}'
+    if hgvs_c:
+        return f'allele?hgvs={quote(hgvs_c)}'
+    if hgvs_g:
+        return f'allele?hgvs={quote(hgvs_g)}'
+    if rsid:
+        return f'alleles?dbSNP.rs={quote(rsid)}'
+    return None
+
+
 @function_tool
 def allele_registry_resolver(
     rsid: str | None = None,
@@ -273,15 +297,8 @@ def allele_registry_resolver(
     - hgvs_g: Genomic HGVS (prefer GRCh38)
     - hgvs_p: Protein HGVS if available
     """
-    if caid:
-        suffix = f'allele/{quote(caid)}'
-    elif hgvs_c:
-        suffix = f'allele?hgvs={quote(hgvs_c)}'
-    elif hgvs_g:
-        suffix = f'allele?hgvs={quote(hgvs_g)}'
-    elif rsid:
-        suffix = f'alleles?dbSNP.rs={quote(rsid)}'
-    else:
+    suffix = _registry_query(rsid, caid, hgvs_c, hgvs_g)
+    if suffix is None:
         return None
 
     url = f'{CLINGEN_ALLELE_REGISTRY_ENDPOINT}/{suffix}'
@@ -861,8 +878,12 @@ If multiple results returned:
     Compare resolved values (hgvs_c, transcript annotations, hgvs_g) against input variant data.
 
 RETURN selected result with all available fields populated.
-NOTE: Even if allele_registry_resolver returns no match (None), still return the input
-identifier (rsid or caid) with other fields set to None.
+
+If allele_registry_resolver returns no match (None) or fails (an error, not a
+result), the identifier did not resolve; it is not the end of the run. Proceed
+to State 3 when the input has a coding change, then State 4 as usual, and say
+in basis that the identifier did not resolve. Return the input identifier with
+other fields set to None only when no later state has anything to work from.
 
 If neither present → proceed to State 3.
 
