@@ -71,7 +71,7 @@ from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient_variant_occurrences import Inheritance
 from lib.models.signoff import SignoffProgress
 from lib.models.user import UserSummaryResp
-from lib.tasks.models import TaskResp
+from lib.tasks.models import TaskResp, TaskType
 
 Color: TypeAlias = Literal[
     'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
@@ -503,6 +503,30 @@ class PaperSummaryResp(BaseModel):
     @property
     def thumbnail_url(self) -> str:
         return str(document_thumbnail_path(self.id))
+
+
+class TaskTypeCounts(BaseModel):
+    """How many tasks of one type a paper has, and where they stand."""
+
+    type: TaskType
+    total: int
+    running: int = 0
+    completed: int = 0
+    failed: int = 0
+
+
+class ActivePaperResp(PaperSummaryResp):
+    """The shape GET /papers/active returns: a summary plus task counts.
+
+    The header's popover lists every paper in flight as one collapsed line
+    naming the step it is on, and only the row a curator opens fetches that
+    paper's tasks. Without the counts each line would need the task list, a
+    polled request per running paper. Counts rather than a verdict, so the
+    rule for what makes a step complete stays in one place, the frontend's
+    lib/taskTimeline.
+    """
+
+    task_counts: list[TaskTypeCounts] = []
 
 
 class PaperReviewUpdateRequest(BaseModel):

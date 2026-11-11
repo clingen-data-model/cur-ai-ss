@@ -95,6 +95,7 @@ from lib.misc.snapshots import (
     write_snapshot_safe,
 )
 from lib.models import (
+    ActivePaperResp,
     AnnotatedVariantDB,
     AnnotatedVariantResp,
     ChangePasswordRequest,
@@ -146,6 +147,7 @@ from lib.models import (
     SnapshotMeta,
     SpliceAI,
     TaskDB,
+    TaskTypeCounts,
     TokenResp,
     UserCreateRequest,
     UserDB,
@@ -562,7 +564,7 @@ def _track_stats() -> list[TrackDurationStat]:
     ]
 
 
-@app.get('/papers/active', response_model=list[PaperSummaryResp], tags=['papers'])
+@app.get('/papers/active', response_model=list[ActivePaperResp], tags=['papers'])
 def list_active_papers(
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
@@ -595,7 +597,29 @@ def list_active_papers(
     ]
     if not active_paper_ids:
         return []
-    return _paper_summaries(session, active_paper_ids)
+    # Per task type, for the popover's collapsed rows (see ActivePaperResp).
+    # Grouped in SQL and only over the papers in flight, so the polled route
+    # still reads a few rows per paper rather than every task.
+    counts: dict[int, dict[TaskType, TaskTypeCounts]] = defaultdict(dict)
+    for paper_id, task_type, task_status, n in (
+        session.query(TaskDB.paper_id, TaskDB.type, TaskDB.status, func.count())
+        .filter(TaskDB.paper_id.in_(active_paper_ids))
+        .group_by(TaskDB.paper_id, TaskDB.type, TaskDB.status)
+    ):
+        entry = counts[paper_id].setdefault(
+            task_type, TaskTypeCounts(type=task_type, total=0)
+        )
+        entry.total += n
+        if task_status == TaskStatus.RUNNING:
+            entry.running += n
+        elif task_status == TaskStatus.COMPLETED:
+            entry.completed += n
+        elif task_status == TaskStatus.FAILED:
+            entry.failed += n
+    return [
+        ActivePaperResp(**dict(summary), task_counts=list(counts[summary.id].values()))
+        for summary in _paper_summaries(session, active_paper_ids)
+    ]
 
 
 @app.get('/stats', response_model=TaskStatsResp, tags=['stats'])

@@ -20,6 +20,7 @@ import type {
   TaskResp,
   TaskStatsResp,
   TaskType,
+  TaskTypeCounts,
 } from '@/api/generated/types.gen'
 
 export type TaskRowStatus = 'pending' | 'running' | 'complete' | 'failed'
@@ -37,6 +38,26 @@ export interface TaskRowProgress {
   instanceCount: number
   /** Any instance ran as a quick run (tasks.budget_model): the cheaper model. */
   quick: boolean
+}
+
+/** One task type's status from how many of its instances stand where. The
+ *  one rule both the full timeline (from a paper's tasks) and the header's
+ *  collapsed rows (from GET /papers/active's counts) are judged by. */
+export function rowStatus({
+  total,
+  running = 0,
+  completed = 0,
+  failed = 0,
+}: {
+  total: number
+  running?: number
+  completed?: number
+  failed?: number
+}): TaskRowStatus {
+  if (running > 0) return 'running'
+  if (total > 0 && completed === total) return 'complete'
+  if (failed > 0) return 'failed'
+  return 'pending'
 }
 
 function earliestStart(tasks: TaskResp[]): number | null {
@@ -75,16 +96,12 @@ export function taskTypeProgress(
     const running = mine.filter((t) => t.status === 'Running')
     const failed = mine.filter((t) => t.status === 'Failed')
     const completed = mine.filter((t) => t.status === 'Completed')
-    const complete = mine.length > 0 && completed.length === mine.length
-
-    const status: TaskRowStatus =
-      running.length > 0
-        ? 'running'
-        : complete
-          ? 'complete'
-          : failed.length > 0
-            ? 'failed'
-            : 'pending'
+    const status = rowStatus({
+      total: mine.length,
+      running: running.length,
+      completed: completed.length,
+      failed: failed.length,
+    })
 
     let elapsedSeconds: number | null = null
     if (status === 'running') {
@@ -104,6 +121,28 @@ export function taskTypeProgress(
       quick: mine.some((t) => t.budget_model === true),
     }
   })
+}
+
+/** A whole paper in one line, for the header's collapsed rows: the steps
+ *  running now in pipeline order, whether any step has failed, and how many
+ *  of the timeline's rows are checked off. */
+export interface PaperProgress {
+  running: TaskType[]
+  failed: boolean
+  done: number
+  total: number
+}
+
+export function paperProgress(counts: TaskTypeCounts[]): PaperProgress {
+  const statusOf = new Map(counts.map((c) => [c.type, rowStatus(c)]))
+  const withStatus = (status: TaskRowStatus) =>
+    RERUNNABLE_TASK_TYPES.filter((type) => statusOf.get(type) === status)
+  return {
+    running: withStatus('running'),
+    failed: withStatus('failed').length > 0,
+    done: withStatus('complete').length,
+    total: RERUNNABLE_TASK_TYPES.length,
+  }
 }
 
 /** "12s" / "1m 12s" / "2h 05m" -- real per-second precision, since this ticks

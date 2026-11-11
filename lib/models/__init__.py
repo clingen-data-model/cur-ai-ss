@@ -45,6 +45,7 @@ from lib.models.mondo import (
     MondoTermDetail,
 )
 from lib.models.paper import (
+    ActivePaperResp,
     CitationHighlightRequest,
     DocumentResp,
     FileFormat,
@@ -59,6 +60,7 @@ from lib.models.paper import (
     PaperType,
     PaperUpdateRequest,
     ReviewStatus,
+    TaskTypeCounts,
 )
 from lib.models.patient import (
     PatientCreateRequest,
