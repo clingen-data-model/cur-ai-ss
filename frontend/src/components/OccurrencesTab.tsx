@@ -35,7 +35,7 @@ import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
 import { OccurrenceDetailPanel } from '@/components/OccurrenceDetailPanel'
-import { displayProteinChange } from '@/lib/hgvs'
+import { VariantLabel } from '@/components/VariantLabel'
 import { EntityLink } from '@/components/EntityLink'
 import { PatientIdCell, hasSeveralFamilies } from '@/components/PatientIdCell'
 import { RowExpander } from '@/components/RowExpander'
@@ -101,24 +101,6 @@ function isManuallyCreatedRow(row: TableRow): boolean {
       line.patient.created_by_user_id != null ||
       line.variant.created_by_user_id != null ||
       line.occurrence.created_by_user_id != null,
-  )
-}
-
-/** "c.123A>G (p.Arg41Gly)" -- the protein change alongside the genomic/cDNA
- * description, when known. Omitted when they're the same string:
- * variant_description falls back to hgvs_p itself when no genomic/cDNA
- * notation exists (see get_variant_description in lib/models/variant.py),
- * which would otherwise show "p.Arg41Gly (p.Arg41Gly)". A predicted change
- * "p.(Arg41Gly)" loses its own parentheses (displayProteinChange) so the label
- * does not read "(p.(Arg41Gly))". */
-function VariantLabel({ description, hgvsP }: { description: string; hgvsP: string | null }) {
-  return (
-    <>
-      {description}
-      {hgvsP && hgvsP !== description && (
-        <span className="text-muted-foreground"> ({displayProteinChange(hgvsP)})</span>
-      )}
-    </>
   )
 }
 
@@ -301,31 +283,21 @@ export function OccurrencesTab({
         ),
       },
     ]
-    if (!compact) {
-      // Its own column so the family sorts and the filter box matches it;
-      // sorting by it puts a family's rows together. The compact table in
-      // Review Mode is one family already.
-      cols.push({
-        id: 'family',
-        header: 'Family',
-        accessorFn: (row) => row.lines[0].patient.family_identifier,
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground truncate">
-            {row.original.lines[0].patient.family_identifier}
-          </span>
-        ),
-      })
-    }
     cols.push(
       {
         id: 'patient',
         header: 'Individual',
-        accessorFn: (row) => row.lines[0].patient.identifier,
+        // The family is printed beside the name, as in Unassociated
+        // Individuals, rather than in a column of its own. It leads the sort
+        // key, so sorting by Individual still puts a family's rows together,
+        // and the filter box matches it.
+        accessorFn: (row) =>
+          `${row.lines[0].patient.family_identifier ?? ''} ${row.lines[0].patient.identifier}`,
         cell: ({ row }) => (
           <PatientIdCell
             paperId={paperId}
             patient={row.original.lines[0].patient}
-            showFamily={compact && severalFamilies}
+            showFamily={severalFamilies}
             onClick={() => toggleExpanded(row.original, row.original.lines[0], 'patient')}
           />
         ),
