@@ -966,6 +966,11 @@ async def handle_patient_extraction(task_id: int) -> None:
         )
 
 
+def family_identifier(patient: PatientDB) -> str | None:
+    """The family a patient belongs to, as the paper names it."""
+    return patient.family.identifier if patient.family else None
+
+
 async def handle_patient_demographics(task_id: int) -> None:
     """Extract demographics for a single already-identified patient."""
     paper_id: int
@@ -1002,6 +1007,12 @@ async def handle_patient_demographics(task_id: int) -> None:
         patient_data = {
             'patient_id': patient_row.id,
             'identifier': patient_row.identifier,
+            # The identifier is unique only within its family (two pedigrees
+            # each have a II-1). Without the family the agent could not tell
+            # which pedigree's II-1 it had: paper 160's three unnumbered
+            # pedigrees gave 113 "which pedigree?" flags and wrong sex and
+            # affected status (2026-11-11).
+            'family_identifier': family_identifier(patient_row),
             'identifier_citations': cited_text(patient_row.identifier_evidence),
             'proband_status': patient_row.proband_status,
         }
@@ -1954,6 +1965,8 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         patient_data = {
             'patient_id': patient_row.id,
             'identifier': patient_row.identifier,
+            # Unique only within its family; see handle_patient_demographics.
+            'family_identifier': family_identifier(patient_row),
             'identifier_citations': cited_text(patient_row.identifier_evidence),
             # Without it the agent cannot tell a carrier from an affected
             # relative and gives both the family's disease (paper 45, 2026-09-30).
