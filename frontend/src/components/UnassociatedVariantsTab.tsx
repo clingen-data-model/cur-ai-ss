@@ -17,6 +17,11 @@ import { FlagIndicator } from '@/components/FlagIndicator'
 import type { FlagIndex } from '@/hooks/usePaperFlags'
 import type { FlagTarget } from '@/lib/flagTarget'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
+import { VariantHoverCardContent } from '@/components/VariantHoverCard'
+import { VariantLabel } from '@/components/VariantLabel'
+import { EditableVariantTypeCell } from '@/components/OccurrenceEditableCells'
+import { EntityLink } from '@/components/EntityLink'
+import { RowExpander } from '@/components/RowExpander'
 import { PipelineGate } from '@/components/PipelineGate'
 import { AddVariantDialog } from '@/components/AddVariantDialog'
 import { LinkPatientDialog } from '@/components/LinkPatientDialog'
@@ -85,12 +90,34 @@ export function UnassociatedVariantsTab({
           <FlagIndicator paperId={paperId} flags={flags.byVariant.get(row.original.id) ?? []} />
         ),
       },
-      { id: 'variant', header: 'Variant', accessorFn: (row) => row.variant_description },
-      { id: 'type', header: 'Type', accessorFn: (row) => row.variant_type },
       {
-        id: 'main_focus',
-        header: 'Main Focus',
-        accessorFn: (row) => (row.main_focus ? 'Yes' : 'No'),
+        id: 'expander',
+        size: 40,
+        enableSorting: false,
+        header: () => null,
+        cell: ({ row }) => <RowExpander expanded={row.getIsExpanded()} onToggle={() => row.toggleExpanded()} />,
+      },
+      // The variant's own columns of the Occurrences table, drawn the same
+      // way; the rest of that table's columns belong to an occurrence, which
+      // a variant here does not have.
+      {
+        id: 'variant',
+        header: 'Variant',
+        accessorFn: (row) => row.variant_description,
+        cell: ({ row }) => (
+          <EntityLink
+            onClick={() => row.toggleExpanded()}
+            hoverContent={<VariantHoverCardContent variant={row.original} />}
+          >
+            <VariantLabel description={row.original.variant_description} hgvsP={row.original.hgvs_p} />
+          </EntityLink>
+        ),
+      },
+      {
+        id: 'variant_type',
+        header: 'Variant Type',
+        accessorFn: (row) => row.variant_type,
+        cell: ({ row }) => <EditableVariantTypeCell paperId={paperId} variant={row.original} />,
       },
       {
         id: 'actions',
@@ -156,6 +183,7 @@ export function UnassociatedVariantsTab({
             filterPlaceholder="Filter variants..."
             getRowId={(row) => String(row.id)}
             getRowCanExpand={() => true}
+            expandOnRowClick={false}
             reveal={reveal}
             renderSubComponent={({ row }) => (
               <VariantDetailPanel paperId={paperId} variant={row} />
