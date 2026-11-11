@@ -8,7 +8,13 @@ from urllib3.util.retry import Retry
 
 from lib.core.environment import env
 from lib.core.logging import setup_logging
-from lib.models.variant import AnnotatedVariant, HarmonizedVariant, SpliceAI
+from lib.models.variant import (
+    AnnotatedVariant,
+    HarmonizedVariant,
+    SpliceAI,
+    well_formed_caid,
+    well_formed_rsid,
+)
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -53,6 +59,11 @@ def clinvar_lookup(
     hgvs_c: Optional[str],
 ) -> AnnotatedVariant:
     headers = {'content-type': 'application/json'}
+    # A malformed identifier is not just useless here: ClinVar reads "_:CA"
+    # as the word CA and returns thousands of unrelated records, OR'd ahead
+    # of the HGVS terms, and the top one became the classification.
+    rsid = well_formed_rsid(rsid)
+    caid = well_formed_caid(caid)
     result_variant = AnnotatedVariant(rsid=rsid, caid=caid)
 
     if not (caid or rsid or hgvs_g or hgvs_c):

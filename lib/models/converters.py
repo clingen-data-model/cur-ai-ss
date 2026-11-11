@@ -28,6 +28,7 @@ from lib.models.variant import (
     HarmonizedVariant,
     HarmonizedVariantDB,
     Variant,
+    well_formed_caid,
 )
 
 
@@ -182,7 +183,7 @@ def harmonized_variant_to_db(
         variant_id=variant_id,
         gnomad_style_coordinates=data.gnomad_style_coordinates if data else None,
         rsid=data.rsid if data else None,
-        caid=data.caid if data else None,
+        caid=well_formed_caid(data.caid) if data else None,
         hgvs_c=data.hgvs_c if data else None,
         hgvs_p=data.hgvs_p if data else None,
         hgvs_g=data.hgvs_g if data else None,
