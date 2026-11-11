@@ -12,6 +12,17 @@ export interface ExternalLink {
   href: string
 }
 
+/** A ClinGen Allele Registry ID (CA and digits). Stored CAIDs have held the
+ * registry's "_:CA" placeholder and ClinVar submission accessions; a link
+ * built from either leads nowhere useful. */
+export function isCaid(value?: string | null): value is string {
+  return !!value && /^CA\d+$/.test(value.trim())
+}
+
+export function isRsid(value?: string | null): value is string {
+  return !!value && /^rs\d+$/.test(value.trim())
+}
+
 export function gnomadUrl(coordinates: string): string {
   return `https://gnomad.broadinstitute.org/variant/${coordinates}?dataset=gnomad_r4`
 }
@@ -74,10 +85,12 @@ export function clinVarLinks(ids: AnnotationIds): ExternalLink[] {
   const links: ExternalLink[] = []
   if (ids.clinvar_variation_id) {
     links.push({ label: 'ClinVar', href: clinVarRecordUrl(ids.clinvar_variation_id) })
-  } else if (ids.rsid || ids.caid) {
-    links.push({ label: 'Search ClinVar', href: clinVarSearchUrl((ids.rsid ?? ids.caid) as string) })
+  } else if (isRsid(ids.rsid)) {
+    links.push({ label: 'Search ClinVar', href: clinVarSearchUrl(ids.rsid) })
+  } else if (isCaid(ids.caid)) {
+    links.push({ label: 'Search ClinVar', href: clinVarSearchUrl(ids.caid) })
   }
-  if (ids.rsid) links.push({ label: 'dbSNP', href: dbSnpUrl(ids.rsid) })
+  if (isRsid(ids.rsid)) links.push({ label: 'dbSNP', href: dbSnpUrl(ids.rsid) })
   return links
 }
 
@@ -86,7 +99,7 @@ export function inSilicoLinks(ids: AnnotationIds): ExternalLink[] {
   if (ids.gnomad_style_coordinates) {
     links.push({ label: 'SpliceAI Lookup', href: spliceAiLookupUrl(ids.gnomad_style_coordinates) })
   }
-  if (ids.rsid) links.push({ label: 'Ensembl', href: ensemblVariantUrl(ids.rsid) })
+  if (isRsid(ids.rsid)) links.push({ label: 'Ensembl', href: ensemblVariantUrl(ids.rsid) })
   return links
 }
 

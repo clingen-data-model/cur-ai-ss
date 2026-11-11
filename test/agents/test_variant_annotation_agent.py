@@ -71,3 +71,33 @@ def test_no_record_no_variation_id(clinvar):
 
     assert result.clinvar_variation_id is None
     assert result.pathogenicity is None
+
+
+@pytest.mark.parametrize('caid', ['_:CA', 'SCV000804199', 'SUB7928387', ' '])
+def test_malformed_caid_is_left_out_of_the_search(monkeypatch, caid):
+    """ClinVar reads "_:CA" as the word CA and returns thousands of unrelated
+    records; OR'd with the HGVS, the top one became the classification."""
+    terms: list[str] = []
+
+    class Session(_Session):
+        def get(self, url: str, **kwargs: Any) -> _Response:
+            if url.endswith('esearch.fcgi'):
+                terms.append(kwargs['params']['term'])
+            return super().get(url, **kwargs)
+
+    monkeypatch.setattr(agent, '_get_session_with_retries', lambda: Session([], {}))
+
+    result = agent.clinvar_lookup(None, caid, 'NC_000011.10:g.1dup', None)
+
+    assert terms == ['NC_000011.10:g.1dup']
+    assert result.caid is None
+
+
+def test_only_malformed_ids_means_no_search(monkeypatch):
+    monkeypatch.setattr(
+        agent, '_get_session_with_retries', lambda: pytest.fail('searched')
+    )
+
+    result = agent.clinvar_lookup('rs', '_:CA', None, None)
+
+    assert result.pathogenicity is None

@@ -29,6 +29,7 @@ from lib.models.variant import (
     GenomeBuild,
     HarmonizedVariant,
     VariantExtractionOutput,
+    well_formed_caid,
 )
 
 CLINGEN_ALLELE_REGISTRY_ENDPOINT = 'https://reg.genome.network'
@@ -142,7 +143,7 @@ def _clinvar_records(summary_data: Dict[str, Any]) -> List[Dict[str, Any]]:
 
             for xref in v.get('variation_xrefs', []):
                 if xref.get('db_source') == 'ClinGen':
-                    caid = xref.get('db_id')
+                    caid = well_formed_caid(xref.get('db_id'))
                 elif xref.get('db_source') == 'dbSNP':
                     db_id = xref.get('db_id')
                     if db_id:
@@ -306,7 +307,7 @@ def allele_registry_resolver(
         resolved_caid = None
         allele_id_url = data.get('@id')
         if allele_id_url:
-            resolved_caid = allele_id_url.rstrip('/').split('/')[-1]
+            resolved_caid = well_formed_caid(allele_id_url.rstrip('/').split('/')[-1])
 
         # -----------------------
         # gnomAD-style (derived from genomicAlleles)
@@ -443,7 +444,7 @@ def allele_registry_resolver(
             {
                 'gnomad_style_coordinates': resolved_gnomad,
                 'rsid': resolved_rsid or rsid,
-                'caid': resolved_caid or caid,
+                'caid': resolved_caid or well_formed_caid(caid),
                 'hgvs_c': resolved_hgvsc,
                 'hgvs_g': resolved_hgvsg,
                 'hgvs_p': resolved_hgvsp,

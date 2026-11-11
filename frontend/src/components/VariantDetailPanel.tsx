@@ -31,6 +31,8 @@ import {
   dbSnpUrl,
   gnomadUrl,
   inSilicoLinks,
+  isCaid,
+  isRsid,
   populationLinks,
 } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
@@ -181,7 +183,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
                 evidence={variant.harmonized_variant}
                 onSave={(value) => saveHarmonized({ rsid: value || null })}
                 caption={
-                  harmonized.rsid && (
+                  isRsid(harmonized.rsid) && (
                     <a
                       href={dbSnpUrl(harmonized.rsid)}
                       target="_blank"
@@ -199,7 +201,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
                 evidence={variant.harmonized_variant}
                 onSave={(value) => saveHarmonized({ caid: value || null })}
                 caption={
-                  harmonized.caid && (
+                  isCaid(harmonized.caid) && (
                     <a
                       href={clinGenUrl(harmonized.caid)}
                       target="_blank"

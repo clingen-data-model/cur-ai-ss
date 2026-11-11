@@ -2,7 +2,7 @@
  * Variant column hover card -- ClinVar/gnomAD/gnomAD-style id, in the spirit
  * of the pptx curation export's variant summary (lib/misc/curation/summary.py). */
 import type { VariantResp } from '@/api/generated/types.gen'
-import { gnomadUrl, clinGenUrl, clinVarRecordUrl } from '@/lib/variantLinks'
+import { gnomadUrl, clinGenUrl, clinVarRecordUrl, isCaid } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
 import { formatSpliceAI } from '@/lib/spliceai'
 import { formatAf } from '@/lib/alleleFrequency'
@@ -11,7 +11,7 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
   const harmonized = variant.harmonized_variant.value
   const annotated = variant.annotated_variant
   const gnomadCoords = harmonized?.gnomad_style_coordinates
-  const caid = harmonized?.caid ?? variant.caid
+  const caid = [harmonized?.caid, variant.caid].find(isCaid)
 
   const popmaxAf = formatAf(annotated?.gnomad_popmax_af)
   const topLevelAf = formatAf(annotated?.gnomad_top_level_af)

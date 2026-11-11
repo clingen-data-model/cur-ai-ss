@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, TypeAlias
@@ -183,6 +184,26 @@ class VariantExtractionOutput(BaseModel):
 
     variants: List[Variant]
     flags: List[ExtractionFlag] = Field(default_factory=list)
+
+
+# A ClinGen Allele Registry ID is CA and digits. The registry answers an
+# allele it has not registered with the placeholder @id "_:CA", and
+# extraction has put ClinVar submission accessions (SCV..., SUB...) in the
+# CAID field; either one, searched in ClinVar, matches unrelated records.
+_CAID = re.compile(r'CA\d+')
+_RSID = re.compile(r'rs\d+')
+
+
+def well_formed_caid(value: str | None) -> str | None:
+    """The value when it is a ClinGen Allele Registry ID, else None."""
+    value = value.strip() if value else None
+    return value if value and _CAID.fullmatch(value) else None
+
+
+def well_formed_rsid(value: str | None) -> str | None:
+    """The value when it is a dbSNP rsID, else None."""
+    value = value.strip() if value else None
+    return value if value and _RSID.fullmatch(value) else None
 
 
 class HarmonizedVariant(BaseModel):
