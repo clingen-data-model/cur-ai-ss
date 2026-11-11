@@ -289,8 +289,13 @@ def test_spec_states_the_flag_rule_once_for_every_agent():
         'Every flag is of one kind, and a decision that fits no kind is not a flag'
         in (FLAG_RULES)
     )
+    # Every kind but inconsistent, which only Extraction Verification raises
+    # from the finished extraction; no extracting agent is offered it.
     for kind in FlagKind:
-        assert f'  - {kind.value}: ' in FLAG_RULES
+        if kind is FlagKind.INCONSISTENT:
+            assert f'  - {kind.value}: ' not in FLAG_RULES
+        else:
+            assert f'  - {kind.value}: ' in FLAG_RULES
     assert 'Flag only decisions your own output makes' in FLAG_RULES
     assert 'kind: one of the kinds above' in FLAG_RULES
     # The old template asked for a counterfactual on every flag, and got one.
@@ -692,3 +697,16 @@ def test_testing_methods_are_dna_tests_checked_patient_by_patient():
     assert 'Testing methods, patient by patient.' in prompt
     assert 'go through those patients one at a' in prompt
     assert 'found\n  their variants differently' in prompt
+
+
+def test_a_diagnosis_that_names_a_finding_is_a_phenotype():
+    """A tumour, an organ abnormality or a lab abnormality written as a
+    diagnosis was dropped under a blanket "no disease names" rule; only a
+    syndrome or a disorder defined by more than one finding is skipped, and
+    a doubtful case is extracted."""
+    prompt = PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS
+    assert '- Diagnoses or disease names' not in prompt
+    assert 'A diagnosis that names a finding -- a tumour, a' in prompt
+    assert 'A tumour or other\nneoplasm, a malformation' in prompt
+    assert 'Only skip diagnoses that name a syndrome or a disorder' in prompt
+    assert 'When you cannot tell whether a diagnosis names a finding' in prompt

@@ -72,8 +72,11 @@ A phenotype is an observable trait, sign, or symptom that a patient exhibits or 
   uncertain: true and flagged inferred
 
 **DO NOT extract:**
-- Diagnoses or disease names (e.g., "Duchenne muscular dystrophy", "hemophilia")
-- Syndrome names (e.g., "Marfan syndrome", "Williams syndrome")
+- Syndromes and named disorders: a diagnosis that names a condition rather
+  than a finding (e.g., "Marfan syndrome", "Williams syndrome", "Duchenne
+  muscular dystrophy"). A diagnosis that names a finding -- a tumour, a
+  malformation, an organ abnormality, a lab abnormality -- is extracted (see
+  the rule below)
 - Medications
 - Procedures or treatments
 - Family history of diseases (extract only if the phenotype description applies to the proband)
@@ -110,19 +113,41 @@ Examples:
 - "diagnosed with hypotonia"
     → extract phenotype: "hypotonia"
 
-These are NOT diseases for the purpose of this task — they are
-descriptions of observable patient abnormalities.
+- "diagnosed with Wilms tumor" / "developed a pheochromocytoma"
+    → extract phenotype: "Wilms tumor" / "pheochromocytoma"
 
-Only skip diagnoses that are true disease syndromes or named disorders:
+- "diagnosed with dilated cardiomyopathy"
+    → extract phenotype: "dilated cardiomyopathy"
+
+- "a diagnosis of hypothyroidism" / "found to have nephrotic syndrome"
+    → extract phenotype: "hypothyroidism" / "nephrotic syndrome"
+
+These are NOT diseases for the purpose of this task — they are
+descriptions of observable patient abnormalities. A tumour or other
+neoplasm, a malformation, the abnormality of one organ or system, and a
+laboratory abnormality are findings, whatever word the paper puts before
+them ("diagnosed with", "developed", "a diagnosis of"), and so is the
+disease the paper is about when its name is one of these.
+
+Only skip diagnoses that name a syndrome or a disorder defined by a
+combination of findings, a cause or a gene, rather than one finding:
 
 Skip:
 - "Marfan syndrome"
 - "Duchenne muscular dystrophy"
 - "Williams syndrome"
 
+Extract them by their findings instead: each feature the paper reports for
+the patient is a phenotype of its own.
+
 Extract:
 - any diagnosis that corresponds directly to an observable physical,
-neurologic, developmental, or structural phenotype.
+neurologic, developmental, structural, neoplastic, organ-level or
+laboratory phenotype.
+
+When you cannot tell whether a diagnosis names a finding or a syndrome,
+extract it: a curator removes a superfluous phenotype in one click, but
+cannot see one that was never extracted.
 
 ---------------------------------------------------
 PHENOTYPE FIELD DEFINITIONS
