@@ -1,3 +1,5 @@
+import asyncio
+import threading
 from pathlib import Path
 
 import pytest
@@ -58,6 +60,26 @@ async def test_a_decline_still_answers_empty(monkeypatch):
     tool = _tool(monkeypatch, lambda *_: None)
 
     assert await tool.on_invoke_tool(_tool_context('x'), '{}') == ''
+
+
+async def test_reading_the_image_does_not_block_the_event_loop(monkeypatch):
+    """The read is a blocking request of about 25 s. Called on the event loop
+    it froze every task of the worker while it ran, and table checks could
+    not overlap. It runs in a thread, so the loop keeps turning meanwhile."""
+    release = threading.Event()
+
+    def slow_read(*_):
+        release.wait(timeout=5)
+        return '| gene |\n| --- |\n| BRCA1 |'
+
+    tool = _tool(monkeypatch, slow_read)
+
+    reading = asyncio.create_task(tool.on_invoke_tool(_tool_context('x'), '{}'))
+    await asyncio.sleep(0.05)  # would not return until the read did
+    assert not reading.done()
+    release.set()
+
+    assert await reading == '| gene |\n| --- |\n| BRCA1 |'
 
 
 def test_the_agent_runs_on_the_vision_model_not_the_extraction_model(monkeypatch):
