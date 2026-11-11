@@ -1,7 +1,9 @@
+import io
 import json
 import shutil
 from unittest.mock import MagicMock, patch
 
+import docx
 import pytest
 from agents.exceptions import MaxTurnsExceeded
 
@@ -26,6 +28,7 @@ from lib.misc.pdf.paths import (
     document_words_json_path,
 )
 from lib.models import PaperDB
+from lib.models.paper import FileFormat
 
 
 async def test_convert_and_extract_creates_outputs(mocked_root_dir, test_file_contents):
@@ -125,6 +128,47 @@ async def test_reparse_drops_the_previous_tables_and_images(
 
     assert not document_table_unrecovered_path(paper_id, 99).exists()
     assert not (document_images_dir(paper_id) / '99.png').exists()
+
+
+async def test_a_word_supplement_is_parsed_without_table_correction(
+    mocked_root_dir,
+):
+    """A Word table is read from the file's own table structure: exact, and
+    with no image to recover it from. The judge is never asked about one, so
+    a false "corrupted" verdict cannot fail the parse looking for an image
+    that does not exist (paper 146 on dev)."""
+    document = docx.Document()
+    table = document.add_table(rows=3, cols=3)
+    for row, values in enumerate(
+        [
+            ('ID', 'Gender', 'Genetics'),
+            ('P1', 'male', 'c.103+2T>G'),
+            ('P2', 'female', 'n/a'),
+        ]
+    ):
+        for col, value in enumerate(values):
+            table.cell(row, col).text = value
+    buffer = io.BytesIO()
+    document.save(buffer)
+
+    paper_id = 1
+    raw = document_raw_path(paper_id, supplement=True, file_format='docx')
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    raw.write_bytes(buffer.getvalue())
+
+    with patch('agents.Runner.run') as judge:
+        await parse_content(paper_id, force=True, supplement_format=FileFormat.DOCX)
+
+    judge.assert_not_called()
+    assert document_success_path(paper_id, supplement=True).exists()
+    (table_md,) = document_tables_dir(paper_id, supplement=True).glob('*.md')
+    assert 'c.103+2T>G' in table_md.read_text()
+    assert not document_table_unrecovered_path(
+        paper_id, int(table_md.stem), supplement=True
+    ).exists()
+    assert (
+        'c.103+2T>G' in document_anchored_md_path(paper_id, supplement=True).read_text()
+    )
 
 
 async def test_correct_tables_leaves_unrecoverable_tables_in_place(mocked_root_dir):
