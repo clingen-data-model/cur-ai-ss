@@ -311,6 +311,14 @@ export function OccurrencesTab({
           <Lines row={row.original}>
             {(line) => (
               <span className="flex items-center gap-1">
+                {/* Opens this line's Variant panel, as clicking the name
+                    does; a pair's two variants each have their own. */}
+                <RowExpander
+                  expanded={
+                    expandedCell?.occurrenceId === line.occurrence.id && expandedCell.view === 'variant'
+                  }
+                  onToggle={() => toggleExpanded(row.original, line, 'variant')}
+                />
                 <EntityLink
                   onClick={() => toggleExpanded(row.original, line, 'variant')}
                   hoverContent={<VariantHoverCardContent variant={line.variant} />}
@@ -432,7 +440,7 @@ export function OccurrencesTab({
     })
 
     return cols
-  }, [rows, severalFamilies, paperId, expandedCell?.rowId, deleteMutation, flags, compact])
+  }, [rows, severalFamilies, paperId, expandedCell?.rowId, expandedCell?.occurrenceId, expandedCell?.view, deleteMutation, flags, compact])
 
   if (rows.length === 0) {
     return (
