@@ -4,9 +4,12 @@ known by, so a paper's legacy residue numbering can be matched to it."""
 import json
 from pathlib import Path
 
+import pytest
+
 from lib.agents.variant_harmonization_agent import (
     VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
     _clinvar_records,
+    _registry_query,
 )
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'clinvar_esummary_14879.json'
@@ -120,3 +123,28 @@ def test_state_0_infers_terms_from_a_description_for_the_states_to_consume():
     assert 'or State 0 inferred search terms from a description' in state_4
     assert 'take the place of the protein\nforms' in state_4
     assert 'Resolution resting on a term inferred from a description' in rules
+
+
+@pytest.mark.parametrize('caid', ['SCV000998966.1', 'SUB7928387', '_:CA'])
+def test_a_malformed_caid_does_not_shadow_the_hgvs(caid):
+    """A ClinVar submission accession in the CAID field was sent to the
+    registry as allele/SCV... (HTTP 500) ahead of a perfectly good HGVS, so
+    two paper 5 variants never harmonized."""
+    assert (
+        _registry_query(None, caid, 'NM_020982.4:c.475G>A', None)
+        == 'allele?hgvs=NM_020982.4%3Ac.475G%3EA'
+    )
+
+
+def test_registry_query_order():
+    assert _registry_query('rs1', 'CA117961', 'c', 'g') == 'allele/CA117961'
+    assert _registry_query('rs1', None, None, 'g') == 'allele?hgvs=g'
+    assert _registry_query('rs1', None, None, None) == 'alleles?dbSNP.rs=rs1'
+    assert _registry_query(None, None, None, None) is None
+
+
+def test_an_identifier_that_does_not_resolve_falls_through_to_state_3():
+    rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
+    state_2 = rules[rules.index('STATE 2') : rules.index('STATE 3')]
+    assert 'it is not the end of the run' in state_2
+    assert 'Proceed\nto State 3 when the input has a coding change' in state_2
