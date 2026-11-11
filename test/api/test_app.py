@@ -3610,6 +3610,112 @@ def test_phenotype_extraction_takes_cached_hpo_links(
     assert rows[('Ataxia', False)].hpo is None
 
 
+@pytest.mark.parametrize(
+    ('source_reasoning', 'curated', 'expected_tail'),
+    [
+        # The agent's link: its reasoning comes along.
+        (
+            'Recurrent unprovoked seizures.',
+            False,
+            ' Original reasoning: Recurrent unprovoked seizures.',
+        ),
+        # A reuse of a reuse passes on the original, never nesting the chain.
+        (
+            'Reused the link HP:0001250 (Seizure) already made for X in another '
+            'paper for the identical concept. Original reasoning: Fits.',
+            False,
+            ' Original reasoning: Fits.',
+        ),
+        # A reuse from before the original was carried has none to pass on.
+        (
+            'Reused the link HP:0001250 (Seizure) already made for X in another '
+            'paper for the identical concept.',
+            False,
+            '',
+        ),
+        # A curator's link: 'Manually linked by curator' adds nothing.
+        ('Manually linked by curator', True, ''),
+    ],
+)
+def test_reused_hpo_link_reasoning_carries_the_original(
+    db_session, seeded_paper, source_reasoning, curated, expected_tail
+):
+    from lib.tasks.handlers import reused_hpo_link_reasoning
+    from lib.tasks.hpo_link_cache import CachedHpoLink
+
+    origin_patient = _seed_patient(db_session, seeded_paper, 'Origin Patient')
+    origin = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=origin_patient.id,
+        concept='Seizures',
+        concept_evidence={'value': 'Seizures', 'reasoning': 'r', 'citations': []},
+        hpo=HpoDB(hpo_id='HP:0001250', hpo_name='Seizure', reasoning=source_reasoning),
+    )
+    db_session.add(origin)
+    db_session.commit()
+
+    reasoning = reused_hpo_link_reasoning(
+        db_session,
+        CachedHpoLink('HP:0001250', 'Seizure', origin.id, curated),
+        seeded_paper.id,
+    )
+
+    by = ' by a curator' if curated else ''
+    assert reasoning == (
+        f'Reused the link HP:0001250 (Seizure) already made{by} for Origin '
+        f'Patient in this paper for the identical concept.{expected_tail}'
+    )
+
+
+def test_backfill_adds_the_original_to_old_reused_hpo_links(db_session, seeded_paper):
+    """lib.bin.backfill_reused_hpo_reasoning finds the original by concept and
+    term, as the cache would, and leaves curated, already-filled and orphaned
+    reuses, and their updated_at, as they are."""
+    from lib.bin.backfill_reused_hpo_reasoning import backfill
+
+    patient = _seed_patient(db_session, seeded_paper, 'Backfill Patient')
+    reused = 'Reused the link {} already made{} for X in another paper for the identical concept.'
+
+    def phenotype(concept, hpo_id, reasoning):
+        row = PhenotypeDB(
+            paper_id=seeded_paper.id,
+            patient_id=patient.id,
+            concept=concept,
+            concept_evidence={'value': concept, 'reasoning': 'r', 'citations': []},
+            hpo=HpoDB(hpo_id=hpo_id, hpo_name='n', reasoning=reasoning),
+        )
+        db_session.add(row)
+        db_session.commit()
+        return row.hpo
+
+    phenotype('Seizures', 'HP:0001250', 'Old agent reasoning.')
+    phenotype('seizures ', 'HP:0001250', 'Agent reasoning.')
+    plain = phenotype('SEIZURES', 'HP:0001250', reused.format('HP:0001250 (n)', ''))
+    by_curator = phenotype(
+        'Seizures', 'HP:0001250', reused.format('HP:0001250 (n)', ' by a curator')
+    )
+    filled = phenotype(
+        'Seizures',
+        'HP:0001250',
+        reused.format('HP:0001250 (n)', '') + ' Original reasoning: Kept.',
+    )
+    orphan = phenotype('Ataxia', 'HP:0001251', reused.format('HP:0001251 (n)', ''))
+    stamp = plain.updated_at
+
+    assert backfill(db_session) == (1, 1)
+    db_session.commit()
+    db_session.expire_all()
+
+    assert plain.reasoning.endswith(
+        'identical concept. Original reasoning: Agent reasoning.'
+    )
+    assert plain.updated_at == stamp
+    assert 'Original reasoning' not in by_curator.reasoning
+    assert filled.reasoning.endswith('Original reasoning: Kept.')
+    assert 'Original reasoning' not in orphan.reasoning
+    assert backfill(db_session) == (0, 1)
+
+
 def test_phenotype_extraction_skips_cached_hpo_links_given_a_curator_note(
     db_session, seeded_paper, monkeypatch
 ):
