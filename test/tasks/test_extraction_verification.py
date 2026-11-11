@@ -1,15 +1,18 @@
 """Extraction verification: the flag-merge pass and its handler."""
 
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 
 from lib.models import FamilyDB, FlagDB, GeneDB, PaperDB, PatientDB
-from lib.models.flag import FlagMergeOutput
+from lib.models.flag import ExtractionVerificationOutput
 from lib.tasks.extraction_verification import (
     ALSO_RAISED,
     apply_merge,
+    consistency_input,
+    consistency_resolver,
     open_flags,
     verification_input,
 )
@@ -99,11 +102,12 @@ def taiwan(db_session, paper):
     return rows
 
 
-def _groups(*groups):
-    return FlagMergeOutput(
+def _groups(*groups, inconsistencies=()):
+    return ExtractionVerificationOutput(
+        inconsistencies=list(inconsistencies),
         groups=[
             {'keep': g[0], 'merged': list(g[1:]), 'reasoning': 'same'} for g in groups
-        ]
+        ],
     )
 
 
@@ -228,19 +232,23 @@ def test_applying_the_same_answer_twice_changes_nothing_more(db_session, paper, 
 
 @pytest.fixture
 def run_verification(monkeypatch, db_session, paper):
-    """Drive handle_extraction_verification with a canned agent answer."""
+    """Drive handle_extraction_verification with a canned agent answer;
+    returns the messages the agent was sent."""
     from lib.tasks import handlers
     from lib.tasks.models import TaskDB, TaskStatus, TaskType
 
     calls: list[str] = []
 
-    async def run(output):
+    async def run(output, texts=None):
         async def fake_run(agent, message):
             calls.append(message)
             return SimpleNamespace(final_output=output, raw_responses=[])
 
         monkeypatch.setattr(handlers.Runner, 'run', fake_run)
         monkeypatch.setattr(handlers, 'log_run_metrics', lambda *a, **k: None)
+        monkeypatch.setattr(
+            handlers, 'paper_citation_texts', lambda paper_id: texts or {}
+        )
         task = TaskDB(
             paper_id=paper[0].id,
             type=TaskType.EXTRACTION_VERIFICATION,
@@ -278,7 +286,7 @@ async def test_the_handler_merges_what_the_agent_groups(
     ]
 
 
-async def test_the_handler_asks_nothing_with_fewer_than_two_open_flags(
+async def test_the_handler_checks_the_extraction_with_fewer_than_two_open_flags(
     db_session, paper, run_verification
 ):
     paper_db, *_ = paper
@@ -287,8 +295,22 @@ async def test_the_handler_asks_nothing_with_fewer_than_two_open_flags(
 
     calls = await run_verification(_groups())
 
-    assert calls == []
+    assert len(calls) == 1
+    assert '"individual": "Family A HYS272"' in calls[0]
     assert len(open_flags(db_session, paper_db.id)) == 1
+
+
+async def test_the_handler_asks_nothing_with_no_individuals_and_one_flag(
+    db_session, run_verification, paper
+):
+    paper_db, *_ = paper
+    db_session.query(PatientDB).filter_by(paper_id=paper_db.id).delete()
+    db_session.add(_flag(paper_db.id, 'alone'))
+    db_session.flush()
+
+    calls = await run_verification(_groups())
+
+    assert calls == []
 
 
 def _ev(value=None):
@@ -518,3 +540,135 @@ def test_occurrence_flags_for_one_patient_s_variants_merge(db_session, paper):
     assert apply_merge(db_session, paper_db.id, _groups((a.id, b.id))) == 1
     (survivor,) = open_flags(db_session, paper_db.id)
     assert (survivor.patient_id, survivor.occurrence_id) == (father.id, None)
+
+
+# --- the inconsistency pass ---------------------------------------------------
+
+
+def _cohort_methods(db_session, paper_db, patients):
+    """Both individuals' links: the first cites a cohort statement for its
+    testing method, the second has none -- the gap the pass is for."""
+    (fa, _), (ma, _) = (
+        _occurrence_pair(db_session, paper_db.id, patients[0].id, 'a'),
+        _occurrence_pair(db_session, paper_db.id, patients[1].id, 'b'),
+    )
+    fa.testing_methods_evidence = [
+        {
+            'value': 'Sanger Sequencing',
+            'reasoning': 'every proband was confirmed by Sanger',
+            'citations': [{'anchor': 'paragraph-88', 'quote': 'confirmed'}],
+        }
+    ]
+    ma.testing_methods = []
+    ma.testing_methods_evidence = []
+    db_session.flush()
+    return fa, ma
+
+
+def test_the_consistency_input_shows_values_basis_and_cited_text(db_session, paper):
+    paper_db, family, patients = paper
+    _cohort_methods(db_session, paper_db, patients)
+    texts = {'paragraph-88': 'All probands were confirmed by Sanger.', 'other': 'x'}
+
+    payload = consistency_input(db_session, paper_db.id, texts)
+
+    assert payload is not None
+    (fam,) = payload['families']
+    assert fam['family'] == 'Family A'
+    first = fam['individuals'][0]
+    assert first['individual'] == 'Family A HYS272'
+    assert first['proband_status'] == {'value': 'Unknown', 'basis': 't'}
+    method = first['variants'][0]['testing_methods'][0]
+    assert method == {
+        'value': 'Sanger Sequencing',
+        'basis': 'every proband was confirmed by Sanger',
+        'cites': ['paragraph-88'],
+    }
+    assert fam['individuals'][1]['variants'][0]['testing_methods'] == []
+    # Only the blocks something cites, and never the word the model must
+    # not see.
+    assert payload['cited_blocks'] == {
+        'paragraph-88': 'All probands were confirmed by Sanger.'
+    }
+    assert 'reasoning' not in json.dumps(payload)
+
+
+def test_no_individuals_means_no_consistency_input(db_session):
+    gene = GeneDB(symbol='EMPTY1')
+    db_session.add(gene)
+    db_session.flush()
+    empty = PaperDB(content_hash='empty', gene_id=gene.id, filename='e.pdf')
+    db_session.add(empty)
+    db_session.flush()
+    assert consistency_input(db_session, empty.id, {}) is None
+
+
+def test_the_resolver_names_a_link_an_individual_or_a_family(db_session, paper):
+    paper_db, family, patients = paper
+    fa, _ = _cohort_methods(db_session, paper_db, patients)
+    resolve = consistency_resolver(db_session, paper_db.id)
+
+    assert resolve('Family A HYS272 / c.a1A>G') == {
+        'patient_id': patients[0].id,
+        'occurrence_id': fa.id,
+        'variant_id': fa.variant_id,
+    }
+    assert resolve('Family A HYS273') == {'patient_id': patients[1].id}
+    assert resolve('Family A') == {'family_id': family.id}
+    assert resolve('nobody') == {}
+
+
+def _inconsistency(about, subject):
+    return _groups(
+        inconsistencies=[
+            {
+                'about': about,
+                'flag': {'value': subject, 'reasoning': 'because', 'citations': []},
+            }
+        ]
+    )
+
+
+async def test_the_handler_flags_inconsistencies_and_keeps_resolved_ones(
+    db_session, paper, run_verification
+):
+    paper_db, family, patients = paper
+    _, ma = _cohort_methods(db_session, paper_db, patients)
+    resolved = _flag(
+        paper_db.id,
+        'Sex differs from relationship',
+        source='EXTRACTION_VERIFICATION',
+        kind='inconsistent',
+        patient_id=patients[0].id,
+    )
+    resolved.resolved_at = datetime.now(timezone.utc)
+    resolved.resolution_note = 'the paper says so'
+    stale = _flag(
+        paper_db.id,
+        'An old open inconsistency',
+        source='EXTRACTION_VERIFICATION',
+        kind='inconsistent',
+    )
+    db_session.add_all([resolved, stale])
+    db_session.commit()
+
+    (message,) = await run_verification(
+        _inconsistency('Family A HYS273 / c.b1A>G', 'Missing the cohort testing method')
+    )
+
+    assert '"already_reviewed"' in message
+    assert 'the paper says so' in message
+    # The open one being replaced is not shown as an existing flag.
+    assert 'An old open inconsistency' not in message
+    rows = (
+        db_session.query(FlagDB)
+        .filter_by(paper_id=paper_db.id, source='EXTRACTION_VERIFICATION')
+        .order_by(FlagDB.id)
+        .all()
+    )
+    assert [(f.subject, f.kind, f.resolved_at is not None) for f in rows] == [
+        ('Sex differs from relationship', 'inconsistent', True),
+        ('Missing the cohort testing method', 'inconsistent', False),
+    ]
+    assert rows[1].occurrence_id == ma.id
+    assert rows[1].patient_id == patients[1].id

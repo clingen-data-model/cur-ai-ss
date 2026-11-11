@@ -19,6 +19,16 @@ lib.tasks.handlers runs the two around the model call:
   and a per-patient re-run no longer deletes it (replace_flags bounds its
   delete by scope), so a merge survives the re-runs that follow it.
 
+The same call also looks for inconsistencies in the finished extraction
+(``consistency_input`` and ``consistency_resolver`` below): values that
+should agree across rows and do not. It sees each individual's and each
+link's values with their basis and citations, and the text of the blocks
+those citations name -- not the paper -- so the question stays whether the
+extraction agrees with itself and with what it cites, not whether it is
+right. What it finds becomes ``inconsistent`` flags under this task's own
+source; a re-run replaces the open ones and keeps those a curator resolved,
+which the agent is shown so it does not raise them again.
+
 The agent's grouping is checked before it is applied -- ids must be open
 flags of this paper, a flag in at most one group, two or more per group,
 all of one kind and one agent, and occurrence-linked flags sharing a patient
@@ -26,12 +36,17 @@ or a variant -- and a group that fails stays unmerged.
 """
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from lib.models.flag import LINK_COLUMNS, FlagDB, FlagMergeOutput
+from lib.models.family import FamilyDB
+from lib.models.flag import LINK_COLUMNS, FlagDB, FlagKind, FlagMergeOutput
+from lib.models.patient import PatientDB
+from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
 from lib.models.variant import VariantDB, get_variant_description
+from lib.tasks.flags import Resolver, match_label, patient_label, split_pair
 from lib.tasks.models import TaskType
 
 logger = logging.getLogger(__name__)
@@ -208,3 +223,197 @@ def apply_merge(session: Session, paper_id: int, output: FlagMergeOutput) -> int
         )
     session.flush()
     return absorbed
+
+
+# --- the inconsistency pass ---------------------------------------------------
+
+# The fields whose values should agree across rows, as the agent sees them
+# (its name -> the column). Ages and phenotypes are left out: they differ
+# from person to person by nature, and would make the input much larger
+# for little to compare.
+PATIENT_FIELDS = {
+    'proband_status': 'proband_status',
+    'affected_status': 'affected_status',
+    'sex': 'sex',
+    'relationship_to_proband': 'relationship_to_proband',
+    'country_of_origin': 'country_of_origin',
+    'ancestry': 'ancestry',
+    'race': 'race',
+    'ethnicity': 'ethnicity',
+}
+OCCURRENCE_FIELDS = {
+    'zygosity': 'zygosity',
+    'inheritance_mechanism': 'inheritance',
+    'variant_inheritance': 'variant_inheritance',
+    'disease_name': 'disease_name',
+}
+# A long table cited by many rows is still one block; past this it is cut.
+MAX_BLOCK_CHARS = 8000
+
+
+def _value(value: Any, evidence: Mapping[str, Any] | None) -> dict[str, Any]:
+    """A field's current value with its basis and the blocks it cites. The
+    value is the column's, so a curator's edit shows; the basis and citations
+    are the evidence's. Keys are left out when empty to keep the input small."""
+    shown: dict[str, Any] = {'value': value}
+    evidence = evidence or {}
+    if evidence.get('reasoning'):
+        shown['basis'] = evidence['reasoning']
+    cites = [c['anchor'] for c in evidence.get('citations') or [] if c.get('anchor')]
+    if cites:
+        shown['cites'] = cites
+    return shown
+
+
+def _cited(entry: Any, into: set[str]) -> None:
+    if isinstance(entry, dict):
+        into.update(entry.get('cites', []))
+        for value in entry.values():
+            _cited(value, into)
+    elif isinstance(entry, list):
+        for value in entry:
+            _cited(value, into)
+
+
+def _family_patients(session: Session, paper_id: int) -> list[PatientDB]:
+    return (
+        session.query(PatientDB)
+        .filter(PatientDB.paper_id == paper_id)
+        .order_by(PatientDB.family_id, PatientDB.id)
+        .all()
+    )
+
+
+def _occurrences(
+    session: Session, paper_id: int
+) -> dict[int, list[PatientVariantOccurrenceDB]]:
+    by_patient: dict[int, list[PatientVariantOccurrenceDB]] = {}
+    rows = (
+        session.query(PatientVariantOccurrenceDB)
+        .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
+        .order_by(PatientVariantOccurrenceDB.id)
+        .all()
+    )
+    for row in rows:
+        by_patient.setdefault(row.patient_id, []).append(row)
+    return by_patient
+
+
+def _reviewed(session: Session, paper_id: int) -> list[dict[str, Any]]:
+    """The inconsistencies a curator has already resolved, so the agent can
+    leave them alone: the subject, the rows, and the curator's note."""
+    rows = (
+        session.query(FlagDB)
+        .filter(
+            FlagDB.paper_id == paper_id,
+            FlagDB.source == TaskType.EXTRACTION_VERIFICATION.name,
+            FlagDB.kind == FlagKind.INCONSISTENT.value,
+            FlagDB.resolved_at.isnot(None),
+        )
+        .order_by(FlagDB.id)
+        .all()
+    )
+    return [
+        {
+            'about': _about(f),
+            'subject': f.subject,
+            'curator_note': f.resolution_note,
+        }
+        for f in rows
+    ]
+
+
+def consistency_input(
+    session: Session, paper_id: int, texts: Mapping[str, str]
+) -> dict[str, Any] | None:
+    """What the inconsistency pass reads: each family's individuals with
+    their values and their links' values, the text of every block those cite,
+    and the inconsistencies already reviewed. None when the paper has no
+    individuals, so there is nothing to compare."""
+    patients = _family_patients(session, paper_id)
+    if not patients:
+        return None
+    links = _occurrences(session, paper_id)
+
+    families: dict[int, dict[str, Any]] = {}
+    for patient in patients:
+        family = families.setdefault(
+            patient.family_id,
+            {'family': patient.family.identifier, 'individuals': []},
+        )
+        individual: dict[str, Any] = {
+            'individual': patient_label(patient.family.identifier, patient.identifier),
+        }
+        for name, column in PATIENT_FIELDS.items():
+            individual[name] = _value(
+                getattr(patient, column), getattr(patient, f'{column}_evidence')
+            )
+        individual['variants'] = [
+            {
+                'variant': _variant_label(link.variant),
+                **{
+                    name: _value(
+                        getattr(link, column), getattr(link, f'{column}_evidence')
+                    )
+                    for name, column in OCCURRENCE_FIELDS.items()
+                },
+                'testing_methods': [
+                    _value(block.get('value'), block)
+                    for block in link.testing_methods_evidence or []
+                ],
+            }
+            for link in links.get(patient.id, [])
+        ]
+        family['individuals'].append(individual)
+
+    payload: dict[str, Any] = {'families': list(families.values())}
+    anchors: set[str] = set()
+    _cited(payload, anchors)
+    payload['cited_blocks'] = {
+        anchor: texts[anchor][:MAX_BLOCK_CHARS]
+        for anchor in sorted(anchors)
+        if anchor in texts
+    }
+    payload['already_reviewed'] = _reviewed(session, paper_id)
+    return payload
+
+
+def consistency_resolver(session: Session, paper_id: int) -> Resolver:
+    """Turn an inconsistency's ``about`` into the rows it names: "individual /
+    variant" for one link, an individual alone, or a family -- the labels
+    ``consistency_input`` gave them."""
+    patients = _family_patients(session, paper_id)
+    patient_ids = [
+        (patient_label(p.family.identifier, p.identifier), p.id) for p in patients
+    ]
+    family_ids = [
+        (f.identifier, f.id)
+        for f in session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id)
+    ]
+    links = _occurrences(session, paper_id)
+
+    def resolve(about: str) -> dict[str, int]:
+        pair = split_pair(about)
+        patient_half, variant_half = pair if pair else (about, None)
+        patient_id = match_label(patient_half, patient_ids)
+        if patient_id is None:
+            family_id = match_label(about, family_ids)
+            return {'family_id': family_id} if family_id is not None else {}
+        resolved = {'patient_id': patient_id}
+        if variant_half is not None:
+            occurrence_id = match_label(
+                variant_half,
+                [
+                    (_variant_label(link.variant), link.id)
+                    for link in links.get(patient_id, [])
+                ],
+            )
+            if occurrence_id is not None:
+                link = next(
+                    link for link in links[patient_id] if link.id == occurrence_id
+                )
+                resolved['occurrence_id'] = occurrence_id
+                resolved['variant_id'] = link.variant_id
+        return resolved
+
+    return resolve
