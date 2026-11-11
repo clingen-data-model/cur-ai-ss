@@ -50,7 +50,17 @@ Return **exactly** the following for each link:
   A patient the paper tests two ways carries both (Sanger Sequencing and
   Restriction Digest for a proband sequenced and then digested; Linkage
   Analysis and Sanger Sequencing for a family mapped and then sequenced), each
-  cited to the sentence that names it; one method when the paper names one
+  cited to the sentence that names it; one method when the paper names one.
+  Only a test of this patient's DNA is a testing method: one that read,
+  screened for or mapped the variant.
+  RNA studies (RT-PCR, cDNA sequencing, minigene assays), protein and
+  functional assays (immunohistochemistry, western blot, enzyme activity) and
+  the screening of controls are evidence about the variant, not how the
+  patient was tested, and are never listed. PCR is a method only where the
+  PCR itself reads the result (allele-specific, deletion-spanning or
+  breakpoint PCR); PCR that amplifies DNA for sequencing is part of the
+  sequencing. Other is for a DNA test none of the values names, and its basis
+  names the test
 - disease_name: EvidenceBlock[str] (OPTIONAL: the disease name SPECIFIC TO THIS PATIENT-VARIANT LINK.
   Use when the paper describes multiple conditions or when this patient's case clarifies, narrows, or
   differs from the paper-level disease. This value OVERRIDES the paper-level disease for this link.
@@ -248,10 +258,22 @@ BEFORE RETURNING, CHECK:
   that same variant stays.
 - Every patient in the input with no link has an excluded flag, or the paper
   reports them as not carrying the variant.
-- Disease name, inheritance mechanism and testing methods are facts about the
-  patient or the family, not about one link: a patient's links carry the same
-  values, a family's links the same mechanism, and two patients the paper tests
-  in one sentence or one table row the same methods.
+- Disease name and inheritance mechanism are facts about the patient or the
+  family, not about one link: a patient's links carry the same values, a
+  family's links the same mechanism.
+- Testing methods, patient by patient. A statement about how the cohort's or
+  a family's variants were found or confirmed ("all variants were confirmed
+  by Sanger sequencing", "probands were screened by exome sequencing") gives
+  that method to every patient it covers: go through those patients one at a
+  time and confirm each of their links carries it, since the patient a first
+  pass misses is the one whose own row says nothing about method. Two
+  patients the paper tests in one sentence or one table row carry the same
+  methods. A patient's links carry the same methods unless the paper found
+  their variants differently (one variant by MLPA, the other by sequencing).
+  A patient with no method while others in their group have one is right
+  only when the paper leaves them out of the group's statement.
+- Every listed method is a test of the patient's DNA: no RNA,
+  protein or functional assay, no PCR that only amplified for sequencing.
 """
 
 PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (
