@@ -167,7 +167,12 @@ from lib.models.figure import (
     FigureDescriptionDB,
     described_figures,
 )
-from lib.models.flag import AnyFlag, FlagMergeOutput
+from lib.models.flag import (
+    AnyFlag,
+    ExtractionFlag,
+    ExtractionVerificationOutput,
+    FlagKind,
+)
 from lib.models.mondo import (
     MondoDiseaseScope,
     MondoLinkingTarget,
@@ -192,6 +197,8 @@ from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
 from lib.tasks.extraction_verification import (
     apply_merge,
+    consistency_input,
+    consistency_resolver,
     open_flags,
     verification_input,
 )
@@ -826,11 +833,17 @@ def citation_check(paper_id: int) -> Check:
     run, not per attempt. A figure's text is its legend plus its description,
     so a quote copied from the description checks out.
     """
+    texts = paper_citation_texts(paper_id)
+    return lambda output: verify_citations(output, texts)
+
+
+def paper_citation_texts(paper_id: int) -> dict[str, str]:
+    """Block id -> text for every block a citation can name, figures as
+    their legend plus description (what ``citation_check`` checks against)."""
     with session_scope() as session:
-        texts = figure_texts(
+        return figure_texts(
             paper_block_texts(paper_id), described_figures(session, paper_id)
         )
-    return lambda output: verify_citations(output, texts)
 
 
 def cited_text(block: dict[str, Any]) -> str:
@@ -2351,39 +2364,76 @@ async def handle_mondo_linking(task_id: int) -> None:
 
 async def handle_extraction_verification(task_id: int) -> None:
     """The pipeline's last pass over a paper (see
-    lib.tasks.extraction_verification): ask the agent which open flags say
-    the same thing, and fold each group into its earliest flag. No agent
-    session: the input is the flags themselves, rebuilt from the database
-    on every run, so a re-run never has a stale conversation to continue."""
+    lib.tasks.extraction_verification), one agent call: it names the rows
+    whose values disagree with the rest of the extraction, which replace this
+    task's open ``inconsistent`` flags (resolved ones are kept, and shown to
+    the agent so it does not raise them again), and the open flags that say
+    the same thing, which are folded into their earliest. No agent session:
+    the input is rebuilt from the database on every run, so a re-run never
+    has a stale conversation to continue."""
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
         paper_id = task.paper_id
         budget_model = task.budget_model
-        flags = open_flags(session, paper_id)
-        if len(flags) < 2:
+
+    texts = paper_citation_texts(paper_id)
+    with session_scope() as session:
+        extraction = consistency_input(session, paper_id, texts)
+        # This task's own open inconsistencies are about to be replaced:
+        # shown as flags, the agent would take them as already raised and
+        # leave them out of its answer.
+        flags = [
+            f
+            for f in open_flags(session, paper_id)
+            if not (
+                f.source == TaskType.EXTRACTION_VERIFICATION.name
+                and f.kind == FlagKind.INCONSISTENT.value
+            )
+        ]
+        if extraction is None and len(flags) < 2:
             logger.info(
-                f'Paper {paper_id}: {len(flags)} open flag(s), nothing to merge'
+                f'Paper {paper_id}: no individuals and {len(flags)} open '
+                'flag(s), nothing to verify'
             )
             return
-        payload = verification_input(flags)
+        flag_payload = verification_input(flags)
 
     message = (
         f'{EXTRACTION_VERIFICATION_AGENT_INSTRUCTIONS}\n\n'
-        f'Open flags on this paper:\n{json.dumps(payload, indent=2)}'
+        f'The extraction:\n{json.dumps(extraction, indent=2)}\n\n'
+        f'Open flags on this paper:\n{json.dumps(flag_payload, indent=2)}'
     )
-    result = await Runner.run(
-        agent_on_tier(extraction_verification_agent, budget_model), message
+    result = await run_with_checked_output(
+        agent_on_tier(extraction_verification_agent, budget_model),
+        message,
+        lambda output: verify_citations(output, texts),
     )
     log_run_metrics('EXTRACTION_VERIFICATION', result, paper_id=paper_id)
     output = result.final_output
-    if not isinstance(output, FlagMergeOutput):
-        raise ValueError(f'Extraction verification returned no groups: {output!r}')
+    if not isinstance(output, ExtractionVerificationOutput):
+        raise ValueError(f'Extraction verification returned nothing: {output!r}')
 
     with session_scope() as session:
         absorbed = apply_merge(session, paper_id, output)
-    logger.info(f'Paper {paper_id}: {absorbed} repeated flag(s) merged')
+        replace_flags(
+            session,
+            paper_id=paper_id,
+            source=TaskType.EXTRACTION_VERIFICATION.name,
+            flags=[
+                ExtractionFlag(
+                    kind=FlagKind.INCONSISTENT, about=item.about, flag=item.flag
+                )
+                for item in output.inconsistencies
+            ],
+            resolve=consistency_resolver(session, paper_id),
+            keep_resolved=True,
+        )
+    logger.info(
+        f'Paper {paper_id}: {absorbed} repeated flag(s) merged, '
+        f'{len(output.inconsistencies)} inconsistency flag(s) raised'
+    )
 
 
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {

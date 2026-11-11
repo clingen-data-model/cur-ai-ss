@@ -76,6 +76,7 @@ def replace_flags(
     flags: Sequence[AnyFlag],
     scope: dict[str, int] | None = None,
     resolve: Resolver | None = None,
+    keep_resolved: bool = False,
 ) -> list[FlagDB]:
     """Replace ``source``'s flags for this run with ``flags``.
 
@@ -89,6 +90,10 @@ def replace_flags(
     ``resolve`` turns a flag's ``about`` into further link columns. A match
     adds to the scope rather than replacing it; a miss leaves the flag with
     the scope alone.
+
+    ``keep_resolved`` leaves the source's resolved flags in place, for a task
+    that re-runs on its own (Extraction Verification runs whenever a paper's
+    tasks settle) and would otherwise erase a curator's judgment each time.
     """
     scope = dict(scope or {})
     for column in scope:
@@ -103,6 +108,8 @@ def replace_flags(
     )
     for column, value in scope.items():
         query = query.filter(getattr(FlagDB, column) == value)
+    if keep_resolved:
+        query = query.filter(FlagDB.resolved_at.is_(None))
     query.delete(synchronize_session=False)
 
     rows: list[FlagDB] = []

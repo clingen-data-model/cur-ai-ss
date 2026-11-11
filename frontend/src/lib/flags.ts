@@ -30,6 +30,10 @@ export const FLAG_KIND_LABELS: Record<string, { label: string; hint: string }> =
     label: 'Alternative cause',
     hint: 'The paper reports another explanation of this person\'s phenotype, such as a finding in a different gene',
   },
+  inconsistent: {
+    label: 'Inconsistent',
+    hint: 'Extracted values that should agree do not, such as a statement about a group applied to some of its members only',
+  },
 }
 
 export function flagKindLabel(flag: Pick<FlagResp, 'kind'>): string {

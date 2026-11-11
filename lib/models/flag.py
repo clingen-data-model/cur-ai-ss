@@ -24,7 +24,9 @@ in different words -- a country taken from the recruitment site, once per
 relative; a pedigree label that differs from the text, once by patient
 extraction and once by demographics. Extraction verification, the
 pipeline's last task (``lib.tasks.extraction_verification``), folds those
-into one flag; ``FlagMergeOutput`` below is what its agent returns.
+into one flag, and raises ``inconsistent`` flags of its own for extracted
+values that disagree; ``ExtractionVerificationOutput`` below is what its
+agent returns.
 """
 
 from datetime import datetime
@@ -78,6 +80,12 @@ class FlagKind(StrEnum):
     # gene, so this is the only place such a finding can be recorded; it bears
     # on how much the case says about the target gene.
     ALTERNATIVE_CAUSE = 'alternative_cause'
+    # Extracted values that should agree and do not: a group statement
+    # applied to some of its members and not others, a fact about a person
+    # that differs between their links, two fields of one row that contradict
+    # each other. Raised only by Extraction Verification, which reads the
+    # finished extraction rather than the paper.
+    INCONSISTENT = 'inconsistent'
 
 
 class FlagEvidenceBlock(EvidenceBlock[str]):
@@ -154,6 +162,24 @@ class FlagMergeOutput(BaseModel):
     group stands as it is."""
 
     groups: list[FlagMergeGroup] = Field(default_factory=list)
+
+
+class InconsistencyFlag(BaseModel):
+    """One inconsistency the verification pass found: ``about`` names the row
+    that is out of line (a patient-variant pair, a patient, or a family), as
+    the input labels it; ``flag`` says what disagrees with what."""
+
+    about: str | None
+    flag: FlagEvidenceBlock
+
+
+class ExtractionVerificationOutput(FlagMergeOutput):
+    """What the Extraction Verification agent returns in its one call (see
+    lib.tasks.extraction_verification): the groups of repeated flags, and the
+    rows whose values do not agree with the rest of the extraction. Both empty
+    when there is nothing to do."""
+
+    inconsistencies: list[InconsistencyFlag] = Field(default_factory=list)
 
 
 # The link columns a resolved ``about`` (or a task's own scope) can fill.
