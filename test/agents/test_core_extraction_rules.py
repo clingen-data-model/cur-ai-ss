@@ -577,9 +577,9 @@ def test_occurrence_prompt_checks_patient_and_family_facts_agree_across_links():
     now says which values are the patient's or the family's, not the link's."""
     prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     checklist = prompt[prompt.index('BEFORE RETURNING, CHECK') :]
-    assert "a patient's links carry the same\n  values" in checklist
-    assert "a family's links the same mechanism" in checklist
-    assert 'in one sentence or one table row the same methods' in checklist
+    assert "a patient's links carry the same values" in checklist
+    assert "family's links the same mechanism" in checklist
+    assert 'in one sentence or one table row carry the same' in checklist
 
 
 def test_occurrence_prompt_reads_dominant_from_a_heterozygous_affected_carrier():
@@ -677,3 +677,18 @@ def test_a_genotype_from_a_redrawn_pedigree_finds_its_patient():
     prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'redraws a family with fewer generations' in prompt
     assert "its II-4 is the full pedigree's III-4" in prompt
+
+
+def test_testing_methods_are_dna_tests_checked_patient_by_patient():
+    """Curators found testing methods assigned inconsistently: a cohort-wide
+    confirmation missed on one proband, RNA and protein assays listed as
+    methods, amplification PCR counted. The occurrence prompt defines what
+    counts as a method and checks each patient against the group's statement
+    before returning."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert "Only a test of this patient's DNA is a testing method" in prompt
+    assert 'screened for or mapped the variant' in prompt
+    assert 'PCR that amplifies DNA for sequencing is part of the' in prompt
+    assert 'Testing methods, patient by patient.' in prompt
+    assert 'go through those patients one at a' in prompt
+    assert 'found\n  their variants differently' in prompt
