@@ -50,7 +50,8 @@ export function ensemblVariantUrl(rsid: string): string {
 /** UCSC Genome Browser on hg38 at the variant's position, or null when the
  * coordinates are not gnomAD-style. */
 export function ucscUrl(coordinates: string): string | null {
-  const match = /^(?:chr)?([0-9XYM]+|MT)-(\d+)-([ACGTN]+)-([ACGTN]+)$/i.exec(coordinates)
+  // Colons too: a curator-edited value may be written 17:41196312:AG:A.
+  const match = /^(?:chr)?([0-9XYM]+|MT)[-:](\d+)[-:]([ACGTN]+)[-:]([ACGTN]+)$/i.exec(coordinates)
   if (!match) return null
   const [, chrom, pos, ref] = match
   const start = Number(pos)

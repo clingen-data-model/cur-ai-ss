@@ -1533,6 +1533,7 @@ async def handle_variant_annotation(task_id: int) -> None:
                     gnomad_style_coordinates=ev.gnomad_style_coordinates,
                     rsid=ev.rsid,
                     caid=ev.caid,
+                    clinvar_variation_id=ev.clinvar_variation_id,
                     pathogenicity=ev.pathogenicity,
                     submissions=ev.submissions,
                     stars=ev.stars,
