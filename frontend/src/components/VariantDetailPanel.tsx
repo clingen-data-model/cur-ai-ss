@@ -24,7 +24,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { VARIANT_TYPE_OPTIONS } from '@/lib/variantType'
-import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
+import {
+  type ExternalLink,
+  clinGenUrl,
+  clinVarLinks,
+  dbSnpUrl,
+  gnomadUrl,
+  inSilicoLinks,
+  populationLinks,
+} from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
 import { formatAf } from '@/lib/alleleFrequency'
 import { formatSpliceAI } from '@/lib/spliceai'
@@ -34,6 +42,31 @@ import { apiErrorMessage } from '@/lib/apiError'
 function formatAlleleCounts(ac?: number | null, an?: number | null): string {
   if (ac == null || an == null) return 'N/A'
   return `${ac.toLocaleString()} / ${an.toLocaleString()}`
+}
+
+/** An Annotations section heading, with links to the sources its values came
+ * from on the right. */
+function AnnotationSection({ title, links, first }: { title: string; links: ExternalLink[]; first?: boolean }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-2 mb-1 ${first ? 'mt-1' : 'mt-3'}`}>
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{title}</p>
+      {links.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-x-3 gap-y-0.5">
+          {links.map((link) => (
+            <a
+              key={link.label}
+              href={link.href}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary hover:underline"
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function VariantDetailPanel({ paperId, variant }: { paperId: number; variant: VariantResp }) {
@@ -147,6 +180,18 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
                 value={harmonized.rsid ?? ''}
                 evidence={variant.harmonized_variant}
                 onSave={(value) => saveHarmonized({ rsid: value || null })}
+                caption={
+                  harmonized.rsid && (
+                    <a
+                      href={dbSnpUrl(harmonized.rsid)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-primary hover:underline"
+                    >
+                      View in dbSNP
+                    </a>
+                  )
+                }
               />
               <SimpleTextRow
                 label="CAID"
@@ -224,12 +269,12 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
             <p className="text-sm text-muted-foreground">Enrichment not yet completed for this variant.</p>
           ) : (
             <>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-1 mb-1">ClinVar</p>
+              <AnnotationSection title="ClinVar" links={clinVarLinks(annotated)} first />
               <ReadOnlyRow label="Pathogenicity" value={annotated.pathogenicity ?? 'N/A'} noEvidence />
               <ReadOnlyRow label="Submissions" value={annotated.submissions ?? 'N/A'} noEvidence />
               <ReadOnlyRow label="Review Status" value={annotated.stars != null ? '⭐'.repeat(annotated.stars) || '0⭐' : 'N/A'} noEvidence />
 
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-3 mb-1">In Silico</p>
+              <AnnotationSection title="In Silico" links={inSilicoLinks(annotated)} />
               <ReadOnlyRow label="REVEL" value={annotated.revel != null ? annotated.revel.toFixed(3) : 'N/A'} noEvidence />
               <ReadOnlyRow label="AlphaMissense Class" value={annotated.alphamissense_class ?? 'N/A'} noEvidence />
               <ReadOnlyRow
@@ -241,7 +286,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
               <ReadOnlyRow label="Exon" value={annotated.exon ?? 'N/A'} noEvidence />
               <ReadOnlyRow label="VEP Consequence" value={annotated.vep_consequence ?? 'N/A'} noEvidence />
 
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-3 mb-1">gnomAD</p>
+              <AnnotationSection title="gnomAD" links={populationLinks(annotated)} />
               <ReadOnlyRow label="Top-level AF" value={formatAf(annotated.gnomad_top_level_af) ?? 'N/A'} noEvidence />
               <ReadOnlyRow
                 noEvidence

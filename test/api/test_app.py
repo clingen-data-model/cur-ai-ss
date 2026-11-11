@@ -985,6 +985,7 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     # Create enriched variant
     enriched = AnnotatedVariantDB(
         variant_id=variant.id,
+        clinvar_variation_id='55601',
         pathogenicity='Pathogenic',
         submissions=15,
         stars=3,
@@ -1050,6 +1051,7 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
 
     # Check enriched data
     assert v['annotated_variant'] is not None
+    assert v['annotated_variant']['clinvar_variation_id'] == '55601'
     assert v['annotated_variant']['pathogenicity'] == 'Pathogenic'
     assert v['annotated_variant']['submissions'] == 15
     assert v['annotated_variant']['stars'] == 3

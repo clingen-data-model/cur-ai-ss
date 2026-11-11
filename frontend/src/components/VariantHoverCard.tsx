@@ -2,7 +2,7 @@
  * Variant column hover card -- ClinVar/gnomAD/gnomAD-style id, in the spirit
  * of the pptx curation export's variant summary (lib/misc/curation/summary.py). */
 import type { VariantResp } from '@/api/generated/types.gen'
-import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
+import { gnomadUrl, clinGenUrl, clinVarRecordUrl } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
 import { formatSpliceAI } from '@/lib/spliceai'
 import { formatAf } from '@/lib/alleleFrequency'
@@ -16,6 +16,9 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
   const popmaxAf = formatAf(annotated?.gnomad_popmax_af)
   const topLevelAf = formatAf(annotated?.gnomad_top_level_af)
   const spliceAi = formatSpliceAI(annotated?.spliceai)
+  const clinVarSummary =
+    annotated?.pathogenicity &&
+    `${annotated.pathogenicity}${annotated.stars != null ? ` (${'⭐'.repeat(annotated.stars) || '0⭐'})` : ''}`
 
   return (
     <div className="space-y-1.5">
@@ -49,10 +52,17 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
       <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
         <dt className="text-muted-foreground">ClinVar</dt>
         <dd className="text-right truncate">
-          {annotated?.pathogenicity
-            ? `${annotated.pathogenicity}${
-                annotated.stars != null ? ` (${'⭐'.repeat(annotated.stars) || '0⭐'})` : ''
-              }`
+          {annotated?.pathogenicity && annotated.clinvar_variation_id ? (
+            <a
+              href={clinVarRecordUrl(annotated.clinvar_variation_id)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary hover:underline"
+            >
+              {clinVarSummary}
+            </a>
+          ) : annotated?.pathogenicity
+            ? clinVarSummary
             : caid
               ? 'Not in ClinVar'
               : 'N/A'}

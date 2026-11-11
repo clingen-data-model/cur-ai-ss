@@ -546,6 +546,8 @@ class AnnotatedVariant(BaseModel):
     gnomad_style_coordinates: Optional[str] = None
     rsid: Optional[str] = None
     caid: Optional[str] = None
+    # The ClinVar variation (VCV) the classification below was read from.
+    clinvar_variation_id: Optional[str] = None
     pathogenicity: Optional[str] = None
     submissions: Optional[int] = None
     stars: Optional[int] = None
@@ -578,6 +580,7 @@ class AnnotatedVariantResp(BaseModel):
     gnomad_style_coordinates: Optional[str] = None
     rsid: Optional[str] = None
     caid: Optional[str] = None
+    clinvar_variation_id: Optional[str] = None
     pathogenicity: Optional[str] = None
     submissions: Optional[int] = None
     stars: Optional[int] = None
@@ -610,6 +613,7 @@ class AnnotatedVariantDB(Base):
     )
 
     # ClinVar
+    clinvar_variation_id: Mapped[str | None] = mapped_column(String, nullable=True)
     pathogenicity: Mapped[str | None] = mapped_column(String, nullable=True)
     submissions: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stars: Mapped[int | None] = mapped_column(Integer, nullable=True)

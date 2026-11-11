@@ -145,6 +145,10 @@ def clinvar_lookup(
     if not uids:
         return result_variant
 
+    # ClinVar's esummary uid is the variation ID, which is also the record's
+    # page (clinvar/variation/<id>/); kept so a curator can open the record
+    # the classification came from.
+    result_variant.clinvar_variation_id = str(uids[0])
     record = summary.get(uids[0], {})
     germline = record.get('germline_classification', {})
 

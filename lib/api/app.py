@@ -1979,6 +1979,7 @@ def _variant_to_resp(row: VariantDB, session: Session) -> VariantResp:
             gnomad_style_coordinates=row.annotated_variant.gnomad_style_coordinates,
             rsid=row.annotated_variant.rsid,
             caid=row.annotated_variant.caid,
+            clinvar_variation_id=row.annotated_variant.clinvar_variation_id,
             pathogenicity=row.annotated_variant.pathogenicity,
             submissions=row.annotated_variant.submissions,
             stars=row.annotated_variant.stars,
