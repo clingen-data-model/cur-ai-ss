@@ -1,5 +1,6 @@
 """Agent to correct corrupted table markdown using the vision model."""
 
+import asyncio
 import json
 import logging
 import re
@@ -50,11 +51,20 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
     # outcomes that are findings (a decline, a truncated answer); anything it
     # raises means the call itself did not happen, which is a task failure and
     # not a fact about the paper.
+    #
+    # Async, with the read in a thread: the agents SDK calls a sync tool on
+    # the event loop itself, and vlm_describe is a blocking request of about
+    # 25 s. As a sync tool it froze the whole worker for each table it read
+    # (every task of the shard, not only this parse), and the table checks
+    # could not overlap however many correct_tables started at once.
     @function_tool(failure_error_function=None)
-    def extract_table_from_image() -> str:
+    async def extract_table_from_image() -> str:
         """Extract the current table image as markdown using vision."""
-        image_url = image_to_data_url(image_path)
-        content = vlm_describe(image_url, VISION_EXTRACTION_PROMPT)
+
+        def read() -> str | None:
+            return vlm_describe(image_to_data_url(image_path), VISION_EXTRACTION_PROMPT)
+
+        content = await asyncio.to_thread(read)
         # An empty string, never a partial table: the agent reports the table
         # unrecoverable rather than accepting half of one as the extraction.
         return content if content is not None else ''
@@ -134,6 +144,16 @@ def is_well_formed_table(markdown: str) -> bool:
     return all(len(row) == width for row in cells)
 
 
+# How many tables of one document are judged at once. Each check is one or
+# two model calls, about 25 s when the judge asks for the table's image, and
+# in turn a 71-page supplement's 52 tables outlasted PDF Parsing's 30-minute
+# lease (paper 156 on dev, PMID 20428114, 2026-11-11): the attempt was
+# cancelled and the retry started over. The checks share nothing, one table
+# each, so they run side by side. Per parse, and the worker runs one parse
+# at a time, so this is also the vision calls in flight per worker.
+TABLE_CHECK_CONCURRENCY = 8
+
+
 async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     """Correct corrupted table markdown in paper using agent.
 
@@ -151,90 +171,107 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     if not tables_dir.exists():
         return
 
-    # Find all .md table files
-    table_files = sorted(tables_dir.glob('*.md'))
+    # Docling's tables; N.vision.md files are this step's own output.
+    table_files = [
+        path for path in sorted(tables_dir.glob('*.md')) if '.vision' not in path.name
+    ]
     if not table_files:
         return
 
-    for table_path in table_files:
-        # Skip vision files
-        if '.vision' in table_path.name:
-            continue
+    limit = asyncio.Semaphore(TABLE_CHECK_CONCURRENCY)
 
-        table_id = int(table_path.stem)
-        table_markdown = table_path.read_text()
+    async def check(table_path: Path) -> None:
+        async with limit:
+            await _check_table(paper_id, table_path, supplement)
 
-        logger.info(f'Checking table {table_id} for corruption...')
+    checks = [asyncio.create_task(check(path)) for path in table_files]
+    try:
+        await asyncio.gather(*checks)
+    except BaseException:
+        # A check that raised fails the parse, as it did when they ran in
+        # turn; the rest are stopped rather than left running unawaited.
+        # gather re-raises the first exception as it was, so the task's
+        # error message names the real failure.
+        for task in checks:
+            task.cancel()
+        await asyncio.gather(*checks, return_exceptions=True)
+        raise
 
-        image_path = document_table_image_path(
-            paper_id, table_id, supplement=supplement
+
+async def _check_table(paper_id: int, table_path: Path, supplement: bool) -> None:
+    """Judge one table and record the verdict beside it (see correct_tables)."""
+    table_id = int(table_path.stem)
+    table_markdown = table_path.read_text()
+
+    logger.info(f'Checking table {table_id} for corruption...')
+
+    image_path = document_table_image_path(paper_id, table_id, supplement=supplement)
+    agent = table_correction_agent_for_image(image_path)
+
+    # Build prompt with table markdown only. The vision tool reads the image
+    # on demand if the agent decides the markdown is corrupted.
+    message = (
+        f'Table ID: {table_id}\n\nMarkdown to evaluate:\n```\n{table_markdown}\n```'
+    )
+
+    unrecovered_path = document_table_unrecovered_path(
+        paper_id, table_id, supplement=supplement
+    )
+
+    try:
+        result = await Runner.run(agent, message, max_turns=JUDGE_MAX_TURNS)
+    except (MaxTurnsExceeded, ModelDeclined) as exc:
+        # The model would not, or could not, give a verdict. That is an
+        # outcome this step already has a bucket for -- the table is left
+        # as parsed and marked unrecovered, so anchored.md carries the
+        # warning -- and not a reason to fail the paper's parse, which is
+        # what a propagated exception does. ModelDeclined is the provider's
+        # safety classifier refusing the judge call (model_factory says how
+        # a refusal otherwise becomes MaxTurnsExceeded); MaxTurnsExceeded
+        # here is the same thing seen through a model whose adapter did
+        # not surface it, or a judge that lost its way, and in either
+        # case asking the same question again gets the same answer.
+        logger.warning(
+            f'Table {table_id}: no verdict from the judge ({exc}); leaving '
+            f'the original markdown in place and marking it unrecovered'
         )
-        agent = table_correction_agent_for_image(image_path)
+        unrecovered_path.touch()
+        return
 
-        # Build prompt with table markdown only. The vision tool reads the image
-        # on demand if the agent decides the markdown is corrupted.
-        message = (
-            f'Table ID: {table_id}\n\nMarkdown to evaluate:\n```\n{table_markdown}\n```'
-        )
-
-        unrecovered_path = document_table_unrecovered_path(
-            paper_id, table_id, supplement=supplement
-        )
-
-        try:
-            result = await Runner.run(agent, message, max_turns=JUDGE_MAX_TURNS)
-        except (MaxTurnsExceeded, ModelDeclined) as exc:
-            # The model would not, or could not, give a verdict. That is an
-            # outcome this step already has a bucket for -- the table is left
-            # as parsed and marked unrecovered, so anchored.md carries the
-            # warning -- and not a reason to fail the paper's parse, which is
-            # what a propagated exception does. ModelDeclined is the provider's
-            # safety classifier refusing the judge call (model_factory says how
-            # a refusal otherwise becomes MaxTurnsExceeded); MaxTurnsExceeded
-            # here is the same thing seen through a model whose adapter did
-            # not surface it, or a judge that lost its way, and in either
-            # case asking the same question again gets the same answer.
-            logger.warning(
-                f'Table {table_id}: no verdict from the judge ({exc}); leaving '
-                f'the original markdown in place and marking it unrecovered'
-            )
-            unrecovered_path.touch()
-            continue
-
-        if not result.final_output.is_corrupted:
-            logger.info(f'Table {table_id} looks OK')
-            unrecovered_path.unlink(missing_ok=True)
-            continue
-
-        if (
-            not result.final_output.conversion_successful
-            or not result.final_output.corrected_markdown
-        ):
-            # The table is genuinely unrecoverable (e.g. a dense matrix of
-            # symbols with no faithful tabular structure). Leave the original
-            # markdown in place rather than failing the whole paper extraction.
-            logger.warning(
-                f'Table {table_id} is corrupted but could not be recovered; '
-                f'leaving original markdown in place (recoverable='
-                f'{result.final_output.is_recoverable})'
-            )
-            unrecovered_path.touch()
-            continue
-
-        if not is_well_formed_table(result.final_output.corrected_markdown):
-            logger.warning(
-                f'Table {table_id}: the judge accepted an extraction that is not '
-                f'a well-formed markdown table; leaving original markdown in place'
-            )
-            unrecovered_path.touch()
-            continue
-
-        logger.info(f'Table {table_id} was corrupted, corrected version ready')
-
-        # Write vision file
-        vision_path = document_table_vision_markdown_path(
-            paper_id, table_id, supplement=supplement
-        )
-        vision_path.write_text(result.final_output.corrected_markdown)
-        logger.info(f'Wrote {vision_path}')
+    if not result.final_output.is_corrupted:
+        logger.info(f'Table {table_id} looks OK')
         unrecovered_path.unlink(missing_ok=True)
+        return
+
+    if (
+        not result.final_output.conversion_successful
+        or not result.final_output.corrected_markdown
+    ):
+        # The table is genuinely unrecoverable (e.g. a dense matrix of
+        # symbols with no faithful tabular structure). Leave the original
+        # markdown in place rather than failing the whole paper extraction.
+        logger.warning(
+            f'Table {table_id} is corrupted but could not be recovered; '
+            f'leaving original markdown in place (recoverable='
+            f'{result.final_output.is_recoverable})'
+        )
+        unrecovered_path.touch()
+        return
+
+    if not is_well_formed_table(result.final_output.corrected_markdown):
+        logger.warning(
+            f'Table {table_id}: the judge accepted an extraction that is not '
+            f'a well-formed markdown table; leaving original markdown in place'
+        )
+        unrecovered_path.touch()
+        return
+
+    logger.info(f'Table {table_id} was corrupted, corrected version ready')
+
+    # Write vision file
+    vision_path = document_table_vision_markdown_path(
+        paper_id, table_id, supplement=supplement
+    )
+    vision_path.write_text(result.final_output.corrected_markdown)
+    logger.info(f'Wrote {vision_path}')
+    unrecovered_path.unlink(missing_ok=True)

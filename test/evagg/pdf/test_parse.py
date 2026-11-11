@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import shutil
@@ -7,6 +8,7 @@ import docx
 import pytest
 from agents.exceptions import MaxTurnsExceeded
 
+from lib.agents import table_correction_agent as tca
 from lib.agents.model_factory import ModelDeclined
 from lib.agents.table_correction_agent import (
     JUDGE_MAX_TURNS,
@@ -368,3 +370,71 @@ async def test_clean_table_leaves_no_marker(mocked_root_dir):
 
     assert not document_table_unrecovered_path(paper_id, 0).exists()
     assert not document_table_vision_markdown_path(paper_id, 0).exists()
+
+
+async def test_tables_are_checked_side_by_side_within_the_limit(
+    mocked_root_dir, monkeypatch
+):
+    """One at a time, a supplement's 52 tables outlasted PDF Parsing's lease
+    (paper 156 on dev). The checks overlap, never more than the limit at once,
+    and every table still gets its verdict."""
+    paper_id = 987031
+    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
+    corrected = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
+    for table_id in range(10):
+        _seed_table(paper_id, table_id, garbled)
+    monkeypatch.setattr(tca, 'TABLE_CHECK_CONCURRENCY', 3)
+
+    in_flight = peak = 0
+
+    async def judge(*_args, **_kwargs):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        result = MagicMock()
+        result.final_output = TableCorrectionResult(
+            is_corrupted=True,
+            corrected_markdown=corrected,
+            conversion_successful=True,
+            is_recoverable=True,
+        )
+        return result
+
+    with patch('agents.Runner.run', side_effect=judge):
+        await correct_tables(paper_id)
+
+    assert peak == 3
+    assert all(
+        document_table_vision_markdown_path(paper_id, n).read_text() == corrected
+        for n in range(10)
+    )
+
+
+async def test_a_check_that_raises_still_fails_the_parse_with_its_own_error(
+    mocked_root_dir,
+):
+    """Not reaching the model is a task failure (vlm_describe). Run side by
+    side, the first such error still reaches the worker as itself, not
+    wrapped, and the other checks are stopped."""
+    paper_id = 987032
+    for table_id in range(5):
+        _seed_table(paper_id, table_id, '| a |\n|---|\n| b |')
+    started: list[str] = []
+
+    async def judge(_agent, message, **_kwargs):
+        started.append(message)
+        if 'Table ID: 0' in message:
+            raise RuntimeError('connection reset')
+        await asyncio.sleep(5)  # cancelled long before this ends
+
+    with (
+        patch('agents.Runner.run', side_effect=judge),
+        pytest.raises(RuntimeError, match='connection reset'),
+    ):
+        await asyncio.wait_for(correct_tables(paper_id), timeout=2)
+
+    assert not any(
+        document_table_vision_markdown_path(paper_id, n).exists() for n in range(5)
+    )
