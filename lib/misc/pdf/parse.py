@@ -311,4 +311,16 @@ async def parse_content(
         return
 
     document = await convert(content, supplement_format)
-    await write_parse_outputs(document, content, paper_id, supplement=supplement)
+    # Table correction is for tables Docling rebuilt from a page's layout,
+    # which can come out jumbled, and it recovers one from the table's image.
+    # A Word table is read from the file's own table structure, so it is
+    # exact and has no image: the judge could only mistake a good table for a
+    # corrupted one and then fail the parse looking for a picture of it
+    # (paper 146 on dev, PMID 38773012, 2026-11-11). XLSX never reaches here.
+    await write_parse_outputs(
+        document,
+        content,
+        paper_id,
+        supplement=supplement,
+        correct=supplement_format != FileFormat.DOCX,
+    )
