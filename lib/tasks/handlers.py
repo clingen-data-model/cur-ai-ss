@@ -1871,14 +1871,35 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         session.flush()
 
 
+REUSED_HPO_LINK_PREFIX = 'Reused the link '
+ORIGINAL_REASONING_LABEL = 'Original reasoning: '
+
+
+def _original_hpo_reasoning(source: PhenotypeDB | None) -> str | None:
+    """The HPO agent's own reasoning behind the link being copied, so a
+    curator reads why the term fits and not only that it was reused. A
+    source that was itself a reuse passes on the original it carried, so
+    the chain never nests; one reused before that was kept has none."""
+    if source is None or source.hpo is None or not source.hpo.reasoning:
+        return None
+    text = source.hpo.reasoning.strip()
+    if text.startswith(REUSED_HPO_LINK_PREFIX):
+        _, _, original = text.partition(ORIGINAL_REASONING_LABEL)
+        return original.strip() or None
+    return text
+
+
 def reused_hpo_link_reasoning(
     session: Session, cached: CachedHpoLink, paper_id: int
 ) -> str:
     """Why a phenotype carries an HPO term the agent never chose for it: the
-    identical concept was linked before, and that link is copied. Names the
-    patient it came from (and whether that was in this paper), never the
-    phenotype's database id, which a curator cannot follow and which may no
-    longer exist once that patient's phenotypes are re-extracted."""
+    identical concept was linked before, and that link is copied, along with
+    the reasoning the HPO agent gave for it. Names the patient it came from
+    (and whether that was in this paper), never the phenotype's database id,
+    which a curator cannot follow and which may no longer exist once that
+    patient's phenotypes are re-extracted. A curated link carries no agent
+    reasoning ('Manually linked by curator' says nothing "by a curator"
+    does not), so none is added."""
     source = session.get(PhenotypeDB, cached.source_phenotype_id)
     where = 'elsewhere'
     if source is not None:
@@ -1889,10 +1910,12 @@ def reused_hpo_link_reasoning(
             else f'for {who} in another paper'
         )
     by = ' by a curator' if cached.curated else ''
-    return (
-        f'Reused the link {cached.hpo_id} ({cached.hpo_name}) already made{by} '
-        f'{where} for the identical concept.'
+    reused = (
+        f'{REUSED_HPO_LINK_PREFIX}{cached.hpo_id} ({cached.hpo_name}) already '
+        f'made{by} {where} for the identical concept.'
     )
+    original = None if cached.curated else _original_hpo_reasoning(source)
+    return f'{reused} {ORIGINAL_REASONING_LABEL}{original}' if original else reused
 
 
 async def handle_phenotype_extraction(task_id: int) -> None:
