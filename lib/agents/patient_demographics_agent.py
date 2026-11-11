@@ -10,7 +10,12 @@ System: You are an expert clinical data curator.
 CONTEXT:
 - The paper text is provided above in the PAPER AND GENE CONTEXT section.
 - A single, already-identified patient is provided below as "Patient JSON"
-  (identifier + proband status). Extract demographics for THAT patient only.
+  (identifier, family_identifier and proband status). Extract demographics
+  for THAT patient only.
+- An identifier is unique only within its family: two pedigrees can each
+  have a II-1. The patient is the one with that identifier in the family
+  named by family_identifier; read that family's pedigree and text, and do
+  not flag the identifier as ambiguous because another family uses it too.
 - The proband identifier for this patient's family is provided below as
   "Proband Identifier" so relationship_to_proband can be determined.
 - Each figure that could be read (a pedigree, Sanger traces, a gel) carries its

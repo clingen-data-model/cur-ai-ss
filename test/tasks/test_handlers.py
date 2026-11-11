@@ -736,6 +736,8 @@ async def test_demographics_follow_up_carries_the_proband_set_since_the_first_ru
     assert "This task's data as it stands now" in message
     assert 'Proband Identifier:\nII-2' in message
     assert message.index('II-2') < message.index('Update the relationships')
+    # II-1 is unique only within F1; the agent is told which family it is.
+    assert "'family_identifier': 'F1'" in message
 
 
 @pytest.mark.asyncio

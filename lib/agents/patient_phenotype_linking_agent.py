@@ -22,6 +22,8 @@ CONTEXT:
   The patient includes:
      - patient_id (database ID)
      - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
+     - family_identifier (the patient's family; an identifier is unique only
+       within its family, so a II-3 in another family is someone else)
      - identifier_citations (the text and anchors that established the identifier)
      - affected_status (Affected, Unaffected or Unknown, as extracted earlier)
 
