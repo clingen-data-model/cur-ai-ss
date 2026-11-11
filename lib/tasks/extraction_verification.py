@@ -42,7 +42,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from lib.models.family import FamilyDB
-from lib.models.flag import LINK_COLUMNS, FlagDB, FlagKind, FlagMergeOutput
+from lib.models.flag import (
+    LINK_COLUMNS,
+    FlagDB,
+    FlagKind,
+    FlagMergeOutput,
+    InconsistencyFlag,
+)
 from lib.models.patient import PatientDB
 from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
 from lib.models.variant import VariantDB, get_variant_description
@@ -417,3 +423,39 @@ def consistency_resolver(session: Session, paper_id: int) -> Resolver:
         return resolved
 
     return resolve
+
+
+def one_per_row(items: list[InconsistencyFlag]) -> list[InconsistencyFlag]:
+    """Fold the entries that name the same row into one, in first-seen order.
+
+    The agent is asked for one entry per row, but a row with two values out
+    of line (or one value out of line for two reasons) still comes back
+    twice now and then, and the flags of one answer cannot be merged by the
+    merge pass, which only sees flags that existed before the call. The
+    folded entry keeps every subject, basis and citation. Entries naming no
+    row stay apart: there is nothing to tell them the same."""
+    folded: list[InconsistencyFlag] = []
+    by_row: dict[str, InconsistencyFlag] = {}
+    for item in items:
+        key = ' '.join((item.about or '').lower().split())
+        if not key:
+            folded.append(item)
+            continue
+        first = by_row.get(key)
+        if first is None:
+            by_row[key] = item.model_copy(deep=True)
+            folded.append(by_row[key])
+            continue
+        flag = first.flag
+        if item.flag.value not in flag.value:
+            flag.value = f'{flag.value}; {item.flag.value}'
+        if item.flag.reasoning and item.flag.reasoning not in flag.reasoning:
+            flag.reasoning = f'{flag.reasoning}\n\n{item.flag.reasoning}'
+        seen = {(c.anchor, c.quote) for c in flag.citations}
+        for citation in item.flag.citations:
+            if (citation.anchor, citation.quote) not in seen:
+                seen.add((citation.anchor, citation.quote))
+                flag.citations.append(citation)
+    # The folded entries are the same objects as in by_row, so the list
+    # already carries their merged contents.
+    return folded

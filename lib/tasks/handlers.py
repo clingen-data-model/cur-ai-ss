@@ -199,6 +199,7 @@ from lib.tasks.extraction_verification import (
     apply_merge,
     consistency_input,
     consistency_resolver,
+    one_per_row,
     open_flags,
     verification_input,
 )
@@ -2415,6 +2416,7 @@ async def handle_extraction_verification(task_id: int) -> None:
     if not isinstance(output, ExtractionVerificationOutput):
         raise ValueError(f'Extraction verification returned nothing: {output!r}')
 
+    inconsistencies = one_per_row(output.inconsistencies)
     with session_scope() as session:
         absorbed = apply_merge(session, paper_id, output)
         replace_flags(
@@ -2425,14 +2427,14 @@ async def handle_extraction_verification(task_id: int) -> None:
                 ExtractionFlag(
                     kind=FlagKind.INCONSISTENT, about=item.about, flag=item.flag
                 )
-                for item in output.inconsistencies
+                for item in inconsistencies
             ],
             resolve=consistency_resolver(session, paper_id),
             keep_resolved=True,
         )
     logger.info(
         f'Paper {paper_id}: {absorbed} repeated flag(s) merged, '
-        f'{len(output.inconsistencies)} inconsistency flag(s) raised'
+        f'{len(inconsistencies)} inconsistency flag(s) raised'
     )
 
 
