@@ -13,6 +13,7 @@ from lib.tasks.extraction_verification import (
     apply_merge,
     consistency_input,
     consistency_resolver,
+    one_per_row,
     open_flags,
     verification_input,
 )
@@ -672,3 +673,61 @@ async def test_the_handler_flags_inconsistencies_and_keeps_resolved_ones(
     ]
     assert rows[1].occurrence_id == ma.id
     assert rows[1].patient_id == patients[1].id
+
+
+def test_entries_naming_the_same_row_fold_into_one():
+    """Seen on a local run: one individual flagged twice in one answer for a
+    relationship that contradicted its basis. One flag per row, carrying
+    every subject, basis and citation; entries naming no row stay apart."""
+    from lib.models.flag import InconsistencyFlag
+
+    def item(about, subject, anchor=None):
+        citations = [{'anchor': anchor, 'quote': 'q'}] if anchor else []
+        return InconsistencyFlag(
+            about=about,
+            flag={
+                'value': subject,
+                'reasoning': f'why {subject}',
+                'citations': citations,
+            },
+        )
+
+    folded = one_per_row(
+        [
+            item(
+                'Family A III-2',
+                'Relationship is Sibling, basis says Child',
+                'figure-2',
+            ),
+            item(None, 'unplaced one'),
+            item(
+                'family a  iii-2', 'Relationship contradicts the pedigree', 'figure-2'
+            ),
+            item('Family A I-2', 'Relationship is Other', 'figure-3'),
+            item(None, 'unplaced two'),
+        ]
+    )
+
+    assert [f.about for f in folded] == [
+        'Family A III-2',
+        None,
+        'Family A I-2',
+        None,
+    ]
+    first = folded[0].flag
+    assert first.value == (
+        'Relationship is Sibling, basis says Child; '
+        'Relationship contradicts the pedigree'
+    )
+    assert 'why Relationship contradicts the pedigree' in first.reasoning
+    assert [c.anchor for c in first.citations] == ['figure-2']
+
+
+def test_the_prompt_keeps_to_disagreements_one_entry_per_row():
+    from lib.agents.extraction_verification_agent import (
+        EXTRACTION_VERIFICATION_AGENT_INSTRUCTIONS as prompt,
+    )
+
+    assert '- The quality of the evidence.' in prompt
+    assert 'A value that contradicts its own basis' in prompt
+    assert 'A row is never named twice' in prompt

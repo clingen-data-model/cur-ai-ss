@@ -66,6 +66,9 @@ What counts:
   variant recorded de novo in an individual while a parent in the family
   carries it; a parent named as a variant's source whose own link records
   them as not carrying it.
+- A value that contradicts its own basis: the basis names one value and the
+  field holds another, or the basis places the person in a group whose
+  other members carry a value this one lacks.
 - The same person described two ways. Members of one family whose country
   of origin, ancestry or ethnicity differ when their bases rest on the same
   statement about the family.
@@ -81,10 +84,17 @@ What does not count:
   decided. Do not raise it again in other words.
 - Anything an open flag (part 2's list) already raises about the same rows:
   the curator will see it there.
+- The quality of the evidence. A citation that does not support its value,
+  a value resting on a figure that does not show it, a basis that is thin or
+  inferred: whether the evidence holds up was the extracting agent's call,
+  and it is not a disagreement between values. Nor is a basis that mentions
+  a conflict or an uncertainty its agent then settled, when the value it
+  settled on agrees with the rest.
 
-For each inconsistency, return one entry in "inconsistencies" for the row
-that is out of line,
-not for the rows that agree:
+Return one entry in "inconsistencies" per row that is out of line, not for
+the rows that agree. A row is never named twice: when one row has several
+values out of line, or one value out of line for several reasons, its one
+entry covers them all.
 - "about" names that row exactly as the input labels it: "individual /
   variant" (both halves, copied from the input) for a link's value, the
   individual alone for one of their own values, the family for a split
