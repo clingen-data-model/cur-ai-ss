@@ -3027,6 +3027,48 @@ def test_active_papers_say_when_their_tasks_last_changed(
     assert stamp.replace(tzinfo=None) == latest.replace(tzinfo=None)
 
 
+def test_active_papers_count_their_tasks_by_type(
+    client, test_pdf, db_session, seeded_genes
+):
+    """The popover's collapsed rows name the step a paper is on from these
+    counts, so only the row a curator opens fetches the paper's task list."""
+    paper_id = client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    ).json()['id']
+    db_session.query(TaskDB).filter(TaskDB.paper_id == paper_id).delete()
+    for task_type, task_status in [
+        (TaskType.PDF_PARSING, TaskStatus.COMPLETED),
+        (TaskType.VARIANT_HARMONIZATION, TaskStatus.COMPLETED),
+        (TaskType.VARIANT_HARMONIZATION, TaskStatus.RUNNING),
+        (TaskType.VARIANT_HARMONIZATION, TaskStatus.FAILED),
+        (TaskType.VARIANT_HARMONIZATION, TaskStatus.PENDING),
+    ]:
+        db_session.add(TaskDB(paper_id=paper_id, type=task_type, status=task_status))
+    db_session.flush()
+
+    (paper,) = client.get('/papers/active').json()
+
+    counts = {c['type']: c for c in paper['task_counts']}
+    assert counts == {
+        TaskType.PDF_PARSING.value: {
+            'type': TaskType.PDF_PARSING.value,
+            'total': 1,
+            'running': 0,
+            'completed': 1,
+            'failed': 0,
+        },
+        TaskType.VARIANT_HARMONIZATION.value: {
+            'type': TaskType.VARIANT_HARMONIZATION.value,
+            'total': 4,
+            'running': 1,
+            'completed': 1,
+            'failed': 1,
+        },
+    }
+
+
 def test_active_papers_is_empty_when_nothing_runs(client, db_session):
     """The common case: the indicator renders nothing rather than a zero."""
     assert client.get('/papers/active').json() == []
