@@ -4749,13 +4749,14 @@ def _prepare(db_session, paper_id, edits, message, texts=None):
     """What propose_edits would put on the card, without the tool wrapper."""
     from lib.api.direct_edits import CuratorWords, EditRequest, prepare_edits
 
-    return prepare_edits(
+    edits, _ = prepare_edits(
         db_session,
         paper_id,
         [EditRequest.model_validate(e) for e in edits],
         texts or {},
         CuratorWords(said=message, note=message),
     )
+    return edits
 
 
 def _apply_prepared(client, db_session, paper_id, edits, message):
@@ -4913,7 +4914,6 @@ def test_chat_edits_are_refused_with_what_to_fix(client, db_session, seeded_pape
             [
                 update('patient', patient.id, 'sex', 'woman'),
                 update('patient', patient.id, 'favourite_colour', 'blue'),
-                update('patient', patient.id, 'sex', 'Unknown'),
                 {
                     'entity': 'occurrence',
                     'action': 'create',
@@ -4929,10 +4929,9 @@ def test_chat_edits_are_refused_with_what_to_fix(client, db_session, seeded_pape
     assert problems[0].startswith("sex: 'woman' is not a valid value; one of")
     assert "'Female'" in problems[0]
     assert problems[1].startswith('a individual has no settable field')
-    assert problems[2] == "sex is already 'Unknown'"
-    assert 'already carries c.123A>G' in problems[3]
-    assert 'has not been harmonized yet' in problems[4]
-    assert 'delete all individuals in the family first' in problems[5]
+    assert 'already carries c.123A>G' in problems[2]
+    assert 'has not been harmonized yet' in problems[3]
+    assert 'delete all individuals in the family first' in problems[4]
 
     # A choice in another case is the same choice, stored as the field spells it.
     (edit,) = _prepare(
@@ -4962,6 +4961,51 @@ def test_chat_edits_are_refused_with_what_to_fix(client, db_session, seeded_pape
     )
     assert [c.field for c in edit.changes] == ['age_report']
     assert 'sex' not in edit.payload['request']
+
+
+def test_a_bulk_edit_leaves_out_rows_already_as_asked(client, db_session, seeded_paper):
+    """ "Make every carrier male" where one already is: that individual's
+    edit changes nothing, so it is left out and the reply says so, and the
+    rest are proposed. Alone, an edit that changes nothing is refused."""
+    from lib.api.direct_edits import CuratorWords, EditRequest, propose
+
+    first = _seed_patient(db_session, seeded_paper, identifier='II-1')
+    second = _seed_patient(db_session, seeded_paper, identifier='II-2')
+    already = _seed_patient(db_session, seeded_paper, identifier='II-3')
+    already.sex = 'Male'
+    db_session.commit()
+
+    def to_male(patient):
+        return EditRequest.model_validate(
+            {
+                'entity': 'patient',
+                'action': 'update',
+                'entity_id': patient.id,
+                'values': [{'field': 'sex', 'value': 'Male'}],
+            }
+        )
+
+    words = CuratorWords(said='make every carrier male', note='every carrier male')
+    reply, proposal = propose(
+        db_session,
+        seeded_paper.id,
+        [to_male(first), to_male(second), to_male(already)],
+        {},
+        words,
+    )
+    assert proposal is not None
+    assert [edit.entity_id for edit in proposal.edits] == [first.id, second.id]
+    assert reply.splitlines() == [
+        "Here are the 2 changes I'd make. Review them and confirm to make them all.",
+        'Left out, already as you asked:',
+        "- II-3: sex is already 'Male'",
+    ]
+
+    reply, proposal = propose(
+        db_session, seeded_paper.id, [to_male(already)], {}, words
+    )
+    assert proposal is None
+    assert reply.splitlines()[1] == "- II-3: sex is already 'Male'"
 
 
 def test_chat_deletes_go_through_the_deletion_log(client, db_session, seeded_paper):

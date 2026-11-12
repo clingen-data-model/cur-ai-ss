@@ -168,6 +168,13 @@ class EditProblem(ValueError):
     problem, for the chat model to fix and ask again."""
 
 
+class NoChange(EditProblem):
+    """An update whose every value the row already holds. Alone it is
+    refused, since there is nothing to confirm; beside other edits (a bulk
+    request, "make every carrier male", where some already are) it is left
+    out and the reply says so."""
+
+
 def _values(request: EditRequest) -> dict[str, Value]:
     return {v.field: v.value for v in request.values}
 
@@ -658,7 +665,7 @@ def _prepare_generic(
     }
     if unchanged == checked:
         name, new = next(iter(checked.items()))
-        raise EditProblem(f'{name} is already {_display(new)!r}')
+        raise NoChange(f'{target.label}: {name} is already {_display(new)!r}')
     checked = {name: new for name, new in checked.items() if name not in unchanged}
     harmonized = sorted(set(checked) & spec.harmonized)
     changes = []
@@ -1010,24 +1017,31 @@ def prepare_edits(
     requests: list[EditRequest],
     texts: Mapping[str, str],
     curator: CuratorWords,
-) -> list[ProposedEdit]:
-    """The confirmation card's edits, or EditProblem naming every request
-    that cannot be proposed (numbered from 1, as the model sent them)."""
+) -> tuple[list[ProposedEdit], list[str]]:
+    """The confirmation card's edits, and the updates left out because they
+    would change nothing (one line each). EditProblem names every request
+    that cannot be proposed; an update that changes nothing is one only when
+    nothing at all would change."""
     if not requests:
         raise EditProblem('no edits given')
     edits: list[ProposedEdit] = []
+    unchanged: list[str] = []
     problems: list[str] = []
     for request in requests:
         prepare, _ = EDITORS[request.entity]
         try:
             edits.append(prepare(session, paper_id, request, texts, curator))
+        except NoChange as exc:
+            unchanged.append(str(exc))
         except EditError as exc:
             problems.append(exc.detail)
         except ValueError as exc:  # EditProblem, and pydantic's ValidationError
             problems.append(str(exc))
+    if not edits and not problems:
+        problems = unchanged
     if problems:
         raise EditProblem('\n'.join(f'- {p}' for p in problems))
-    return _settle_cascades(session, edits)
+    return _settle_cascades(session, edits), unchanged
 
 
 def propose(
@@ -1042,7 +1056,7 @@ def propose(
     to the model to fix, but told to the curator, with nothing proposed --
     the model already had its chance to say it could not."""
     try:
-        edits = prepare_edits(session, paper_id, requests, texts, curator)
+        edits, unchanged = prepare_edits(session, paper_id, requests, texts, curator)
     except EditProblem as exc:
         return (
             f"I couldn't propose {'that change' if len(requests) == 1 else 'those changes'}"
@@ -1056,6 +1070,10 @@ def propose(
         else f"Here are the {count} changes I'd make. Review them and confirm "
         'to make them all.'
     )
+    if unchanged:
+        reply += '\nLeft out, already as you asked:\n' + '\n'.join(
+            f'- {line}' for line in unchanged
+        )
     return reply, ChatProposal(request=curator.note, edits=edits)
 
 
