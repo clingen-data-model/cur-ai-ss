@@ -41,7 +41,7 @@ def manual_evidence_block(value: Any) -> dict:
     to point at. The caller must record an edits-table row for every field
     built with this once the row has been flushed and has an id -- that row
     is the only thing marking the field as curator-entered (see record_edits
-    calls in create_patient/create_variant/create_occurrence/create_family/
+    calls in create_individual/create_variant/create_occurrence/create_family/
     create_phenotype)."""
     block = HumanEvidenceBlock[Any](
         value=value,

@@ -1750,7 +1750,7 @@ def _family_to_resp(row: FamilyDB, session: Session) -> FamilyResp:
     return resp
 
 
-def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
+def _individual_to_resp(row: PatientDB, session: Session) -> PatientResp:
     resp = PatientResp(
         id=row.id,
         paper_id=row.paper_id,
@@ -1836,8 +1836,8 @@ def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
     return resp
 
 
-@app.get('/papers/{paper_id}/patients', response_model=list[PatientResp])
-def get_patients(
+@app.get('/papers/{paper_id}/individuals', response_model=list[PatientResp])
+def get_individuals(
     paper_id: int,
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
@@ -1858,7 +1858,7 @@ def get_patients(
         .order_by(PatientDB.id)
         .all()
     )
-    return [_patient_to_resp(p, session) for p in patients]
+    return [_individual_to_resp(p, session) for p in patients]
 
 
 @app.get('/papers/{paper_id}/families', response_model=list[FamilyResp])
@@ -2388,10 +2388,10 @@ def get_variant_occurrences(
 
 
 @app.get(
-    '/papers/{paper_id}/patients/{patient_id}/occurrences',
+    '/papers/{paper_id}/individuals/{patient_id}/occurrences',
     response_model=list[PatientVariantOccurrenceResp],
 )
-def get_patient_occurrences(
+def get_individual_occurrences(
     paper_id: int,
     patient_id: int,
     session: Session = Depends(get_session),
@@ -2653,8 +2653,8 @@ def _patient_variant_occurrence_to_resp(
 # ==============================
 
 
-@app.post('/papers/{paper_id}/patients', response_model=PatientResp)
-def create_patient(
+@app.post('/papers/{paper_id}/individuals', response_model=PatientResp)
+def create_individual(
     paper_id: int,
     create_request: PatientCreateRequest,
     session: Session = Depends(get_session),
@@ -2673,13 +2673,14 @@ def create_patient(
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(patient_db)
-    return _patient_to_resp(patient_db, session)
+    return _individual_to_resp(patient_db, session)
 
 
 @app.delete(
-    '/papers/{paper_id}/patients/{patient_id}', status_code=status.HTTP_204_NO_CONTENT
+    '/papers/{paper_id}/individuals/{patient_id}',
+    status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_patient(
+def delete_individual(
     paper_id: int,
     patient_id: int,
     session: Session = Depends(get_session),
@@ -3116,7 +3117,7 @@ def get_curation_export(
 
 
 @app.get(
-    '/papers/{paper_id}/patients/{patient_id}/phenotypes',
+    '/papers/{paper_id}/individuals/{patient_id}/phenotypes',
     response_model=list[PhenotypeResp],
 )
 def get_phenotypes(
@@ -3150,7 +3151,7 @@ def get_phenotypes(
 
 
 @app.post(
-    '/papers/{paper_id}/patients/{patient_id}/phenotypes',
+    '/papers/{paper_id}/individuals/{patient_id}/phenotypes',
     response_model=PhenotypeResp,
 )
 def create_phenotype(
@@ -3242,8 +3243,8 @@ def search_hpo_terms(
     return find_matching_hpo_terms(text, limit=limit)
 
 
-@app.patch('/papers/{paper_id}/patients/{patient_id}', response_model=PatientResp)
-def update_patient(
+@app.patch('/papers/{paper_id}/individuals/{patient_id}', response_model=PatientResp)
+def update_individual(
     paper_id: int,
     patient_id: int,
     patch_request: PatientUpdateRequest,
@@ -3262,7 +3263,7 @@ def update_patient(
         )
     patch_request.apply_to(patient_db, current_user, session)
     _touch_paper(session, paper_id, current_user)
-    return _patient_to_resp(patient_db, session)
+    return _individual_to_resp(patient_db, session)
 
 
 @app.get('/genes/search', response_model=list[GeneResp])

@@ -15,8 +15,8 @@ from lib.models.phenotype import PhenotypeExtractionOutput
 from lib.models.variant import VariantExtractionOutput
 from lib.tasks.flags import (
     flags_of,
+    individual_labels,
     match_label,
-    patient_labels,
     replace_flags,
     split_pair,
 )
@@ -259,7 +259,7 @@ def test_a_flag_names_a_patient_by_family_then_identifier():
     """Two families each have a II-1 once the family is out of the identifier,
     so a flag's about carries both, and the bare identifier resolves to nothing
     rather than to the wrong person."""
-    labels = patient_labels(
+    labels = individual_labels(
         [('Family 1', 'II-1', 1), ('Family 2', 'II-1', 2), ('Family 2', 'P4', 3)]
     )
     assert match_label('Family 2 II-1', labels) == 2

@@ -58,7 +58,6 @@ from lib.api.entity_edits import (
 )
 from lib.api.phenotype_edits import (
     add_phenotype,
-    find_patient,
     find_phenotype,
     remove_phenotype,
 )
@@ -116,7 +115,7 @@ from lib.models.variant import (
     VariantType,
     VariantUpdateRequest,
 )
-from lib.tasks.flags import patient_label
+from lib.tasks.flags import individual_label
 
 Value = str | int | bool | list[str] | None
 
@@ -186,7 +185,7 @@ def _label(patient: PatientDB) -> str:
     family = patient.family.identifier
     if family == patient.identifier:
         return patient.identifier
-    return patient_label(family, patient.identifier)
+    return individual_label(family, patient.identifier)
 
 
 def _norm(text: str) -> str:
@@ -834,7 +833,7 @@ def _prepare_phenotype(
     if request.action is EditAction.CREATE:
         if request.parent_id is None:
             raise EditProblem('a new phenotype needs parent_id, the individual')
-        patient = find_patient(session, paper_id, request.parent_id)
+        patient = find_individual(session, paper_id, request.parent_id)
         unknown = set(values) - {'concept'}
         if unknown:
             raise EditProblem(

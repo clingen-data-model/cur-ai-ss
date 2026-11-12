@@ -4,7 +4,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { updatePatientPapersPaperIdPatientsPatientIdPatch } from '@/api/generated'
+import { updateIndividualPapersPaperIdIndividualsPatientIdPatch } from '@/api/generated'
 import {
   AffectedStatus,
   AgeUnit,
@@ -30,7 +30,7 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
   const mutation = useMutation({
     mutationKey: ['paper-edit', paperId],
     mutationFn: (body: PatientUpdateRequest) =>
-      updatePatientPapersPaperIdPatientsPatientIdPatch({
+      updateIndividualPapersPaperIdIndividualsPatientIdPatch({
         path: { paper_id: paperId, patient_id: patient.id },
         body,
         throwOnError: true,

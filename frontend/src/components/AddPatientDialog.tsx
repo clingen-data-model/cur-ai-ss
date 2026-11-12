@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import {
   createFamilyPapersPaperIdFamiliesPost,
-  createPatientPapersPaperIdPatientsPost,
+  createIndividualPapersPaperIdIndividualsPost,
   getFamiliesPapersPaperIdFamiliesGet,
 } from '@/api/generated'
 import { Button } from '@/components/ui/button'
@@ -72,7 +72,7 @@ export function AddPatientDialog({ paperId }: { paperId: number }) {
         familyId = Number(effectiveFamilyChoice)
       }
 
-      return createPatientPapersPaperIdPatientsPost({
+      return createIndividualPapersPaperIdIndividualsPost({
         path: { paper_id: paperId },
         body: {
           family_id: familyId,

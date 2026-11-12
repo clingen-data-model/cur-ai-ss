@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { UserPlus } from 'lucide-react'
 import { TaskType } from '@/api/generated/types.gen'
 import type { PatientResp, TaskResp } from '@/api/generated/types.gen'
-import { deletePatientPapersPaperIdPatientsPatientIdDelete } from '@/api/generated'
+import { deleteIndividualPapersPaperIdIndividualsPatientIdDelete } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
@@ -54,7 +54,7 @@ export function UnassociatedPatientsTab({
 
   const deleteMutation = useMutation({
     mutationFn: (patientId: number) =>
-      deletePatientPapersPaperIdPatientsPatientIdDelete({
+      deleteIndividualPapersPaperIdIndividualsPatientIdDelete({
         path: { paper_id: paperId, patient_id: patientId },
         throwOnError: true,
       }),

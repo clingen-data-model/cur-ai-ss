@@ -205,8 +205,8 @@ from lib.tasks.extraction_verification import (
 )
 from lib.tasks.flags import (
     flags_of,
+    individual_labels,
     match_label,
-    patient_labels,
     replace_flags,
     split_pair,
 )
@@ -962,9 +962,9 @@ async def handle_individual_extraction(task_id: int) -> None:
             inserted.append(
                 (family_id_value, patient_info.identifier.value, db_patient.id)
             )
-        patient_label_ids = patient_labels(inserted)
+        patient_label_ids = individual_labels(inserted)
 
-        def resolve_patient_or_family(about: str) -> dict[str, int]:
+        def resolve_individual_or_family(about: str) -> dict[str, int]:
             patient_id = match_label(about, patient_label_ids)
             if patient_id is not None:
                 return {'patient_id': patient_id}
@@ -976,7 +976,7 @@ async def handle_individual_extraction(task_id: int) -> None:
             paper_id=paper_id,
             source=TaskType.INDIVIDUAL_EXTRACTION.name,
             flags=parsed.flags,
-            resolve=resolve_patient_or_family,
+            resolve=resolve_individual_or_family,
         )
 
 
@@ -1688,14 +1688,14 @@ async def handle_individual_variant_occurrence(task_id: int) -> None:
                 paper.disease_name = parsed.disease_name.value
                 paper.disease_name_evidence = parsed.disease_name.model_dump()
 
-        patient_label_ids = patient_labels(
+        patient_label_ids = individual_labels(
             (p['family'], p['identifier'], p['patient_id']) for p in structured_patients
         )
         variant_labels = [
             (v['variant_quote'], v['variant_id']) for v in structured_variants
         ]
 
-        def resolve_patient_or_variant(about: str) -> dict[str, int]:
+        def resolve_individual_or_variant(about: str) -> dict[str, int]:
             # "patient / variant" names a pair and links the occurrence row
             # just written for it. A patient alone links that patient's
             # only link when there is exactly one (the agent writes the
@@ -1733,7 +1733,7 @@ async def handle_individual_variant_occurrence(task_id: int) -> None:
             paper_id=paper_id,
             source=TaskType.INDIVIDUAL_VARIANT_OCCURRENCES.name,
             flags=parsed.flags,
-            resolve=resolve_patient_or_variant,
+            resolve=resolve_individual_or_variant,
         )
 
 

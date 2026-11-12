@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from lib.api.entity_edits import EditError
+from lib.api.entity_edits import EditError, find_individual
 from lib.models import HpoDB, PatientDB, PhenotypeDB
 from lib.models.base import manual_evidence_block
 from lib.models.deletion_log import record_deletion
@@ -29,17 +29,6 @@ def hpo_name(hpo_id: str) -> str:
     if name is None:
         raise EditError(400, f'Unknown HPO id: {hpo_id}')
     return name
-
-
-def find_patient(session: Session, paper_id: int, patient_id: int) -> PatientDB:
-    patient = (
-        session.query(PatientDB)
-        .filter(PatientDB.id == patient_id, PatientDB.paper_id == paper_id)
-        .one_or_none()
-    )
-    if patient is None:
-        raise EditError(404, 'Individual not found')
-    return patient
 
 
 def find_phenotype(session: Session, paper_id: int, phenotype_id: int) -> PhenotypeDB:
@@ -68,7 +57,7 @@ def add_phenotype(
     """Add a phenotype row, linked to ``hpo_id`` when given. ``evidence`` is
     the concept's evidence block; a plain manual block when omitted (the
     form has no citation to give)."""
-    find_patient(session, paper_id, patient_id)
+    find_individual(session, paper_id, patient_id)
     name = hpo_name(hpo_id) if hpo_id is not None else None
 
     phenotype = PhenotypeDB(

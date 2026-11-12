@@ -29,7 +29,7 @@ from lib.models.patient import PatientDB
 from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
 from lib.models.phenotype import PhenotypeDB
 from lib.models.variant import VariantDB
-from lib.tasks.flags import patient_label
+from lib.tasks.flags import individual_label
 from lib.tasks.handlers import (
     QA_UNSUPPORTED_TASK_TYPES,
     ask_task_agent,
@@ -176,8 +176,8 @@ def _make_list_entities_tool(paper_id: int) -> Any:
                 .all()
             )
 
-            def patient_name(patient: PatientDB) -> str:
-                return patient_label(patient.family.identifier, patient.identifier)
+            def individual_name(patient: PatientDB) -> str:
+                return individual_label(patient.family.identifier, patient.identifier)
 
             def variant_entry(variant: VariantDB) -> dict:
                 entry = {'label': variant_text(variant), **_record(variant)}
@@ -193,12 +193,12 @@ def _make_list_entities_tool(paper_id: int) -> Any:
                         {'label': f.identifier, **_record(f)} for f in families
                     ],
                     'patients': [
-                        {'label': patient_name(p), **_record(p)} for p in patients
+                        {'label': individual_name(p), **_record(p)} for p in patients
                     ],
                     'variants': [variant_entry(v) for v in variants],
                     'occurrences': [
                         {
-                            'label': f'{patient_name(o.patient)}: '
+                            'label': f'{individual_name(o.patient)}: '
                             f'{variant_text(o.variant)}',
                             **_record(o),
                         }
@@ -207,7 +207,7 @@ def _make_list_entities_tool(paper_id: int) -> Any:
                     'phenotypes': [
                         {
                             'label': ph.concept,
-                            'individual': patient_name(ph.patient),
+                            'individual': individual_name(ph.patient),
                             **_record(ph),
                             'hpo_id': ph.hpo.hpo_id if ph.hpo else None,
                             'hpo_name': ph.hpo.hpo_name if ph.hpo else None,

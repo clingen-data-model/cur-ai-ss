@@ -545,7 +545,7 @@ def seeded_paper(db_session):
 
 
 def test_get_patients_empty(client, seeded_paper):
-    response = client.get(f'/papers/{seeded_paper.id}/patients')
+    response = client.get(f'/papers/{seeded_paper.id}/individuals')
     assert response.status_code == 200
     assert response.json() == []
 
@@ -624,7 +624,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     )
     db_session.flush()
 
-    response = client.get(f'/papers/{seeded_paper.id}/patients')
+    response = client.get(f'/papers/{seeded_paper.id}/individuals')
     assert response.status_code == 200
     patients = response.json()
     assert len(patients) == 3
@@ -635,7 +635,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
 
 
 def test_get_patients_paper_not_found(client):
-    response = client.get('/papers/999/patients')
+    response = client.get('/papers/999/individuals')
     assert response.status_code == 404
     assert response.json()['detail'] == 'Paper not found'
 
@@ -707,7 +707,7 @@ def test_get_patients_returns_stored_citations(client, db_session, seeded_paper)
     )
     db_session.flush()
 
-    patient = client.get(f'/papers/{seeded_paper.id}/patients').json()[0]
+    patient = client.get(f'/papers/{seeded_paper.id}/individuals').json()[0]
 
     assert patient['sex_evidence']['citations'] == [
         {'anchor': 'table-1-row-2', 'quote': 'F'}
@@ -734,7 +734,7 @@ def test_update_patient_with_human_edit_note(
 
     # Update patient with evidence notes
     response = client.patch(
-        f'/papers/{seeded_paper.id}/patients/{patient_id}',
+        f'/papers/{seeded_paper.id}/individuals/{patient_id}',
         json={
             'identifier_human_edit_note': 'This is a human note about identifier',
             'proband_status_human_edit_note': 'Proband confirmed by clinician',
@@ -784,7 +784,7 @@ def test_patient_field_edit_history_is_append_only_and_cascades_on_delete(
 
     for note in ('First note', 'Second note'):
         response = client.patch(
-            f'/papers/{seeded_paper.id}/patients/{patient_id}',
+            f'/papers/{seeded_paper.id}/individuals/{patient_id}',
             json={'identifier_human_edit_note': note},
         )
         assert response.status_code == 200
@@ -801,7 +801,7 @@ def test_patient_field_edit_history_is_append_only_and_cascades_on_delete(
     )
     assert len(edit_rows) == 2, 'each patch should append, not overwrite, a row'
 
-    response = client.delete(f'/papers/{seeded_paper.id}/patients/{patient_id}')
+    response = client.delete(f'/papers/{seeded_paper.id}/individuals/{patient_id}')
     assert response.status_code == 204
     remaining = db_session.query(EditDB).filter(EditDB.patient_id == patient_id).count()
     assert remaining == 0, 'deleting the patient should cascade its edit history away'
@@ -825,7 +825,7 @@ def test_edited_by_reflects_current_deactivation_state(
     patient_id = patient.id
 
     response = client.patch(
-        f'/papers/{seeded_paper.id}/patients/{patient_id}',
+        f'/papers/{seeded_paper.id}/individuals/{patient_id}',
         json={'identifier_human_edit_note': 'A note'},
     )
     assert response.status_code == 200
@@ -834,7 +834,7 @@ def test_edited_by_reflects_current_deactivation_state(
     test_user.is_active = False
     db_session.flush()
 
-    response = client.get(f'/papers/{seeded_paper.id}/patients')
+    response = client.get(f'/papers/{seeded_paper.id}/individuals')
     patient_resp = next(p for p in response.json() if p['id'] == patient_id)
     evidence = patient_resp['identifier_evidence']
     assert evidence['edited_by_name'] == 'Test User'
@@ -872,7 +872,7 @@ def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_pap
     db_session.flush()
 
     response = client.patch(
-        f'/papers/{seeded_paper.id}/patients/{patient.id}',
+        f'/papers/{seeded_paper.id}/individuals/{patient.id}',
         json={'identifier': 'Wrongly scoped edit'},
     )
 
@@ -2269,7 +2269,7 @@ def test_create_patient(client, db_session, seeded_paper, test_user):
     )
 
     resp = client.post(
-        f'/papers/{seeded_paper.id}/patients',
+        f'/papers/{seeded_paper.id}/individuals',
         json=_patient_create_body(family.id),
     )
     assert resp.status_code == 200
@@ -2281,7 +2281,7 @@ def test_create_patient(client, db_session, seeded_paper, test_user):
     assert body['identifier_evidence']['edited_by_user_id'] == test_user.id
 
     resp = client.post(
-        f'/papers/{seeded_paper.id}/patients',
+        f'/papers/{seeded_paper.id}/individuals',
         json=_patient_create_body(999999),
     )
     assert resp.status_code == 404
@@ -2385,7 +2385,7 @@ def test_delete_patient(client, db_session, seeded_paper, test_user):
     db_session.commit()
     patient_id = patient.id
 
-    resp = client.delete(f'/papers/{seeded_paper.id}/patients/{patient_id}')
+    resp = client.delete(f'/papers/{seeded_paper.id}/individuals/{patient_id}')
     assert resp.status_code == 204
     assert db_session.get(PatientDB, patient_id) is None
 
@@ -2401,7 +2401,7 @@ def test_delete_patient(client, db_session, seeded_paper, test_user):
     assert log_entry.identifier_snapshot == 'Deletable'
     assert log_entry.deleted_by_user_id == test_user.id
 
-    resp = client.delete(f'/papers/{seeded_paper.id}/patients/999999')
+    resp = client.delete(f'/papers/{seeded_paper.id}/individuals/999999')
     assert resp.status_code == 404
 
 
@@ -2425,7 +2425,7 @@ def test_delete_family(client, db_session, seeded_paper, test_user):
     assert 'delete all individuals in the family first' in resp.json()['detail']
     assert db_session.get(FamilyDB, family_id) is not None
 
-    client.delete(f'/papers/{seeded_paper.id}/patients/{patient.id}')
+    client.delete(f'/papers/{seeded_paper.id}/individuals/{patient.id}')
     resp = client.delete(f'/papers/{seeded_paper.id}/families/{family_id}')
     assert resp.status_code == 204
     db_session.expire_all()
@@ -2723,7 +2723,7 @@ def test_patch_patient_records_updated_by(client, db_session, seeded_paper, test
     db_session.flush()
 
     resp = client.patch(
-        f'/papers/{seeded_paper.id}/patients/{patient.id}',
+        f'/papers/{seeded_paper.id}/individuals/{patient.id}',
         json={'identifier': 'P1-edited'},
     )
     assert resp.status_code == 200
@@ -3142,7 +3142,7 @@ def test_create_phenotype(client, db_session, seeded_paper):
     patient = _seed_patient(db_session, seeded_paper)
 
     resp = client.post(
-        f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+        f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes',
         json={'concept': 'Seizures'},
     )
     assert resp.status_code == 200
@@ -3163,13 +3163,13 @@ def test_create_phenotype(client, db_session, seeded_paper):
     }
 
     resp = client.post(
-        f'/papers/{seeded_paper.id}/patients/999999/phenotypes',
+        f'/papers/{seeded_paper.id}/individuals/999999/phenotypes',
         json={'concept': 'Seizures'},
     )
     assert resp.status_code == 404
 
     resp = client.post(
-        '/papers/999999/patients/1/phenotypes',
+        '/papers/999999/individuals/1/phenotypes',
         json={'concept': 'Seizures'},
     )
     assert resp.status_code == 404
@@ -3181,7 +3181,7 @@ def test_create_phenotype_with_hpo_id(client, db_session, seeded_paper):
 
     with patch('lib.api.phenotype_edits.get_ontology', return_value=ontology):
         resp = client.post(
-            f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+            f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes',
             json={'concept': 'Seizures', 'hpo_id': 'HP:0001250'},
         )
         assert resp.status_code == 200
@@ -3191,7 +3191,7 @@ def test_create_phenotype_with_hpo_id(client, db_session, seeded_paper):
         assert body['hpo']['edited_by_name'] == 'Test User'
 
         resp = client.post(
-            f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+            f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes',
             json={'concept': 'Seizures', 'hpo_id': 'HP:9999999'},
         )
         assert resp.status_code == 400
@@ -3254,7 +3254,7 @@ def test_create_phenotype_records_edit_history(client, db_session, seeded_paper)
     patient = _seed_patient(db_session, seeded_paper, 'Edit History Patient')
 
     resp = client.post(
-        f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+        f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes',
         json={'concept': 'Seizures'},
     )
     assert resp.status_code == 200
@@ -3265,7 +3265,7 @@ def test_create_phenotype_records_edit_history(client, db_session, seeded_paper)
     ontology = _fake_ontology({'HP:0001250': 'Seizure'})
     with patch('lib.api.phenotype_edits.get_ontology', return_value=ontology):
         resp = client.post(
-            f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+            f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes',
             json={'concept': 'Ataxia', 'hpo_id': 'HP:0001250'},
         )
     assert resp.status_code == 200
@@ -3349,7 +3349,7 @@ def test_deleting_hpo_link_cascades_its_edit_history(client, db_session, seeded_
     db_session.commit()
 
     assert db_session.query(EditDB).filter(EditDB.hpo_link_id == hpo_id).count() == 0
-    resp = client.get(f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes')
+    resp = client.get(f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes')
     [body] = resp.json()
     assert body['hpo']['edited_at'] is None
 
@@ -3372,7 +3372,7 @@ def test_extracted_hpo_link_has_no_curator_attribution(
     db_session.add(phenotype)
     db_session.commit()
 
-    resp = client.get(f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes')
+    resp = client.get(f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes')
     assert resp.status_code == 200
     [body] = resp.json()
     assert body['hpo']['edited_at'] is None
@@ -4158,7 +4158,7 @@ def test_deleting_a_patient_drops_the_flag_about_them(client, db_session, seeded
     _seed_flag(db_session, seeded_paper, subject='about P1', patient_id=patient.id)
     _seed_flag(db_session, seeded_paper, subject='about nobody')
 
-    resp = client.delete(f'/papers/{seeded_paper.id}/patients/{patient.id}')
+    resp = client.delete(f'/papers/{seeded_paper.id}/individuals/{patient.id}')
     assert resp.status_code == 204
     db_session.expire_all()
     rows = client.get(f'/papers/{seeded_paper.id}/flags').json()
@@ -4357,7 +4357,7 @@ def test_patient_ancestry_round_trips_through_create_and_patch(
     clearing it writes None."""
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     response = client.post(
-        f'/papers/{seeded_paper.id}/patients',
+        f'/papers/{seeded_paper.id}/individuals',
         json={
             'family_id': family.id,
             'identifier': 'P9',
@@ -4377,7 +4377,7 @@ def test_patient_ancestry_round_trips_through_create_and_patch(
     patient_id = created['id']
 
     response = client.patch(
-        f'/papers/{seeded_paper.id}/patients/{patient_id}',
+        f'/papers/{seeded_paper.id}/individuals/{patient_id}',
         json={'ancestry': 'Ashkenazi Jewish', 'ancestry_human_edit_note': 'per text'},
     )
     assert response.status_code == 200, response.text
@@ -4386,7 +4386,7 @@ def test_patient_ancestry_round_trips_through_create_and_patch(
     assert patched['ancestry_evidence']['human_edit_note'] == 'per text'
 
     response = client.patch(
-        f'/papers/{seeded_paper.id}/patients/{patient_id}', json={'ancestry': None}
+        f'/papers/{seeded_paper.id}/individuals/{patient_id}', json={'ancestry': None}
     )
     assert response.status_code == 200, response.text
     assert response.json()['ancestry'] is None
@@ -4403,7 +4403,7 @@ def test_patient_onset_round_trips_through_create_and_patch(
         'age_onset_unit': 'Months',
         'onset_category': 'Infantile',
     }
-    response = client.post(f'/papers/{seeded_paper.id}/patients', json=body)
+    response = client.post(f'/papers/{seeded_paper.id}/individuals', json=body)
     assert response.status_code == 200, response.text
     created = response.json()
     assert (created['age_onset'], created['age_onset_unit']) == (3, 'Months')
@@ -4412,7 +4412,7 @@ def test_patient_onset_round_trips_through_create_and_patch(
     patient_id = created['id']
 
     response = client.patch(
-        f'/papers/{seeded_paper.id}/patients/{patient_id}',
+        f'/papers/{seeded_paper.id}/individuals/{patient_id}',
         json={
             'age_onset': 7,
             'age_onset_unit': 'Years',
@@ -4427,7 +4427,7 @@ def test_patient_onset_round_trips_through_create_and_patch(
     assert patched['onset_category'] == 'Juvenile'
 
     response = client.post(
-        f'/papers/{seeded_paper.id}/patients',
+        f'/papers/{seeded_paper.id}/individuals',
         json=_patient_create_body(family.id, 'P7'),
     )
     assert response.status_code == 200, response.text
@@ -5254,7 +5254,7 @@ def test_a_proposal_overtaken_by_another_edit_is_refused(
     )
     assert (
         client.patch(
-            f'/papers/{seeded_paper.id}/patients/{patient.id}',
+            f'/papers/{seeded_paper.id}/individuals/{patient.id}',
             json={'sex': 'Male', 'sex_human_edit_note': 'checked the pedigree'},
         ).status_code
         == 200
@@ -5290,7 +5290,7 @@ def test_a_phenotype_already_there_is_left_out_beside_other_edits(
 
     patient = _seed_patient(db_session, seeded_paper, identifier='II-1')
     client.post(
-        f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+        f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes',
         json={'concept': 'Seizures'},
     )
     db_session.commit()
