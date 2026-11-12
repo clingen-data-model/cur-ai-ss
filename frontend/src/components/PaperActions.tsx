@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { RefreshCw, Trash2 } from 'lucide-react'
+import { ExternalLink, RefreshCw, Trash2 } from 'lucide-react'
 import {
   createTaskPapersPaperIdTasksPost,
   deletePaperPapersPaperIdDelete,
@@ -144,6 +144,22 @@ function RerunTaskDialog({
             <h2 className="text-base font-semibold">Rerun Agent</h2>
             <p className="text-sm text-muted-foreground mt-0.5">{paper.title ?? paper.filename}</p>
           </div>
+          {/* The pipeline drawing (made from the task graph with the Excalidraw
+           * generator): every step, what each hands the next, and when to step
+           * in. Opened full size in its own tab, where it can be zoomed. */}
+          <p className="text-xs text-muted-foreground">
+            Understanding the inner workings of the tool is optional, but it may help you use it
+            effectively!{' '}
+            <a
+              href={`${import.meta.env.BASE_URL}pipeline-steps.svg`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-0.5 font-medium text-primary underline-offset-2 hover:underline"
+            >
+              See how the steps fit together
+              <ExternalLink className="size-3" />
+            </a>
+          </p>
           <Tabs value={tab} onValueChange={(v) => setTab(v as RerunTab)}>
             <TabsList className="w-full">
               <TabsTrigger value="single">Single task</TabsTrigger>
@@ -227,7 +243,7 @@ function RerunTaskDialog({
                 </label>
                 <p className="text-xs text-muted-foreground">
                   Rebuilds the text, tables and images the agents cite. Off, the run starts at
-                  Paper Classifier and uses the parse already on disk.
+                  "{taskLabel('Paper Classifier')}" and uses the parse already on disk.
                 </p>
               </div>
               <QuickRunCheckbox checked={budgetModel} onChange={setBudgetModel} />
