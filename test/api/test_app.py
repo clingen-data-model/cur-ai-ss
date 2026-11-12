@@ -4893,6 +4893,15 @@ def test_chat_edits_are_refused_with_what_to_fix(client, db_session, seeded_pape
     assert 'has not been harmonized yet' in problems[4]
     assert 'delete all individuals in the family first' in problems[5]
 
+    # A choice in another case is the same choice, stored as the field spells it.
+    (edit,) = _prepare(
+        db_session,
+        seeded_paper.id,
+        [update('patient', patient.id, 'sex', 'female')],
+        'they are female',
+    )
+    assert edit.payload['request']['sex'] == 'Female'
+
     # A value restated alongside a real change is left out, not refused.
     (edit,) = _prepare(
         db_session,
