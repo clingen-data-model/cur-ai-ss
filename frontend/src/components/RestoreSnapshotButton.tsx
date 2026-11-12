@@ -31,13 +31,20 @@ import { paperBusyMessage } from '@/lib/taskState'
 import type { PaperResp, SnapshotMeta } from '@/api/generated/types.gen'
 
 
+// "Nov 11, 2026, 6:10 PM", in the curator's own time zone.
+const SNAPSHOT_TIME = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+
+/** A snapshot as a curator reads it: when, what it was taken for ("Before
+ * re-run: Finding variants"), and whether the paper matches it now. Not the
+ * file name, and not the model, which the UI never names. */
 function formatSnapshotLabel(snapshot: SnapshotMeta): string {
-  const created = new Date(snapshot.created_at)
-  const parts = [`${created.toISOString().slice(0, 16).replace('T', ' ')} UTC`]
+  const parts = [SNAPSHOT_TIME.format(new Date(snapshot.created_at))]
   if (snapshot.description) parts.push(snapshot.description)
-  if (snapshot.model) parts.push(snapshot.model)
-  if (snapshot.matches_current) parts.push('current state')
-  return parts.join(' — ')
+  if (snapshot.matches_current) parts.push('current')
+  return parts.join(' · ')
 }
 
 function RestoreSnapshotDialog({
@@ -136,7 +143,14 @@ function RestoreSnapshotDialog({
                 <label className="text-sm font-medium">Restore snapshot</label>
                 <Select value={chosenName ?? undefined} onValueChange={setSelectedName}>
                   <SelectTrigger className="w-full">
-                    <SelectValue />
+                    {/* Base UI shows the raw value (the file name) unless told
+                        how to name it. */}
+                    <SelectValue>
+                      {(name: string | null) => {
+                        const snapshot = snapshots.find((x) => x.name === name)
+                        return snapshot ? formatSnapshotLabel(snapshot) : null
+                      }}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
                     {snapshots.map((s) => (
