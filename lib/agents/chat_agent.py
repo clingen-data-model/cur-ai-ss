@@ -55,14 +55,19 @@ _NOT_CHAT_RUNNABLE = {
     TaskType.VARIANT_ANNOTATION,
 }
 _RUNNABLE_TASK_TYPES = [t for t in TaskType if t not in _NOT_CHAT_RUNNABLE]
+# Each step as task_type takes it, then the name curators know it by (the
+# timeline and Rerun dialog show TaskType.label), so "re-run finding
+# variants" resolves as readily as "re-run Variant Extraction".
 _RUNNABLE_TASK_TYPE_LIST = '\n'.join(
-    f'- "{t.value}": {t.description}' for t in _RUNNABLE_TASK_TYPES
+    f'- "{t.value}" (shown to curators as "{t.label}"): {t.description}'
+    for t in _RUNNABLE_TASK_TYPES
 )
 
 # Task types ask_task_agent can actually consult -- see QA_UNSUPPORTED_TASK_TYPES.
 _ASKABLE_TASK_TYPES = [t for t in TaskType if t not in QA_UNSUPPORTED_TASK_TYPES]
 _ASKABLE_TASK_TYPE_LIST = '\n'.join(
-    f'- "{t.value}": {t.description}' for t in _ASKABLE_TASK_TYPES
+    f'- "{t.value}" (shown to curators as "{t.label}"): {t.description}'
+    for t in _ASKABLE_TASK_TYPES
 )
 
 
@@ -243,7 +248,7 @@ def _make_ask_extraction_agent_tool(paper_id: int) -> Any:
         Returns the agent's answer, or a message explaining why none is
         available (step hasn't run yet, or has no conversation to consult)."""
         if task_type in QA_UNSUPPORTED_TASK_TYPES:
-            return f'"{task_type.value}" has no agent conversation to consult.'
+            return f'"{task_type.label}" has no agent conversation to consult.'
 
         with session_scope() as session:
             task = (
@@ -261,7 +266,7 @@ def _make_ask_extraction_agent_tool(paper_id: int) -> Any:
                 .first()
             )
             if task is None:
-                return f'No "{task_type.value}" task found for that scope.'
+                return f'No "{task_type.label}" step found for that scope.'
             task_id = task.id
 
         return await ask_task_agent(task_id, task_type, paper_id, question)
@@ -314,7 +319,7 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
             # handlers delete-and-recreate rows, which would otherwise
             # silently discard any manual edit made since the last snapshot.
             write_snapshot_safe(
-                session, paper_id, description=f'Before re-running {task_type.value}'
+                session, paper_id, description=f'Before re-run: {task_type.label}'
             )
 
             notify_on_next_completion(session, paper_id, user_id)
@@ -353,7 +358,7 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
                 # Already in flight; enqueue_task left it unchanged, so any new
                 # guidance was not applied -- don't claim it was.
                 confirmation = (
-                    f'The "{task_type}" task{target} is already in progress. '
+                    f'"{task_type.label}"{target} is already in progress. '
                     f'Results will appear on the paper page when it finishes.'
                 )
             else:
@@ -363,7 +368,7 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
                     else ''
                 )
                 confirmation = (
-                    f'Queued the "{task_type}" task{target}{guidance}. It will '
+                    f'Queued "{task_type.label}"{target}{guidance}. It will '
                     f'run shortly and results will appear on the paper page.'
                 )
         ctx.context.confirmation = confirmation
@@ -419,7 +424,10 @@ extraction/analysis step (e.g. "re-run variant extraction", "redo phenotype
 extraction for patient III-2"), this is an ACTION even when the message also
 contains extra guidance -- a phrase like "re-run X but treat Y" is one action
 with Y as additional_context, not a separate question.
-  - Pick a task_type. It MUST be one of these runnable types:
+  - Pick a task_type. It MUST be one of these runnable types, given as the
+    value in quotes; curators may name a step either way, so match their
+    words against both names. When you name a step to the curator, use the
+    name they are shown:
 {_RUNNABLE_TASK_TYPE_LIST}
   - If the request clearly targets one entity (a patient/family label, or any
     variant identifier), call list_paper_entities and match the user's words

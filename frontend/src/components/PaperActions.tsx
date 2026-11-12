@@ -154,7 +154,8 @@ function RerunTaskDialog({
                 <label className="text-sm font-medium">Task</label>
                 <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)}>
                   <SelectTrigger className="w-full">
-                    <SelectValue />
+                    {/* Base UI shows the raw value unless told how to name it. */}
+                    <SelectValue>{(value: string | null) => (value ? taskLabel(value) : null)}</SelectValue>
                   </SelectTrigger>
                   {/* Not aligned to the trigger: with the selected item pinned over
                       it, a short scrolling list floated up over the dialog and

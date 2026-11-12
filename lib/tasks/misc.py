@@ -220,7 +220,7 @@ def paper_busy_message(session: Session, paper_id: int, action: str) -> str | No
         return None
     total = sum(counts.values())
     in_flight = ', '.join(
-        f'{task_type.value} ×{n}' if n > 1 else task_type.value
+        f'{task_type.label} ×{n}' if n > 1 else task_type.label
         for task_type, n in counts.most_common()
     )
     return (

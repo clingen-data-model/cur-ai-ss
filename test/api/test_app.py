@@ -1784,7 +1784,7 @@ def test_send_chat_message_holds_no_write_lock_while_the_agent_runs(
             json={'message': 're-run variant extraction'},
         )
     assert response.status_code == 200
-    assert captured['reply'].startswith('Queued the "Variant Extraction" task')
+    assert captured['reply'].startswith('Queued "Finding variants"')
     assert response.json()['content'] == captured['reply']
 
     db_session.expire_all()
@@ -3972,7 +3972,7 @@ def test_create_task_refused_while_paper_has_tasks_in_flight(
 
     assert resp.status_code == 409
     assert resp.json()['detail'] == (
-        '1 task still pending or running (HPO Linking). '
+        '1 task still pending or running (Matching phenotypes to HPO terms). '
         'Wait for it to finish before re-running.'
     )
     # Refused before the pre-rerun snapshot: a mid-run snapshot is the thing
@@ -4028,7 +4028,7 @@ def test_chat_queue_task_refused_while_paper_has_tasks_in_flight(
         )
 
     assert reply == (
-        '1 task still pending or running (HPO Linking). '
+        '1 task still pending or running (Matching phenotypes to HPO terms). '
         'Wait for it to finish before re-running.'
     )
     assert run_context.confirmation is None
@@ -5264,3 +5264,61 @@ def test_a_proposal_overtaken_by_another_edit_is_refused(
     assert 'IV:3 Sex is now Male, not Unknown' in resp.json()['detail']
     db_session.expire_all()
     assert db_session.get(PatientDB, patient.id).sex == 'Male'
+
+
+def test_chat_knows_each_step_by_the_name_curators_see():
+    """Curators see a step's label (the timeline, the Rerun dialog), so the
+    chat is given it beside the value task_type takes."""
+    from lib.agents.chat_agent import CHAT_AGENT_INSTRUCTIONS
+
+    assert (
+        '"Variant Extraction" (shown to curators as "Finding variants")'
+        in CHAT_AGENT_INSTRUCTIONS
+    )
+    assert '(shown to curators as "Matching phenotypes to HPO terms")' in (
+        CHAT_AGENT_INSTRUCTIONS
+    )
+
+
+def test_a_phenotype_already_there_is_left_out_beside_other_edits(
+    client, db_session, seeded_paper
+):
+    """Adding a phenotype the individual already has is already as asked: it
+    is left out of a proposal with other edits, as an unchanged value is,
+    and refused only on its own."""
+    from lib.api.direct_edits import CuratorWords, EditRequest, propose
+
+    patient = _seed_patient(db_session, seeded_paper, identifier='II-1')
+    client.post(
+        f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+        json={'concept': 'Seizures'},
+    )
+    db_session.commit()
+    add_seizures = EditRequest.model_validate(
+        {
+            'entity': 'phenotype',
+            'action': 'create',
+            'parent_id': patient.id,
+            'values': [{'field': 'concept', 'value': 'seizures'}],
+        }
+    )
+    to_male = EditRequest.model_validate(
+        {
+            'entity': 'patient',
+            'action': 'update',
+            'entity_id': patient.id,
+            'values': [{'field': 'sex', 'value': 'Male'}],
+        }
+    )
+    words = CuratorWords(said='II-1 is male and has seizures', note='II-1')
+
+    reply, proposal = propose(
+        db_session, seeded_paper.id, [to_male, add_seizures], {}, words
+    )
+    assert proposal is not None
+    assert [edit.entity for edit in proposal.edits] == ['patient']
+    assert reply.splitlines()[-1] == '- Family 1 II-1 already has "seizures"'
+
+    reply, proposal = propose(db_session, seeded_paper.id, [add_seizures], {}, words)
+    assert proposal is None
+    assert 'already has "seizures"' in reply

@@ -440,7 +440,7 @@ def _snapshot_description(
         for column, label in _SCOPE_LABELS
         if getattr(root, column) is not None
     )
-    return f'{root.type.value} re-run' + (f' ({scope})' if scope else '')
+    return f'Re-run: {root.type.label}' + (f' ({scope})' if scope else '')
 
 
 def write_snapshot(

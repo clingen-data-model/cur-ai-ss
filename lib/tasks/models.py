@@ -81,6 +81,35 @@ class TaskType(StrEnum):
         return _SCOPE_COLUMNS.get(self.name)
 
     @property
+    def label(self) -> str:
+        """The step's name for curators, in plain words: what the timeline,
+        the Rerun dialog, flags and the paper chat call it (via GET
+        /task-types). The value stays the step's name in code, logs and
+        requests; this is only how it reads to someone who does not know the
+        pipeline."""
+        labels: dict[TaskType, str] = {
+            TaskType.PDF_PARSING: 'Reading the PDF',
+            TaskType.PAPER_CLASSIFIER: 'Checking the paper is relevant',
+            TaskType.PAPER_METADATA: 'Finding title and authors',
+            TaskType.VARIANT_EXTRACTION: 'Finding variants',
+            TaskType.FIGURE_DESCRIPTION: 'Reading figures',
+            TaskType.INDIVIDUAL_EXTRACTION: 'Finding individuals and families',
+            TaskType.INDIVIDUAL_DEMOGRAPHICS: 'Filling in individual details',
+            TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Finding segregation evidence',
+            TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Scoring segregation',
+            TaskType.VARIANT_HARMONIZATION: 'Standardizing variants',
+            TaskType.VARIANT_ANNOTATION: 'Adding variant predictions',
+            TaskType.INDIVIDUAL_VARIANT_OCCURRENCES: 'Linking individuals to variants',
+            TaskType.COMPOUND_HET_EVALUATION: 'Checking compound heterozygosity',
+            TaskType.PHENOTYPE_EXTRACTION: 'Finding phenotypes',
+            TaskType.HPO_LINKING: 'Matching phenotypes to HPO terms',
+            TaskType.PAPER_MONDO_LINKING: 'Matching the disease to MONDO',
+            TaskType.OCCURRENCE_MONDO_LINKING: "Matching each case's disease to MONDO",
+            TaskType.EXTRACTION_VERIFICATION: 'Final consistency check',
+        }
+        return labels[self]
+
+    @property
     def description(self) -> str:
         """One sentence on what this step is for: shown to curators in the Rerun
         Agent dialog (via GET /task-types) and listed for the chat agent."""
@@ -90,18 +119,18 @@ class TaskType(StrEnum):
             TaskType.PAPER_METADATA: 'Finds the title, authors, journal and year, and matches the paper to its PubMed record.',
             TaskType.VARIANT_EXTRACTION: 'Finds the genetic variants the paper reports, written as the paper writes them.',
             TaskType.FIGURE_DESCRIPTION: 'Looks at every figure, says which show a pedigree or genotyping evidence (Sanger traces, gels, copy-number plots, read pileups, karyotypes or FISH), and describes those for the later steps.',
-            TaskType.INDIVIDUAL_EXTRACTION: 'Identifies each patient the paper describes, marks the probands and groups patients into families.',
-            TaskType.INDIVIDUAL_DEMOGRAPHICS: "Fills in each patient's sex, ages, ancestry, affected status and relationship to the proband.",
+            TaskType.INDIVIDUAL_EXTRACTION: 'Identifies each individual the paper describes, marks the probands and groups individuals into families.',
+            TaskType.INDIVIDUAL_DEMOGRAPHICS: "Fills in each individual's sex, ages, ancestry, affected status and relationship to the proband.",
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects what the paper says about whether variants track with disease in each family, such as LOD scores.',
-            TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Calculates segregation counts and points for each family from its extracted patients and variants.',
+            TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Calculates segregation counts and points for each family from its extracted individuals and variants.',
             TaskType.VARIANT_HARMONIZATION: 'Converts each variant to standard coordinates and identifiers (HGVS, rsID, ClinGen allele) using ClinVar, the Allele Registry and VariantValidator.',
             TaskType.VARIANT_ANNOTATION: 'Adds predictions and scores, such as SpliceAI, to each harmonized variant.',
-            TaskType.INDIVIDUAL_VARIANT_OCCURRENCES: 'Links each patient to the variants they carry, with inheritance and testing details.',
-            TaskType.COMPOUND_HET_EVALUATION: "Works out whether a patient's two variants sit on opposite copies of the gene (compound heterozygous).",
-            TaskType.PHENOTYPE_EXTRACTION: "Pulls each patient's clinical features out of the text as the paper describes them.",
-            TaskType.HPO_LINKING: "Matches each patient's clinical features to standard HPO terms.",
+            TaskType.INDIVIDUAL_VARIANT_OCCURRENCES: 'Links each individual to the variants they carry, with inheritance and testing details.',
+            TaskType.COMPOUND_HET_EVALUATION: "Works out whether an individual's two variants sit on opposite copies of the gene (compound heterozygous).",
+            TaskType.PHENOTYPE_EXTRACTION: "Pulls each individual's clinical features out of the text as the paper describes them.",
+            TaskType.HPO_LINKING: "Matches each individual's clinical features to standard HPO terms.",
             TaskType.PAPER_MONDO_LINKING: "Matches the paper's disease name to a MONDO disease term.",
-            TaskType.OCCURRENCE_MONDO_LINKING: 'Matches the disease named for a patient-variant pair to a MONDO disease term.',
+            TaskType.OCCURRENCE_MONDO_LINKING: 'Matches the disease named for each individual and variant to a MONDO disease term.',
             TaskType.EXTRACTION_VERIFICATION: 'Reviews the finished extraction and merges flags that raise the same decision more than once.',
         }
         return descriptions[self]
@@ -113,6 +142,7 @@ class TaskTypeResp(BaseModel):
     can show what else a re-run sets in motion."""
 
     type: TaskType
+    label: str
     description: str
     successors: list[TaskType]
 

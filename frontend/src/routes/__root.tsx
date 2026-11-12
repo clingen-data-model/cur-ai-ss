@@ -13,6 +13,7 @@ import { ChatBubble } from '@/components/ChatBubble'
 import { useTaskTypes } from '@/components/TaskSuccessors'
 import { UserMenu } from '@/components/UserMenu'
 import { AuthProvider, useAuth } from '@/lib/auth'
+import { registerTaskLabels } from '@/lib/taskLabel'
 
 /* Renders the chat bubble on every /papers/$paperId/* page. Reads the param
  * loosely (strict: false) so it works from any current or future route
@@ -32,6 +33,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const onLoginPage = pathname === '/login'
+  // Every step's name for curators (taskLabel), wanted before anything that
+  // shows a step renders. One small request, cached for the session.
+  const taskTypes = useTaskTypes(token !== null && !onLoginPage)
+  if (taskTypes.data) registerTaskLabels(taskTypes.data)
 
   useEffect(() => {
     if (!token && !onLoginPage) navigate({ to: '/login' })
@@ -41,8 +46,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   if (onLoginPage) return <>{children}</>
   if (!token) return null
   // Hold the first paint until /auth/me resolves, so children never flash with a
-  // token that turns out to be expired.
-  if (isLoading) {
+  // token that turns out to be expired, and until the step names are in. A
+  // failed /task-types renders anyway: taskLabel falls back to the values.
+  if (isLoading || taskTypes.isPending) {
     return (
       <div className="flex justify-center py-16">
         <Spinner />

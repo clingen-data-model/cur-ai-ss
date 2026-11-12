@@ -513,7 +513,7 @@ def test_snapshot_descriptions(db_session, test_user, snapshot_paper):
     write_snapshot(paper.id, db_session)
     assert (
         list_snapshots(paper.id, db_session)[0].description
-        == f'Individual Demographics re-run (patient {scoped.patient_id})'
+        == f'Re-run: Filling in individual details (patient {scoped.patient_id})'
     )
 
     # An explicit description (e.g. the backfill script) wins over the heuristic.
@@ -669,7 +669,7 @@ def test_create_task_writes_pre_rerun_snapshot(client, db_session, snapshot_pape
 
     snapshots = list_snapshots(paper.id, db_session)
     assert len(snapshots) == 1
-    assert snapshots[0].description == 'Before re-running Individual Demographics'
+    assert snapshots[0].description == 'Before re-run: Filling in individual details'
 
 
 def test_worker_hook_writes_snapshot_when_pipeline_done(db_session, snapshot_paper):
