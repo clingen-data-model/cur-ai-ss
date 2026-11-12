@@ -191,7 +191,7 @@ def test_signoff_stamps_occurrences_and_reports_progress(
     assert stamped['reviewed_by']['id'] == test_user.id
     assert occurrences[other.id]['reviewed_at'] is None
     # The stamp lives on the occurrence alone.
-    patient = client.get(f'/papers/{paper.id}/patients').json()[0]
+    patient = client.get(f'/papers/{paper.id}/individuals').json()[0]
     assert 'reviewed_at' not in patient
 
     # The paper and the list carry the same progress.

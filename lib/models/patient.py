@@ -523,12 +523,12 @@ class IndividualExtractionOutput(BaseModel):
         return self
 
     @model_validator(mode='after')
-    def validate_patients_named_apart(self) -> 'IndividualExtractionOutput':
+    def validate_individuals_named_apart(self) -> 'IndividualExtractionOutput':
         """No two patients share a family and an identifier. The family is not
         part of the identifier, so two families may each have a II-1, but
         within a family the identifier is the only thing telling people apart,
         and a flag names a patient as family then identifier
-        (``lib.tasks.flags.patient_label``), compared with case and whitespace
+        (``lib.tasks.flags.individual_label``), compared with case and whitespace
         ignored. A duplicate fails the output before any row is written; the
         worker's retry is a fresh attempt."""
         seen: dict[str, str] = {}

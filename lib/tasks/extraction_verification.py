@@ -52,7 +52,7 @@ from lib.models.flag import (
 from lib.models.patient import PatientDB
 from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
 from lib.models.variant import VariantDB, get_variant_description
-from lib.tasks.flags import Resolver, match_label, patient_label, split_pair
+from lib.tasks.flags import Resolver, individual_label, match_label, split_pair
 from lib.tasks.models import TaskType
 
 logger = logging.getLogger(__name__)
@@ -281,7 +281,7 @@ def _cited(entry: Any, into: set[str]) -> None:
             _cited(value, into)
 
 
-def _family_patients(session: Session, paper_id: int) -> list[PatientDB]:
+def _family_individuals(session: Session, paper_id: int) -> list[PatientDB]:
     return (
         session.query(PatientDB)
         .filter(PatientDB.paper_id == paper_id)
@@ -336,7 +336,7 @@ def consistency_input(
     their values and their links' values, the text of every block those cite,
     and the inconsistencies already reviewed. None when the paper has no
     individuals, so there is nothing to compare."""
-    patients = _family_patients(session, paper_id)
+    patients = _family_individuals(session, paper_id)
     if not patients:
         return None
     links = _occurrences(session, paper_id)
@@ -348,7 +348,9 @@ def consistency_input(
             {'family': patient.family.identifier, 'individuals': []},
         )
         individual: dict[str, Any] = {
-            'individual': patient_label(patient.family.identifier, patient.identifier),
+            'individual': individual_label(
+                patient.family.identifier, patient.identifier
+            ),
         }
         for name, column in PATIENT_FIELDS.items():
             individual[name] = _value(
@@ -388,9 +390,9 @@ def consistency_resolver(session: Session, paper_id: int) -> Resolver:
     """Turn an inconsistency's ``about`` into the rows it names: "individual /
     variant" for one link, an individual alone, or a family -- the labels
     ``consistency_input`` gave them."""
-    patients = _family_patients(session, paper_id)
+    patients = _family_individuals(session, paper_id)
     patient_ids = [
-        (patient_label(p.family.identifier, p.identifier), p.id) for p in patients
+        (individual_label(p.family.identifier, p.identifier), p.id) for p in patients
     ]
     family_ids = [
         (f.identifier, f.id)

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getPaperPapersPaperIdGet,
   getOccurrencesPapersPaperIdOccurrencesGet,
-  getPatientsPapersPaperIdPatientsGet,
+  getIndividualsPapersPaperIdIndividualsGet,
   getVariantsPapersPaperIdVariantsGet,
 } from '@/api/generated'
 import type {
@@ -70,7 +70,7 @@ export function usePaperOccurrences(paperId: number) {
 
   const patientsQuery = useQuery({
     queryKey: ['patients', paperId],
-    queryFn: () => getPatientsPapersPaperIdPatientsGet({ path: { paper_id: paperId } }),
+    queryFn: () => getIndividualsPapersPaperIdIndividualsGet({ path: { paper_id: paperId } }),
     staleTime: STALE_TIME,
   })
 

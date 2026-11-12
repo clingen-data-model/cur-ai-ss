@@ -8,7 +8,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { toast } from 'sonner'
 import {
   deletePhenotypePapersPaperIdPhenotypesPhenotypeIdDelete,
-  getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet,
+  getPhenotypesPapersPaperIdIndividualsPatientIdPhenotypesGet,
 } from '@/api/generated'
 import type { PhenotypeResp } from '@/api/generated/types.gen'
 import { DataTable } from '@/components/ui/data-table'
@@ -70,7 +70,7 @@ export function PhenotypesTable({
   const phenotypesQuery = useQuery({
     queryKey: ['phenotypes', paperId, patientId],
     queryFn: () =>
-      getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet({
+      getPhenotypesPapersPaperIdIndividualsPatientIdPhenotypesGet({
         path: { paper_id: paperId, patient_id: patientId },
       }),
     staleTime: STALE_TIME,

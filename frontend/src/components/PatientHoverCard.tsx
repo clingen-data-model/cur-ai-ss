@@ -2,7 +2,7 @@
  * Patient column hover card -- age/sex/origin/phenotypes, in the spirit of
  * the pptx curation export's proband summary (lib/misc/curation/summary.py). */
 import { useQuery } from '@tanstack/react-query'
-import { getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet } from '@/api/generated'
+import { getPhenotypesPapersPaperIdIndividualsPatientIdPhenotypesGet } from '@/api/generated'
 import type { PatientResp } from '@/api/generated/types.gen'
 import { Badge } from '@/components/ui/badge'
 
@@ -21,7 +21,7 @@ export function PatientHoverCardContent({ paperId, patient }: { paperId: number;
   const phenotypesQuery = useQuery({
     queryKey: ['phenotypes', paperId, patient.id],
     queryFn: () =>
-      getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet({
+      getPhenotypesPapersPaperIdIndividualsPatientIdPhenotypesGet({
         path: { paper_id: paperId, patient_id: patient.id },
       }),
     staleTime: STALE_TIME,

@@ -30,7 +30,7 @@ import { toast } from 'sonner'
 import {
   deleteFamilyPapersPaperIdFamiliesFamilyIdDelete,
   getFamiliesPapersPaperIdFamiliesGet,
-  getPatientsPapersPaperIdPatientsGet,
+  getIndividualsPapersPaperIdIndividualsGet,
   getSegregationAnalysisPapersPaperIdSegregationAnalysisGet,
   updateFamilyPapersPaperIdFamiliesFamilyIdPatch,
   updateSegregationEvidencePapersPaperIdSegregationAnalysisFamilyIdPatch,
@@ -489,7 +489,7 @@ export function FamiliesTab({
   })
   const patientsQuery = useQuery({
     queryKey: ['patients', paperId],
-    queryFn: () => getPatientsPapersPaperIdPatientsGet({ path: { paper_id: paperId } }),
+    queryFn: () => getIndividualsPapersPaperIdIndividualsGet({ path: { paper_id: paperId } }),
     staleTime: STALE_TIME,
   })
   const segregationQuery = useQuery({

@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { Link2 } from 'lucide-react'
 import {
   createOccurrencePapersPaperIdOccurrencesPost,
-  getPatientsPapersPaperIdPatientsGet,
+  getIndividualsPapersPaperIdIndividualsGet,
 } from '@/api/generated'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -47,7 +47,7 @@ export function LinkPatientDialog({
 
   const patientsQuery = useQuery({
     queryKey: ['patients', paperId],
-    queryFn: () => getPatientsPapersPaperIdPatientsGet({ path: { paper_id: paperId } }),
+    queryFn: () => getIndividualsPapersPaperIdIndividualsGet({ path: { paper_id: paperId } }),
   })
   const patients = useMemo(() => patientsQuery.data ?? [], [patientsQuery.data])
 
