@@ -51,6 +51,7 @@ from lib.api.entity_edits import (
     add_individual,
     add_occurrence,
     add_variant,
+    remove_family,
     remove_individual,
     remove_occurrence,
     remove_variant,
@@ -1923,6 +1924,25 @@ def update_family(
     patch_request.apply_to(family_db, current_user, session)
     _touch_paper(session, paper_id, current_user)
     return _family_to_resp(family_db, session)
+
+
+@app.delete(
+    '/papers/{paper_id}/families/{family_id}', status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_family(
+    paper_id: int,
+    family_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> None:
+    """Delete an empty family. One that still has individuals is refused
+    (409): they are deleted first, each as its own edit."""
+    with edit_errors():
+        remove_family(
+            session, paper_id=paper_id, family_id=family_id, editor=current_user
+        )
+    _touch_paper(session, paper_id, current_user)
+    session.commit()
 
 
 @app.get('/papers/{paper_id}/figures', response_model=list[FigureDescriptionResp])
