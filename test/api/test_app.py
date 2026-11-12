@@ -3175,6 +3175,25 @@ def test_create_phenotype(client, db_session, seeded_paper):
     assert resp.status_code == 404
 
 
+def test_phenotypes_are_listed_alphabetically(client, db_session, seeded_paper):
+    patient = _seed_patient(db_session, seeded_paper, 'Sorted Phenotypes Patient')
+    for concept in ['seizures', 'Ataxia', 'microcephaly', 'Hypotonia']:
+        resp = client.post(
+            f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+            json={'concept': concept},
+        )
+        assert resp.status_code == 200
+
+    resp = client.get(f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes')
+    assert resp.status_code == 200
+    assert [p['concept'] for p in resp.json()] == [
+        'Ataxia',
+        'Hypotonia',
+        'microcephaly',
+        'seizures',
+    ]
+
+
 def test_create_phenotype_with_hpo_id(client, db_session, seeded_paper):
     patient = _seed_patient(db_session, seeded_paper, 'Phenotype HPO Patient')
     ontology = _fake_ontology({'HP:0001250': 'Seizure'})

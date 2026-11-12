@@ -3144,7 +3144,8 @@ def get_phenotypes(
         .filter(
             PhenotypeDB.patient_id == patient_id,
         )
-        .order_by(PhenotypeDB.id)
+        # Alphabetical, so a long list reads like an index; id breaks ties.
+        .order_by(func.lower(PhenotypeDB.concept), PhenotypeDB.id)
         .all()
     )
     return [_phenotype_to_resp(session, p) for p in phenotypes]
