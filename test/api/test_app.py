@@ -4,7 +4,7 @@ import json
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -3138,7 +3138,7 @@ def test_create_phenotype_with_hpo_id(client, db_session, seeded_paper):
     patient = _seed_patient(db_session, seeded_paper, 'Phenotype HPO Patient')
     ontology = _fake_ontology({'HP:0001250': 'Seizure'})
 
-    with patch('lib.api.app.get_ontology', return_value=ontology):
+    with patch('lib.api.phenotype_edits.get_ontology', return_value=ontology):
         resp = client.post(
             f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
             json={'concept': 'Seizures', 'hpo_id': 'HP:0001250'},
@@ -3168,7 +3168,7 @@ def test_relink_phenotype_hpo(client, db_session, seeded_paper):
     db_session.commit()
     ontology = _fake_ontology({'HP:0001250': 'Seizure'})
 
-    with patch('lib.api.app.get_ontology', return_value=ontology):
+    with patch('lib.api.phenotype_edits.get_ontology', return_value=ontology):
         resp = client.patch(
             f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
             json={'hpo_id': 'HP:0001250'},
@@ -3222,7 +3222,7 @@ def test_create_phenotype_records_edit_history(client, db_session, seeded_paper)
     assert {e.field_name for e in edits} == {'concept'}
 
     ontology = _fake_ontology({'HP:0001250': 'Seizure'})
-    with patch('lib.api.app.get_ontology', return_value=ontology):
+    with patch('lib.api.phenotype_edits.get_ontology', return_value=ontology):
         resp = client.post(
             f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
             json={'concept': 'Ataxia', 'hpo_id': 'HP:0001250'},
@@ -3251,7 +3251,7 @@ def test_relink_phenotype_hpo_records_edit_history(client, db_session, seeded_pa
     db_session.commit()
 
     ontology = _fake_ontology({'HP:0002066': 'Gait ataxia'})
-    with patch('lib.api.app.get_ontology', return_value=ontology):
+    with patch('lib.api.phenotype_edits.get_ontology', return_value=ontology):
         resp = client.patch(
             f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
             json={'hpo_id': 'HP:0002066'},
@@ -3285,7 +3285,7 @@ def test_deleting_hpo_link_cascades_its_edit_history(client, db_session, seeded_
     db_session.commit()
 
     ontology = _fake_ontology({'HP:0001250': 'Seizure'})
-    with patch('lib.api.app.get_ontology', return_value=ontology):
+    with patch('lib.api.phenotype_edits.get_ontology', return_value=ontology):
         client.patch(
             f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
             json={'hpo_id': 'HP:0001250'},
@@ -4393,3 +4393,780 @@ def test_patient_onset_round_trips_through_create_and_patch(
     bare = response.json()
     assert bare['age_onset'] is None and bare['onset_category'] is None
     assert bare['onset_category_evidence'] is None
+
+
+# --- direct edits from the chat -------------------------------------------------
+
+
+def _proposal(*edits, request='add seizures to the patient'):
+    from lib.models.chat_message import ChatProposal
+
+    return ChatProposal(request=request, edits=list(edits))
+
+
+def _chat_reply(
+    client,
+    paper_id,
+    message,
+    *,
+    edits=(),
+    text='Here you go.',
+    note='',
+    request_messages=1,
+):
+    """Send a chat message whose model answers with ``text`` and ``edits``
+    (dicts, as its structured output holds them)."""
+    from lib.agents.chat_agent import ChatReply
+
+    result = MagicMock()
+    result.final_output = ChatReply.model_validate(
+        {
+            'message': text,
+            'edits': list(edits),
+            'note': note,
+            'request_messages': request_messages,
+        }
+    )
+    with patch('agents.Runner.run', AsyncMock(return_value=result)):
+        return client.post(
+            f'/papers/{paper_id}/chat/messages', json={'message': message}
+        )
+
+
+def _post_reply_with(client, paper_id, proposal, message='add seizures to the patient'):
+    """A chat reply carrying ``proposal`` as it stands after checking: the
+    model output some edit, and ``propose`` built this from it."""
+    with patch(
+        'lib.api.app.propose', return_value=("Here's the change I'd make.", proposal)
+    ):
+        return _chat_reply(
+            client,
+            paper_id,
+            message,
+            edits=[{'entity': 'phenotype', 'action': 'delete', 'entity_id': 1}],
+        )
+
+
+def test_the_models_edits_become_a_proposal_to_confirm(
+    client, db_session, seeded_paper
+):
+    """The model answers once. Edits that check out are stored on the reply,
+    pending, for the curator to confirm; nothing is written. Edits that do
+    not come back as a reply saying why, with nothing proposed and nothing
+    sent back to the model."""
+    patient = _seed_patient(db_session, seeded_paper)
+    texts = {'paragraph-3': 'She had recurrent seizures from age two.'}
+    message = 'add seizures to the patient -- "recurrent seizures"'
+
+    def create(**extra):
+        return {
+            'entity': 'phenotype',
+            'action': 'create',
+            'parent_id': patient.id,
+            'values': [{'field': 'concept', 'value': 'Seizures'}],
+            **extra,
+        }
+
+    with patch('lib.api.app.paper_citation_texts', return_value=texts):
+        # A quote the curator did not give, an HPO term and a relink: each
+        # is told to the curator, and nothing is proposed.
+        refused = _chat_reply(
+            client,
+            seeded_paper.id,
+            'add seizures to this patient',
+            edits=[
+                create(quote='recurrent seizures'),
+                {
+                    **create(),
+                    'values': [
+                        {'field': 'concept', 'value': 'Ataxia'},
+                        {'field': 'hpo_id', 'value': 'HP:0001251'},
+                    ],
+                },
+                {
+                    'entity': 'phenotype',
+                    'action': 'update',
+                    'entity_id': 1,
+                    'values': [{'field': 'hpo_id', 'value': 'HP:0001250'}],
+                },
+            ],
+        ).json()
+        assert refused['proposal'] is None
+        lines = refused['content'].splitlines()
+        assert lines[0] == "I couldn't propose those changes, and nothing was changed:"
+        assert 'is not in your message' in lines[1]
+        assert 'added without an HPO term' in lines[2]
+        assert 'HPO picker' in lines[3]
+
+        reply = _chat_reply(
+            client,
+            seeded_paper.id,
+            message,
+            edits=[create(quote='recurrent seizures')],
+            request_messages=2,
+        ).json()
+        assert reply['content'] == (
+            "Here's the change I'd make. Review it and confirm to make it."
+        )
+        assert reply['proposal_status'] == 'pending'
+        assert reply['proposal']['request'] == (
+            f'Curator in chat: "add seizures to this patient" / "{message}"'
+        )
+        (edit,) = reply['proposal']['edits']
+        assert edit['owner_label'] == 'Family 1 Phenotype Test Patient'
+        assert [(c['label'], c['new']) for c in edit['changes']] == [
+            ('Phenotype', 'Seizures'),
+            # Added unlinked: the chat never picks an HPO term.
+            ('HPO term', None),
+        ]
+        # The code, not the model, found the block the curator's quote is in.
+        assert edit['citation'] == {
+            'anchor': 'paragraph-3',
+            'quote': 'recurrent seizures',
+        }
+        assert db_session.query(PhenotypeDB).count() == 0
+
+        # A quote the curator gave that the paper does not hold.
+        missing = _chat_reply(
+            client,
+            seeded_paper.id,
+            'add seizures -- "words the paper never says"',
+            edits=[create(quote='words the paper never says')],
+        ).json()
+        assert 'not in the paper word for word' in missing['content']
+
+        # No edits: the model's message is the reply.
+        plain = _chat_reply(
+            client,
+            seeded_paper.id,
+            'add seizures to II-3',
+            text='Which II-3: Family 1 or Family 2?',
+        ).json()
+        assert plain['content'] == 'Which II-3: Family 1 or Family 2?'
+        assert plain['proposal'] is None
+    assert db_session.query(PhenotypeDB).count() == 0
+
+
+def test_applying_a_proposal_writes_it_as_the_curator(client, db_session, seeded_paper):
+    from lib.models.chat_message import ProposedCitation, ProposedEdit
+
+    patient = _seed_patient(db_session, seeded_paper)
+    proposal = _proposal(
+        ProposedEdit(
+            entity='phenotype',
+            action='create',
+            label='Seizures',
+            owner_label='Family 1 Phenotype Test Patient',
+            citation=ProposedCitation(anchor='paragraph-3', quote='recurrent seizures'),
+            payload={
+                'patient_id': patient.id,
+                'request': {'concept': 'Seizures'},
+            },
+        )
+    )
+    reply = _post_reply_with(client, seeded_paper.id, proposal).json()
+    assert reply['proposal_status'] == 'pending'
+    assert reply['proposal']['request'] == 'add seizures to the patient'
+    assert db_session.query(PhenotypeDB).count() == 0
+
+    with patch(
+        'lib.api.phenotype_edits.get_ontology',
+        return_value=_fake_ontology({'HP:0001250': 'Seizure'}),
+    ):
+        applied = client.post(
+            f'/papers/{seeded_paper.id}/chat/messages/{reply["id"]}/apply'
+        )
+    assert applied.status_code == 200
+    body = applied.json()
+    assert body['proposal_status'] == 'applied'
+    assert body['proposal']['resolved_by_name'] == 'Test User'
+    assert body['proposal_resolved_at'] is not None
+
+    phenotype = db_session.query(PhenotypeDB).one()
+    assert phenotype.concept == 'Seizures'
+    assert phenotype.hpo is None
+    evidence = phenotype.concept_evidence
+    assert evidence['human_edit_note'] == 'add seizures to the patient'
+    # The note is shown once, as the note; the reasoning only says where the
+    # entry came from.
+    assert evidence['reasoning'] == 'Entered by the curator through the paper chat.'
+    assert evidence['citations'] == [
+        {'anchor': 'paragraph-3', 'quote': 'recurrent seizures'}
+    ]
+    assert db_session.query(EditDB).filter(EditDB.field_name == 'concept').count() == 1
+
+    again = client.post(f'/papers/{seeded_paper.id}/chat/messages/{reply["id"]}/apply')
+    assert again.status_code == 409
+
+
+def test_a_proposal_applies_all_or_nothing(client, db_session, seeded_paper):
+    """An addition and the removal of a phenotype deleted since: the
+    removal fails, so the addition is not made either."""
+    from lib.models.chat_message import ProposedEdit
+
+    patient = _seed_patient(db_session, seeded_paper)
+    phenotype = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient.id,
+        concept='Seizures',
+        concept_evidence=dict(value='Seizures', reasoning='test'),
+    )
+    db_session.add(phenotype)
+    db_session.commit()
+    proposal = _proposal(
+        ProposedEdit(
+            entity='phenotype',
+            action='create',
+            label='Ataxia',
+            payload={'patient_id': patient.id, 'request': {'concept': 'Ataxia'}},
+        ),
+        ProposedEdit(
+            entity='phenotype', action='delete', entity_id=999999, label='Gone'
+        ),
+    )
+    reply = _post_reply_with(client, seeded_paper.id, proposal).json()
+    # The request's session commits the reply in the app; here the test's
+    # session is the app's, so commit it before the failed apply rolls back.
+    db_session.commit()
+
+    with patch(
+        'lib.api.phenotype_edits.get_ontology',
+        return_value=_fake_ontology({'HP:0001250': 'Seizure'}),
+    ):
+        resp = client.post(
+            f'/papers/{seeded_paper.id}/chat/messages/{reply["id"]}/apply'
+        )
+    assert resp.status_code == 409
+    assert resp.json()['detail'].startswith('Nothing was changed')
+    db_session.expire_all()
+    assert db_session.query(PhenotypeDB).filter_by(concept='Ataxia').count() == 0
+    assert db_session.get(PhenotypeDB, phenotype.id) is not None
+    assert (
+        client.get(f'/papers/{seeded_paper.id}/chat/messages').json()[-1][
+            'proposal_status'
+        ]
+        == 'pending'
+    )
+
+
+def test_cancelling_a_proposal_changes_nothing(client, db_session, seeded_paper):
+    from lib.models.chat_message import ProposedEdit
+
+    patient = _seed_patient(db_session, seeded_paper)
+    proposal = _proposal(
+        ProposedEdit(
+            entity='phenotype',
+            action='create',
+            label='Seizures',
+            payload={'patient_id': patient.id, 'request': {'concept': 'Seizures'}},
+        )
+    )
+    reply = _post_reply_with(client, seeded_paper.id, proposal).json()
+
+    resp = client.post(f'/papers/{seeded_paper.id}/chat/messages/{reply["id"]}/cancel')
+    assert resp.status_code == 200
+    assert resp.json()['proposal_status'] == 'cancelled'
+    assert db_session.query(PhenotypeDB).count() == 0
+    assert (
+        client.post(
+            f'/papers/{seeded_paper.id}/chat/messages/{reply["id"]}/apply'
+        ).status_code
+        == 409
+    )
+
+
+def test_a_proposal_waits_while_a_task_runs(client, db_session, seeded_paper):
+    from lib.models.chat_message import ProposedEdit
+    from lib.tasks.models import TaskDB
+
+    patient = _seed_patient(db_session, seeded_paper)
+    db_session.add(
+        TaskDB(
+            paper_id=seeded_paper.id,
+            type=TaskType.PHENOTYPE_EXTRACTION,
+            status=TaskStatus.RUNNING,
+            patient_id=patient.id,
+        )
+    )
+    db_session.commit()
+    proposal = _proposal(
+        ProposedEdit(
+            entity='phenotype',
+            action='create',
+            label='Seizures',
+            payload={'patient_id': patient.id, 'request': {'concept': 'Seizures'}},
+        )
+    )
+    reply = _post_reply_with(client, seeded_paper.id, proposal).json()
+
+    resp = client.post(f'/papers/{seeded_paper.id}/chat/messages/{reply["id"]}/apply')
+    assert resp.status_code == 409
+    assert db_session.query(PhenotypeDB).count() == 0
+
+
+def _prepare(db_session, paper_id, edits, message, texts=None):
+    """What propose_edits would put on the card, without the tool wrapper."""
+    from lib.api.direct_edits import CuratorWords, EditRequest, prepare_edits
+
+    return prepare_edits(
+        db_session,
+        paper_id,
+        [EditRequest.model_validate(e) for e in edits],
+        texts or {},
+        CuratorWords(said=message, note=message),
+    )
+
+
+def _apply_prepared(client, db_session, paper_id, edits, message):
+    reply = _post_reply_with(
+        client, paper_id, _proposal(*edits, request=message), message=message
+    ).json()
+    db_session.commit()
+    return client.post(f'/papers/{paper_id}/chat/messages/{reply["id"]}/apply')
+
+
+def test_chat_edits_reach_every_entity(client, db_session, seeded_paper):
+    """One proposal that adds a family, changes an individual (with the
+    curator's quote), records an occurrence and retypes a variant: the card
+    shows each change, and Apply writes them as the forms do, noted with the
+    curator's message."""
+    patient = _seed_patient(db_session, seeded_paper)
+    variant_id = client.post(
+        f'/papers/{seeded_paper.id}/variants', json={'hgvs_c': 'c.123A>G'}
+    ).json()['id']
+    message = (
+        'add Family 9, consanguineous; the patient is female -- "She was the '
+        'first child" -- and homozygous for c.123A>G by Sanger; it is missense'
+    )
+    texts = {'paragraph-2': 'She was the first child of healthy parents.'}
+    edits = _prepare(
+        db_session,
+        seeded_paper.id,
+        [
+            {
+                'entity': 'family',
+                'action': 'create',
+                'values': [
+                    {'field': 'identifier', 'value': 'Family 9'},
+                    {'field': 'consanguinity', 'value': True},
+                ],
+            },
+            {
+                'entity': 'patient',
+                'action': 'update',
+                'entity_id': patient.id,
+                'values': [{'field': 'sex', 'value': 'Female'}],
+                'quote': 'She was the first child',
+            },
+            {
+                'entity': 'occurrence',
+                'action': 'create',
+                'parent_id': patient.id,
+                'values': [
+                    {'field': 'variant_id', 'value': variant_id},
+                    {'field': 'zygosity', 'value': 'Homozygous'},
+                    {'field': 'testing_methods', 'value': ['Sanger Sequencing']},
+                ],
+            },
+            {
+                'entity': 'variant',
+                'action': 'update',
+                'entity_id': variant_id,
+                'values': [{'field': 'variant_type', 'value': 'Missense'}],
+            },
+        ],
+        message,
+        texts,
+    )
+    family_edit, patient_edit, occurrence_edit, variant_edit = edits
+    assert family_edit.payload['request'] == {
+        'identifier': 'Family 9',
+        'consanguinity': True,
+    }
+    assert [(c.label, c.new) for c in family_edit.changes] == [
+        ('Identifier', 'Family 9'),
+        ('Consanguinity', 'Yes'),
+    ]
+    assert patient_edit.owner_label == 'Family 1'
+    assert [(c.label, c.old, c.new) for c in patient_edit.changes] == [
+        ('Sex', 'Unknown', 'Female')
+    ]
+    assert patient_edit.citation.anchor == 'paragraph-2'
+    # Stored as the request the individual form would send, note included.
+    assert patient_edit.payload['request'] == {
+        'sex': 'Female',
+        'sex_human_edit_note': message,
+    }
+    assert occurrence_edit.label == 'c.123A>G'
+    assert occurrence_edit.owner_label == 'Family 1 Phenotype Test Patient'
+    assert [(c.label, c.new) for c in occurrence_edit.changes] == [
+        ('Zygosity', 'Homozygous'),
+        ('Testing methods', 'Sanger Sequencing'),
+    ]
+    assert [(c.old, c.new) for c in variant_edit.changes] == [('Unknown', 'Missense')]
+
+    resp = _apply_prepared(client, db_session, seeded_paper.id, edits, message)
+    assert resp.status_code == 200, resp.text
+    db_session.expire_all()
+
+    family = db_session.query(FamilyDB).filter(FamilyDB.identifier == 'Family 9').one()
+    assert family.consanguinity is True
+    assert family.consanguinity_evidence['human_edit_note'] == message
+
+    patient = db_session.get(PatientDB, patient.id)
+    assert patient.sex == 'Female'
+    assert patient.sex_evidence['human_edit_note'] == message
+    assert patient.sex_evidence['citations'] == [
+        {'anchor': 'paragraph-2', 'quote': 'She was the first child'}
+    ]
+    assert (
+        db_session.query(EditDB)
+        .filter(EditDB.patient_id == patient.id, EditDB.field_name == 'sex')
+        .count()
+        == 1
+    )
+
+    occurrence = db_session.query(PatientVariantOccurrenceDB).one()
+    assert (occurrence.patient_id, occurrence.variant_id) == (patient.id, variant_id)
+    assert occurrence.zygosity == 'Homozygous'
+    assert occurrence.testing_methods == ['Sanger Sequencing']
+    assert occurrence.zygosity_evidence['human_edit_note'] == message
+    assert occurrence.testing_methods_evidence[0]['value'] == 'Sanger Sequencing'
+
+    variant = db_session.get(VariantDB, variant_id)
+    assert variant.variant_type == 'Missense'
+    assert variant.variant_type_evidence['human_edit_note'] == message
+
+
+def test_chat_edits_are_refused_with_what_to_fix(client, db_session, seeded_paper):
+    """Every problem comes back to the model numbered, so it can fix them:
+    a value outside a choice (with the choices), a field the entity has not,
+    a change to what a field already is, a duplicate occurrence, a
+    harmonized field on an unharmonized variant, and a family with members."""
+    from lib.api.direct_edits import EditProblem
+
+    patient = _seed_patient(db_session, seeded_paper)
+    variant_id = client.post(
+        f'/papers/{seeded_paper.id}/variants', json={'hgvs_c': 'c.123A>G'}
+    ).json()['id']
+    client.post(
+        f'/papers/{seeded_paper.id}/occurrences',
+        json={'patient_id': patient.id, 'variant_id': variant_id},
+    )
+    family = (
+        db_session.query(FamilyDB).filter(FamilyDB.paper_id == seeded_paper.id).one()
+    )
+
+    def update(entity, entity_id, field, value):
+        return {
+            'entity': entity,
+            'action': 'update',
+            'entity_id': entity_id,
+            'values': [{'field': field, 'value': value}],
+        }
+
+    with pytest.raises(EditProblem) as raised:
+        _prepare(
+            db_session,
+            seeded_paper.id,
+            [
+                update('patient', patient.id, 'sex', 'woman'),
+                update('patient', patient.id, 'favourite_colour', 'blue'),
+                update('patient', patient.id, 'sex', 'Unknown'),
+                {
+                    'entity': 'occurrence',
+                    'action': 'create',
+                    'parent_id': patient.id,
+                    'values': [{'field': 'variant_id', 'value': variant_id}],
+                },
+                update('variant', variant_id, 'hgvs_p', 'p.Lys41Arg'),
+                {'entity': 'family', 'action': 'delete', 'entity_id': family.id},
+            ],
+            'fix things',
+        )
+    problems = [p.removeprefix('- ') for p in str(raised.value).splitlines()]
+    assert problems[0].startswith("sex: 'woman' is not a valid value; one of")
+    assert "'Female'" in problems[0]
+    assert problems[1].startswith('a individual has no settable field')
+    assert problems[2] == "sex is already 'Unknown'"
+    assert 'already carries c.123A>G' in problems[3]
+    assert 'has not been harmonized yet' in problems[4]
+    assert 'delete all individuals in the family first' in problems[5]
+
+    # A value restated alongside a real change is left out, not refused.
+    (edit,) = _prepare(
+        db_session,
+        seeded_paper.id,
+        [
+            {
+                'entity': 'patient',
+                'action': 'update',
+                'entity_id': patient.id,
+                'values': [
+                    {'field': 'sex', 'value': 'Unknown'},
+                    {'field': 'age_report', 'value': 18},
+                ],
+            }
+        ],
+        'they are 18',
+    )
+    assert [c.field for c in edit.changes] == ['age_report']
+    assert 'sex' not in edit.payload['request']
+
+
+def test_chat_deletes_go_through_the_deletion_log(client, db_session, seeded_paper):
+    """An occurrence, its variant and its individual in one request: the
+    occurrence goes with either of the others, so its own delete is dropped
+    and the dialog says what each delete takes. Then the emptied family.
+    Each delete is logged as the delete endpoints log it; a change to a row
+    the same request deletes is refused."""
+    from lib.api.direct_edits import EditProblem
+    from lib.models.deletion_log import DeletionLogDB
+
+    patient = _seed_patient(db_session, seeded_paper)
+    variant_id = client.post(
+        f'/papers/{seeded_paper.id}/variants', json={'hgvs_c': 'c.123A>G'}
+    ).json()['id']
+    occurrence_id = client.post(
+        f'/papers/{seeded_paper.id}/occurrences',
+        json={'patient_id': patient.id, 'variant_id': variant_id},
+    ).json()['id']
+    family = (
+        db_session.query(FamilyDB).filter(FamilyDB.paper_id == seeded_paper.id).one()
+    )
+    db_session.query(PatientDB).filter(
+        PatientDB.family_id == family.id, PatientDB.id != patient.id
+    ).delete()
+    db_session.commit()
+
+    db_session.add(
+        PhenotypeDB(
+            paper_id=seeded_paper.id,
+            patient_id=patient.id,
+            concept='Seizures',
+            concept_evidence={'value': 'Seizures', 'reasoning': 'test'},
+        )
+    )
+    db_session.commit()
+    message = 'remove all of it'
+
+    with pytest.raises(EditProblem, match='deleted by this request'):
+        _prepare(
+            db_session,
+            seeded_paper.id,
+            [
+                {
+                    'entity': 'patient',
+                    'action': 'update',
+                    'entity_id': patient.id,
+                    'values': [{'field': 'sex', 'value': 'Female'}],
+                },
+                {'entity': 'patient', 'action': 'delete', 'entity_id': patient.id},
+            ],
+            message,
+        )
+
+    first = _prepare(
+        db_session,
+        seeded_paper.id,
+        [
+            {'entity': 'occurrence', 'action': 'delete', 'entity_id': occurrence_id},
+            {'entity': 'variant', 'action': 'delete', 'entity_id': variant_id},
+            {'entity': 'patient', 'action': 'delete', 'entity_id': patient.id},
+        ],
+        message,
+    )
+    assert [(e.entity.value, e.label) for e in first] == [
+        ('variant', 'c.123A>G'),
+        ('patient', 'Phenotype Test Patient'),
+    ]
+    assert [(c.label, c.new) for e in first for c in e.changes] == [
+        ('Also removes', '1 occurrence(s)'),
+        ('Also removes', '1 occurrence(s) and 1 phenotype(s)'),
+    ]
+    assert (
+        _apply_prepared(client, db_session, seeded_paper.id, first, message).status_code
+        == 200
+    )
+
+    # The family is empty now, so its removal can be proposed.
+    second = _prepare(
+        db_session,
+        seeded_paper.id,
+        [{'entity': 'family', 'action': 'delete', 'entity_id': family.id}],
+        message,
+    )
+    assert (
+        _apply_prepared(
+            client, db_session, seeded_paper.id, second, message
+        ).status_code
+        == 200
+    )
+    db_session.expire_all()
+    assert db_session.get(FamilyDB, family.id) is None
+    assert db_session.get(PatientVariantOccurrenceDB, occurrence_id) is None
+    logged = {
+        (row.entity_type, row.entity_id) for row in db_session.query(DeletionLogDB)
+    }
+    assert logged >= {
+        ('variant', variant_id),
+        ('patient', patient.id),
+        ('family', family.id),
+    }
+
+
+def test_list_paper_entities_labels_every_row(client, db_session, seeded_paper):
+    """The model matches the curator's words itself, against rows that carry
+    the label the card will show, family joined in, and no evidence blocks."""
+    from agents.tool_context import ToolContext
+
+    from lib.agents.chat_agent import ChatRunContext, _make_list_entities_tool
+
+    patient = _seed_patient(db_session, seeded_paper, identifier='II-3')
+    variant_id = client.post(
+        f'/papers/{seeded_paper.id}/variants',
+        json={'variant': 'C7696T', 'hgvs_c': 'c.7696C>T'},
+    ).json()['id']
+    client.post(
+        f'/papers/{seeded_paper.id}/occurrences',
+        json={'patient_id': patient.id, 'variant_id': variant_id},
+    )
+    db_session.add(
+        PhenotypeDB(
+            paper_id=seeded_paper.id,
+            patient_id=patient.id,
+            concept='Seizures',
+            concept_evidence={'value': 'Seizures', 'reasoning': 'test'},
+        )
+    )
+    db_session.commit()
+
+    tool = _make_list_entities_tool(seeded_paper.id)
+    raw = asyncio.run(
+        tool.on_invoke_tool(
+            ToolContext(
+                context=ChatRunContext(),
+                tool_name='list_paper_entities',
+                tool_call_id='call-1',
+                tool_arguments='{}',
+            ),
+            '{}',
+        )
+    )
+    entities = json.loads(raw)
+    by_id = {p['id']: p for p in entities['patients']}
+    assert by_id[patient.id]['label'] == 'Family 1 II-3'
+    assert entities['variants'][0]['label'] == 'C7696T'
+    assert entities['occurrences'][0]['label'] == 'Family 1 II-3: C7696T'
+    phenotype = entities['phenotypes'][0]
+    assert (phenotype['label'], phenotype['individual']) == (
+        'Seizures',
+        'Family 1 II-3',
+    )
+    assert not any(
+        key.endswith('_evidence')
+        for rows in entities.values()
+        for row in rows
+        for key in row
+    )
+
+
+def test_an_edits_note_carries_the_exchange(client, db_session, seeded_paper):
+    """A follow-up like "try again" says nothing on its own: the note is the
+    chat's line for what was asked, then the messages the model says the
+    request spans, so a cancelled proposal does not cut it short and an
+    earlier unrelated question stays out. An applied proposal starts the next
+    exchange, whatever the model says."""
+    patient = _seed_patient(db_session, seeded_paper, identifier='IV:3')
+    _chat_reply(client, seeded_paper.id, 'how many families are there?', text='One.')
+    to_male = {
+        'entity': 'patient',
+        'action': 'update',
+        'entity_id': patient.id,
+        'values': [{'field': 'sex', 'value': 'Male'}],
+    }
+    _chat_reply(client, seeded_paper.id, 'make IV:3 a male', text='Which IV:3?')
+    first = _chat_reply(
+        client,
+        seeded_paper.id,
+        'the latter',
+        edits=[to_male],
+        note='Set IV:3 to male.',
+        request_messages=2,
+    ).json()
+    db_session.commit()
+    client.post(f'/papers/{seeded_paper.id}/chat/messages/{first["id"]}/cancel')
+    again = _chat_reply(
+        client,
+        seeded_paper.id,
+        'try again',
+        edits=[to_male],
+        note='Set IV:3 to male.',
+        request_messages=3,
+    ).json()
+    note = (
+        'Set IV:3 to male. -- Curator in chat: "make IV:3 a male" / "the latter" / '
+        '"try again"'
+    )
+    assert again['proposal']['request'] == note
+    assert again['proposal']['edits'][0]['payload']['request'] == {
+        'sex': 'Male',
+        'sex_human_edit_note': note,
+    }
+    db_session.commit()
+    assert (
+        client.post(
+            f'/papers/{seeded_paper.id}/chat/messages/{again["id"]}/apply'
+        ).status_code
+        == 200
+    )
+    db_session.expire_all()
+    assert db_session.get(PatientDB, patient.id).sex_evidence['human_edit_note'] == note
+
+    # After an applied proposal, the next request starts its own exchange.
+    back = {**to_male, 'values': [{'field': 'sex', 'value': 'Female'}]}
+    later = _chat_reply(
+        client,
+        seeded_paper.id,
+        'make her female',
+        edits=[back],
+        note='Set IV:3 to female.',
+        request_messages=4,
+    ).json()
+    assert later['proposal']['request'] == (
+        'Set IV:3 to female. -- Curator in chat: "make her female"'
+    )
+
+
+def test_a_proposal_overtaken_by_another_edit_is_refused(
+    client, db_session, seeded_paper
+):
+    """An update shows each value as it was when proposed; if a form edit has
+    changed it since, confirming would overwrite that unseen, so nothing is
+    changed and the curator is told what moved."""
+    patient = _seed_patient(db_session, seeded_paper, identifier='IV:3')
+    edits = _prepare(
+        db_session,
+        seeded_paper.id,
+        [
+            {
+                'entity': 'patient',
+                'action': 'update',
+                'entity_id': patient.id,
+                'values': [{'field': 'sex', 'value': 'Female'}],
+            }
+        ],
+        'IV:3 is female',
+    )
+    assert (
+        client.patch(
+            f'/papers/{seeded_paper.id}/patients/{patient.id}',
+            json={'sex': 'Male', 'sex_human_edit_note': 'checked the pedigree'},
+        ).status_code
+        == 200
+    )
+    resp = _apply_prepared(client, db_session, seeded_paper.id, edits, 'IV:3 is female')
+    assert resp.status_code == 409
+    assert 'IV:3 Sex is now Male, not Unknown' in resp.json()['detail']
+    db_session.expire_all()
+    assert db_session.get(PatientDB, patient.id).sex == 'Male'

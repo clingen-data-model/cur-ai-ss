@@ -6,10 +6,10 @@ import shutil
 import time
 import traceback
 from collections import defaultdict
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator, Iterable, Optional, TypeVar
+from typing import Any, AsyncGenerator, Iterable, Iterator, Optional, TypeVar
 
 from agents import Runner
 from fastapi import (
@@ -37,13 +37,33 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from lib.agents.chat_agent import (
+    ChatReply,
     ChatRunContext,
     build_paper_chat_context,
     make_chat_agent,
 )
 from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
+from lib.api.direct_edits import CuratorWords, apply_edits, curator_note, propose
+from lib.api.entity_edits import (
+    EditError,
+    add_family,
+    add_individual,
+    add_occurrence,
+    add_variant,
+    remove_individual,
+    remove_occurrence,
+    remove_variant,
+)
+from lib.api.entity_edits import (
+    update_variant as update_variant_row,
+)
 from lib.api.middleware import make_log_request_middleware
+from lib.api.phenotype_edits import (
+    add_phenotype,
+    relink_phenotype,
+    remove_phenotype,
+)
 from lib.core.agents_init import init_agents_sdk
 from lib.core.environment import env
 from lib.core.logging import setup_logging
@@ -165,6 +185,7 @@ from lib.models.base import (
     _editor_display_name,
     manual_evidence_block,
 )
+from lib.models.chat_message import ChatProposal, ProposalStatus
 from lib.models.deletion_log import DeletionLogDB, DeletionLogResp, record_deletion
 from lib.models.edit import EditDB, latest_edits_for, record_edit, record_edits
 from lib.models.evidence_block import (
@@ -224,7 +245,7 @@ from lib.tasks import (
     invalidate_descendants,
 )
 from lib.tasks.agent_session import chat_session, closing_sessions
-from lib.tasks.handlers import log_run_metrics
+from lib.tasks.handlers import log_run_metrics, paper_citation_texts
 from lib.tasks.misc import (
     notify_on_next_completion,
     paper_busy_message,
@@ -932,6 +953,15 @@ def update_paper_review(
     return _paper_to_resp(paper_db, session)
 
 
+@contextmanager
+def edit_errors() -> Iterator[None]:
+    """Answer an EditError with its HTTP status."""
+    try:
+        yield
+    except EditError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
 def _touch_paper(session: Session, paper_id: int, editor: UserDB | None) -> None:
     """Propagate a child-entity edit up to the parent paper's modification
     attribution. Editing a nested entity (variant, patient, family, ...) does not
@@ -1426,16 +1456,161 @@ async def send_chat_message(
             context=run_context,
         )
     log_run_metrics('CHAT', result, paper_id=paper_id)
-    reply = run_context.confirmation or str(result.final_output)
+    output = result.final_output
+    proposal: ChatProposal | None = None
+    if run_context.confirmation:
+        reply = run_context.confirmation
+    elif isinstance(output, ChatReply) and output.edits:
+        said = _exchange_messages(
+            session, paper_id, user_message.id, output.request_messages
+        )
+        # The paper's text is read only to place a curator's quote.
+        quoted = any(edit.quote for edit in output.edits)
+        reply, proposal = propose(
+            session,
+            paper_id,
+            output.edits,
+            paper_citation_texts(paper_id) if quoted else {},
+            CuratorWords(said='\n'.join(said), note=curator_note(output.note, said)),
+        )
+    elif isinstance(output, ChatReply):
+        reply = output.message
+    else:
+        reply = str(output)
 
     assistant_message = ChatMessageDB(
         paper_id=paper_id,
         role=ChatRole.ASSISTANT,
         content=reply,
     )
+    if proposal is not None:
+        # The curator's own words are the note on every edit it applies.
+        assistant_message.proposal = proposal.model_dump(mode='json')
+        assistant_message.proposal_status = ProposalStatus.PENDING.value
     session.add(assistant_message)
     session.flush()
     return assistant_message
+
+
+EXCHANGE_MESSAGES = 5
+
+
+def _exchange_messages(
+    session: Session, paper_id: int, up_to_id: int, count: int
+) -> list[str]:
+    """The curator's messages that led to this reply's edits, oldest first:
+    the last ``count`` of them, as the model judged the request to span (a
+    cancelled proposal, then "try again", is still the same request; an
+    earlier unrelated question is not), never past the chat's last applied
+    proposal and at most the last few. They are the edits' history and where
+    a quote may come from."""
+    last_applied = (
+        session.query(func.max(ChatMessageDB.id))
+        .filter(
+            ChatMessageDB.paper_id == paper_id,
+            ChatMessageDB.proposal_status == ProposalStatus.APPLIED.value,
+        )
+        .scalar()
+    )
+    rows = (
+        session.query(ChatMessageDB.content)
+        .filter(
+            ChatMessageDB.paper_id == paper_id,
+            ChatMessageDB.role == ChatRole.USER,
+            ChatMessageDB.id <= up_to_id,
+            ChatMessageDB.id > (last_applied or 0),
+        )
+        .order_by(ChatMessageDB.id.desc())
+        .limit(min(count, EXCHANGE_MESSAGES))
+        .all()
+    )
+    return [content for (content,) in reversed(rows)]
+
+
+def _pending_proposal(
+    session: Session, paper_id: int, message_id: int
+) -> tuple[ChatMessageDB, ChatProposal]:
+    message = (
+        session.query(ChatMessageDB)
+        .filter(ChatMessageDB.id == message_id, ChatMessageDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if message is None or message.proposal is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Proposal not found'
+        )
+    if message.proposal_status != ProposalStatus.PENDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f'These changes were already {message.proposal_status}.',
+        )
+    return message, ChatProposal.model_validate(message.proposal)
+
+
+def _resolve_proposal(
+    message: ChatMessageDB,
+    proposal: ChatProposal,
+    outcome: ProposalStatus,
+    user: UserDB,
+) -> None:
+    proposal.resolved_by_user_id = user.id
+    proposal.resolved_by_name = f'{user.first_name} {user.last_name}'.strip()
+    message.proposal = proposal.model_dump(mode='json')
+    message.proposal_status = outcome.value
+    message.proposal_resolved_at = datetime.now(timezone.utc)
+
+
+@app.post(
+    '/papers/{paper_id}/chat/messages/{message_id}/apply',
+    response_model=ChatMessageResp,
+)
+def apply_chat_proposal(
+    paper_id: int,
+    message_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Make the direct edits a chat reply proposed, as the curator who pressed
+    Apply: all of them, through the same functions as the paper page's forms
+    (lib.api.direct_edits), or none if one no longer applies. Refused while a
+    task is running on the paper, since a running extraction could write over
+    the edits as it finishes."""
+    message, proposal = _pending_proposal(session, paper_id, message_id)
+    busy = paper_busy_message(session, paper_id, 'applying changes')
+    if busy:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=busy)
+    try:
+        apply_edits(session, paper_id, proposal, current_user)
+    except EditError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f'Nothing was changed: {exc.detail}. The paper may have '
+            'changed since these edits were proposed; ask again in the chat.',
+        ) from exc
+    _resolve_proposal(message, proposal, ProposalStatus.APPLIED, current_user)
+    _touch_paper(session, paper_id, current_user)
+    session.commit()
+    session.refresh(message)
+    return message
+
+
+@app.post(
+    '/papers/{paper_id}/chat/messages/{message_id}/cancel',
+    response_model=ChatMessageResp,
+)
+def cancel_chat_proposal(
+    paper_id: int,
+    message_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Turn down the direct edits a chat reply proposed; nothing is changed."""
+    message, proposal = _pending_proposal(session, paper_id, message_id)
+    _resolve_proposal(message, proposal, ProposalStatus.CANCELLED, current_user)
+    session.commit()
+    session.refresh(message)
+    return message
 
 
 @app.delete('/papers/{paper_id}/chat/messages', status_code=status.HTTP_204_NO_CONTENT)
@@ -1719,19 +1894,9 @@ def create_family(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-
-    family_db = FamilyDB(
-        paper_id=paper_id,
-        identifier=create_request.identifier,
-        identifier_evidence=manual_evidence_block(create_request.identifier),
-        consanguinity=False,
-        consanguinity_evidence=manual_evidence_block(False),
-        updated_by_user_id=current_user.id,
+    family_db = add_family(
+        session, paper_id=paper_id, request=create_request, editor=current_user
     )
-
-    session.add(family_db)
-    session.flush()
-    record_edits(session, family_db, ['identifier', 'consanguinity'], current_user)
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(family_db)
@@ -2078,41 +2243,14 @@ def update_variant(
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
-    variant_db = (
-        session.query(VariantDB)
-        .options(
-            joinedload(VariantDB.harmonized_variant),
-            joinedload(VariantDB.annotated_variant),
+    with edit_errors():
+        variant_db = update_variant_row(
+            session,
+            paper_id=paper_id,
+            variant_id=variant_id,
+            request=patch_request,
+            editor=current_user,
         )
-        .filter(VariantDB.id == variant_id, VariantDB.paper_id == paper_id)
-        .one_or_none()
-    )
-    if not variant_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
-        )
-    patch_request.apply_to(variant_db, current_user, session)
-    # Editing any harmonized field invalidates the downstream enrichment row,
-    # which was computed by key lookup from the pre-edit coordinates. Treat
-    # all harmonized siblings uniformly so a future enrichment lookup added
-    # for e.g. hgvs_p cannot silently produce stale annotations. The
-    # LLM-generated reasoning on harmonized_variant is intentionally kept
-    # intact: it remains the agent's explanation of its original choices,
-    # and the curator's rationale belongs in human_edit_note fields.
-    harmonized_update = (
-        patch_request.harmonized_variant
-        if 'harmonized_variant' in patch_request.model_fields_set
-        else None
-    )
-    if harmonized_update is not None:
-        if variant_db.harmonized_variant is None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail='Variant has not been harmonized by the server yet',
-            )
-        harmonized_update.apply_to(variant_db.harmonized_variant, current_user, session)
-        # delete-orphan cascade removes the row
-        variant_db.annotated_variant = None
     _touch_paper(session, paper_id, current_user)
     session.flush()
     return _variant_to_resp(variant_db, session)
@@ -2508,80 +2646,10 @@ def create_patient(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-
-    family_db = session.get(FamilyDB, create_request.family_id)
-    if not family_db or family_db.paper_id != paper_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Family not found'
+    with edit_errors():
+        patient_db = add_individual(
+            session, paper_id=paper_id, request=create_request, editor=current_user
         )
-
-    patient_db = PatientDB(
-        paper_id=paper_id,
-        family_id=create_request.family_id,
-        identifier=create_request.identifier,
-        identifier_evidence=manual_evidence_block(create_request.identifier),
-        proband_status=create_request.proband_status,
-        proband_status_evidence=manual_evidence_block(create_request.proband_status),
-        affected_status=create_request.affected_status,
-        affected_status_evidence=manual_evidence_block(create_request.affected_status),
-        sex=create_request.sex,
-        sex_evidence=manual_evidence_block(create_request.sex),
-        country_of_origin=create_request.country_of_origin,
-        country_of_origin_evidence=manual_evidence_block(
-            create_request.country_of_origin
-        ),
-        race=create_request.race,
-        race_evidence=manual_evidence_block(create_request.race),
-        ethnicity=create_request.ethnicity,
-        ethnicity_evidence=manual_evidence_block(create_request.ethnicity),
-        ancestry=create_request.ancestry,
-        ancestry_evidence=manual_evidence_block(create_request.ancestry),
-        age_diagnosis=create_request.age_diagnosis,
-        age_diagnosis_evidence=manual_evidence_block(create_request.age_diagnosis),
-        age_diagnosis_unit=create_request.age_diagnosis_unit,
-        age_report=create_request.age_report,
-        age_report_evidence=manual_evidence_block(create_request.age_report),
-        age_report_unit=create_request.age_report_unit,
-        age_death=create_request.age_death,
-        age_death_evidence=manual_evidence_block(create_request.age_death),
-        age_death_unit=create_request.age_death_unit,
-        age_onset=create_request.age_onset,
-        age_onset_evidence=manual_evidence_block(create_request.age_onset),
-        age_onset_unit=create_request.age_onset_unit,
-        onset_category=create_request.onset_category,
-        onset_category_evidence=manual_evidence_block(create_request.onset_category)
-        if create_request.onset_category
-        else None,
-        is_obligate_carrier=create_request.is_obligate_carrier,
-        relationship_to_proband=create_request.relationship_to_proband,
-        twin_type=create_request.twin_type,
-        family_assignment_evidence=manual_evidence_block(family_db.identifier),
-        updated_by_user_id=current_user.id,
-        created_by_user_id=current_user.id,
-    )
-
-    session.add(patient_db)
-    session.flush()
-    record_edits(
-        session,
-        patient_db,
-        [
-            'identifier',
-            'proband_status',
-            'affected_status',
-            'sex',
-            'country_of_origin',
-            'race',
-            'ethnicity',
-            'ancestry',
-            'age_diagnosis',
-            'age_report',
-            'age_death',
-            'age_onset',
-            'family_assignment',
-        ],
-        current_user,
-    )
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(patient_db)
@@ -2598,21 +2666,10 @@ def delete_patient(
     current_user: UserDB = Depends(get_current_user),
 ) -> None:
     """Delete a patient (cascades to occurrences)."""
-    patient_db = session.get(PatientDB, patient_id)
-    if not patient_db or patient_db.paper_id != paper_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
+    with edit_errors():
+        remove_individual(
+            session, paper_id=paper_id, patient_id=patient_id, editor=current_user
         )
-
-    record_deletion(
-        session,
-        paper_id=patient_db.paper_id,
-        entity_type='patient',
-        entity_id=patient_db.id,
-        identifier_snapshot=patient_db.identifier,
-        editor=current_user,
-    )
-    session.delete(patient_db)
     _touch_paper(session, paper_id, current_user)
     session.commit()
 
@@ -2635,77 +2692,8 @@ def create_variant(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-
-    variant_db = VariantDB(
-        paper_id=paper_id,
-        variant=create_request.variant,
-        variant_evidence=manual_evidence_block(create_request.variant),
-        transcript=create_request.transcript,
-        transcript_evidence=manual_evidence_block(create_request.transcript),
-        protein_accession=create_request.protein_accession,
-        protein_accession_evidence=manual_evidence_block(
-            create_request.protein_accession
-        ),
-        genomic_accession=create_request.genomic_accession,
-        genomic_accession_evidence=manual_evidence_block(
-            create_request.genomic_accession
-        ),
-        lrg_accession=create_request.lrg_accession,
-        lrg_accession_evidence=manual_evidence_block(create_request.lrg_accession),
-        gene_accession=create_request.gene_accession,
-        gene_accession_evidence=manual_evidence_block(create_request.gene_accession),
-        genomic_coordinates=create_request.genomic_coordinates,
-        genomic_coordinates_evidence=manual_evidence_block(
-            create_request.genomic_coordinates
-        ),
-        genome_build=create_request.genome_build,
-        genome_build_evidence=manual_evidence_block(create_request.genome_build),
-        rsid=create_request.rsid,
-        rsid_evidence=manual_evidence_block(create_request.rsid),
-        caid=create_request.caid,
-        caid_evidence=manual_evidence_block(create_request.caid),
-        hgvs_c=create_request.hgvs_c,
-        hgvs_c_evidence=manual_evidence_block(create_request.hgvs_c),
-        hgvs_p=create_request.hgvs_p,
-        hgvs_p_evidence=manual_evidence_block(create_request.hgvs_p),
-        hgvs_g=create_request.hgvs_g,
-        hgvs_g_evidence=manual_evidence_block(create_request.hgvs_g),
-        variant_type=create_request.variant_type,
-        variant_type_evidence=manual_evidence_block(create_request.variant_type),
-        functional_evidence=create_request.functional_evidence,
-        functional_evidence_evidence=manual_evidence_block(
-            create_request.functional_evidence
-        ),
-        main_focus=create_request.main_focus,
-        main_focus_evidence=manual_evidence_block(create_request.main_focus),
-        updated_by_user_id=current_user.id,
-        created_by_user_id=current_user.id,
-    )
-
-    session.add(variant_db)
-    session.flush()
-    record_edits(
-        session,
-        variant_db,
-        [
-            'variant',
-            'transcript',
-            'protein_accession',
-            'genomic_accession',
-            'lrg_accession',
-            'gene_accession',
-            'genomic_coordinates',
-            'genome_build',
-            'rsid',
-            'caid',
-            'hgvs_c',
-            'hgvs_p',
-            'hgvs_g',
-            'variant_type',
-            'functional_evidence',
-            'main_focus',
-        ],
-        current_user,
+    variant_db = add_variant(
+        session, paper_id=paper_id, request=create_request, editor=current_user
     )
     _touch_paper(session, paper_id, current_user)
     session.commit()
@@ -2723,21 +2711,10 @@ def delete_variant(
     current_user: UserDB = Depends(get_current_user),
 ) -> None:
     """Delete a variant (cascades to occurrences)."""
-    variant_db = session.get(VariantDB, variant_id)
-    if not variant_db or variant_db.paper_id != paper_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
+    with edit_errors():
+        remove_variant(
+            session, paper_id=paper_id, variant_id=variant_id, editor=current_user
         )
-
-    record_deletion(
-        session,
-        paper_id=variant_db.paper_id,
-        entity_type='variant',
-        entity_id=variant_db.id,
-        identifier_snapshot=variant_db.variant or variant_db.hgvs_c,
-        editor=current_user,
-    )
-    session.delete(variant_db)
     _touch_paper(session, paper_id, current_user)
     session.commit()
 
@@ -2760,54 +2737,17 @@ def create_occurrence(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-
-    patient_db = session.get(PatientDB, create_request.patient_id)
-    if not patient_db or patient_db.paper_id != paper_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
+    with edit_errors():
+        occurrence_db = add_occurrence(
+            session, paper_id=paper_id, request=create_request, editor=current_user
         )
-
-    variant_db = session.get(VariantDB, create_request.variant_id)
-    if not variant_db or variant_db.paper_id != paper_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
-        )
-
-    occurrence_db = PatientVariantOccurrenceDB(
-        paper_id=paper_id,
-        patient_id=create_request.patient_id,
-        variant_id=create_request.variant_id,
-        zygosity=create_request.zygosity,
-        zygosity_evidence=manual_evidence_block(create_request.zygosity),
-        inheritance=create_request.inheritance,
-        inheritance_evidence=manual_evidence_block(create_request.inheritance),
-        variant_inheritance=create_request.variant_inheritance,
-        variant_inheritance_evidence=manual_evidence_block(
-            create_request.variant_inheritance
-        ),
-        testing_methods=create_request.testing_methods,
-        testing_methods_evidence=[
-            manual_evidence_block(method) for method in create_request.testing_methods
-        ],
-        disease_name=create_request.disease_name,
-        updated_by_user_id=current_user.id,
-        created_by_user_id=current_user.id,
-    )
-
-    session.add(occurrence_db)
-    session.flush()
-    record_edits(
-        session,
-        occurrence_db,
-        ['zygosity', 'inheritance', 'variant_inheritance']
-        + (['testing_methods'] if create_request.testing_methods else []),
-        current_user,
-    )
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(occurrence_db)
     return _patient_variant_occurrence_to_resp(
-        occurrence_db, patient_identifier=patient_db.identifier, session=session
+        occurrence_db,
+        patient_identifier=occurrence_db.patient.identifier,
+        session=session,
     )
 
 
@@ -2822,24 +2762,13 @@ def delete_occurrence(
     current_user: UserDB = Depends(get_current_user),
 ) -> None:
     """Delete a patient-variant occurrence."""
-    occurrence_db = session.get(PatientVariantOccurrenceDB, occurrence_id)
-    if not occurrence_db or occurrence_db.paper_id != paper_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Occurrence not found'
+    with edit_errors():
+        remove_occurrence(
+            session,
+            paper_id=paper_id,
+            occurrence_id=occurrence_id,
+            editor=current_user,
         )
-
-    record_deletion(
-        session,
-        paper_id=occurrence_db.paper_id,
-        entity_type='occurrence',
-        entity_id=occurrence_db.id,
-        identifier_snapshot=(
-            f'patient {occurrence_db.patient_id}, variant {occurrence_db.variant_id} '
-            f'({occurrence_db.zygosity})'
-        ),
-        editor=current_user,
-    )
-    session.delete(occurrence_db)
     _touch_paper(session, paper_id, current_user)
     session.commit()
 
@@ -3213,50 +3142,19 @@ def create_phenotype(
 ) -> Any:
     """Manually add a phenotype row. HPO id is optional; when given, it must
     resolve to a real term in the ontology."""
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
+    if not session.get(PaperDB, paper_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    patient_db = (
-        session.query(PatientDB)
-        .filter(PatientDB.id == patient_id, PatientDB.paper_id == paper_id)
-        .one_or_none()
-    )
-    if not patient_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
-        )
-
-    hpo_name: str | None = None
-    if create_request.hpo_id is not None:
-        hpo_name = get_ontology().get_term_name(create_request.hpo_id)
-        if hpo_name is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f'Unknown HPO id: {create_request.hpo_id}',
-            )
-
-    phenotype_db = PhenotypeDB(
-        paper_id=paper_id,
-        patient_id=patient_id,
-        concept=create_request.concept,
-        concept_evidence=manual_evidence_block(create_request.concept),
-        updated_by_user_id=current_user.id,
-    )
-    session.add(phenotype_db)
-    session.flush()
-    record_edits(session, phenotype_db, ['concept'], current_user)
-
-    if create_request.hpo_id is not None:
-        phenotype_db.hpo = HpoDB(
+    with edit_errors():
+        phenotype_db = add_phenotype(
+            session,
+            paper_id=paper_id,
+            patient_id=patient_id,
+            concept=create_request.concept,
             hpo_id=create_request.hpo_id,
-            hpo_name=hpo_name,
-            reasoning='Manually linked by curator',
+            editor=current_user,
         )
-        session.flush()  # hpo needs a real id before edits can reference it
-        record_edits(session, phenotype_db.hpo, ['hpo'], current_user)
-
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(phenotype_db)
@@ -3274,21 +3172,10 @@ def delete_phenotype(
     current_user: UserDB = Depends(get_current_user),
 ) -> None:
     """Delete a phenotype (cascades to its HPO link, if any)."""
-    phenotype_db = session.get(PhenotypeDB, phenotype_id)
-    if not phenotype_db or phenotype_db.paper_id != paper_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
+    with edit_errors():
+        remove_phenotype(
+            session, paper_id=paper_id, phenotype_id=phenotype_id, editor=current_user
         )
-
-    record_deletion(
-        session,
-        paper_id=phenotype_db.paper_id,
-        entity_type='phenotype',
-        entity_id=phenotype_db.id,
-        identifier_snapshot=phenotype_db.concept,
-        editor=current_user,
-    )
-    session.delete(phenotype_db)
     _touch_paper(session, paper_id, current_user)
     session.commit()
 
@@ -3306,45 +3193,14 @@ def relink_phenotype_hpo(
 ) -> Any:
     """Change (or, with hpo_id=None, clear) which HPO term a phenotype is
     linked to."""
-    phenotype_db = (
-        session.query(PhenotypeDB)
-        .options(joinedload(PhenotypeDB.hpo))
-        .filter(PhenotypeDB.id == phenotype_id, PhenotypeDB.paper_id == paper_id)
-        .one_or_none()
-    )
-    if not phenotype_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
-        )
-
-    if relink_request.hpo_id is None:
-        hpo_name = None
-        reasoning = 'Unlinked by curator'
-    else:
-        hpo_name = get_ontology().get_term_name(relink_request.hpo_id)
-        if hpo_name is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f'Unknown HPO id: {relink_request.hpo_id}',
-            )
-        reasoning = 'Manually linked by curator'
-
-    old_hpo_id = phenotype_db.hpo.hpo_id if phenotype_db.hpo else None
-    if phenotype_db.hpo:
-        phenotype_db.hpo.hpo_id = relink_request.hpo_id
-        phenotype_db.hpo.hpo_name = hpo_name
-        phenotype_db.hpo.reasoning = reasoning
-    else:
-        phenotype_db.hpo = HpoDB(
+    with edit_errors():
+        phenotype_db = relink_phenotype(
+            session,
+            paper_id=paper_id,
+            phenotype_id=phenotype_id,
             hpo_id=relink_request.hpo_id,
-            hpo_name=hpo_name,
-            reasoning=reasoning,
+            editor=current_user,
         )
-        session.flush()  # hpo needs a real id before edits can reference it
-    record_edit(session, phenotype_db.hpo, 'hpo', current_user, old_value=old_hpo_id)
-    phenotype_db.updated_by_user_id = current_user.id
-    phenotype_db.updated_at = func.now()
-
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(phenotype_db)
