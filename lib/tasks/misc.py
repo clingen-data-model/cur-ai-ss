@@ -21,6 +21,97 @@ from lib.tasks.models import (
     TaskType,
 )
 
+# What curators call the row each scope column names.
+_SCOPE_NOUNS: dict[str, str] = {
+    'family_id': 'family',
+    'patient_id': 'individual',
+    'variant_id': 'variant',
+    'phenotype_id': 'phenotype',
+    'patient_variant_occurrence_id': 'occurrence',
+}
+
+
+class TaskScopeError(ValueError):
+    """A task asked for with a scope its type cannot run over, or with a row
+    that is not on the paper. ``status_code`` is what an endpoint answers:
+    404 for a row the paper does not have, 400 for a scope the step does not
+    take."""
+
+    def __init__(self, message: str, status_code: int) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def check_task_scope(
+    session: Session,
+    paper_id: int,
+    task_type: TaskType,
+    family_id: int | None = None,
+    patient_id: int | None = None,
+    variant_id: int | None = None,
+    phenotype_id: int | None = None,
+    patient_variant_occurrence_id: int | None = None,
+) -> None:
+    """Raise TaskScopeError unless the ids given suit ``task_type`` on this
+    paper: none for a step that runs once for the paper, and for a step that
+    runs per row at most its own column's id, naming a row of this paper.
+
+    No id at all is allowed for a per-row step: enqueue_all_instances queues
+    one unscoped row when the paper has none of that step yet. Every caller
+    inside the pipeline already passes exactly the step's own column; this
+    stops the paths that pass on what they were given (POST /tasks and the
+    paper chat's queue_task) from queueing a row of another paper, which the
+    handler would read as this paper's, or a row its handler ignores."""
+    from lib.models import (
+        FamilyDB,
+        PatientDB,
+        PhenotypeDB,
+        VariantDB,
+    )
+
+    given = {
+        column: row_id
+        for column, row_id in {
+            'family_id': family_id,
+            'patient_id': patient_id,
+            'variant_id': variant_id,
+            'phenotype_id': phenotype_id,
+            'patient_variant_occurrence_id': patient_variant_occurrence_id,
+        }.items()
+        if row_id is not None
+    }
+    if not given:
+        return
+    scope_column = task_type.scope_column
+    if scope_column is None:
+        raise TaskScopeError(
+            f'"{task_type.label}" runs once for the whole paper, not for one '
+            f'{_SCOPE_NOUNS[next(iter(given))]}',
+            400,
+        )
+    if set(given) != {scope_column}:
+        named = ', '.join(_SCOPE_NOUNS[column] for column in given)
+        noun = _SCOPE_NOUNS[scope_column]
+        article = 'an' if noun[0] in 'aeiou' else 'a'
+        raise TaskScopeError(
+            f'"{task_type.label}" runs once per {noun}, '
+            f'so it takes {article} {noun}, not: {named}',
+            400,
+        )
+    row_type = {
+        'family_id': FamilyDB,
+        'patient_id': PatientDB,
+        'variant_id': VariantDB,
+        'phenotype_id': PhenotypeDB,
+        'patient_variant_occurrence_id': PatientVariantOccurrenceDB,
+    }[scope_column]
+    row = session.get(row_type, given[scope_column])
+    if row is None or getattr(row, 'paper_id', None) != paper_id:
+        raise TaskScopeError(
+            f'This paper has no {_SCOPE_NOUNS[scope_column]} {given[scope_column]}',
+            404,
+        )
+
 
 def enqueue_task(
     session: Session,
@@ -49,7 +140,21 @@ def enqueue_task(
     note was given to; a curator's own enqueue leaves it None.
     ``budget_model`` runs the task on EXTRACTION_BUDGET_MODEL; like the note
     it describes this run, so a re-queue without it clears it.
+
+    Raises TaskScopeError for a scope the step cannot run over or a row of
+    another paper (check_task_scope); callers that take ids from a request
+    check first, before any re-run side effects.
     """
+    check_task_scope(
+        session,
+        paper_id,
+        task_type,
+        family_id=family_id,
+        patient_id=patient_id,
+        variant_id=variant_id,
+        phenotype_id=phenotype_id,
+        patient_variant_occurrence_id=patient_variant_occurrence_id,
+    )
     # Check if task exists (SQLAlchemy converts == None to IS NULL)
     existing_task = (
         session.query(TaskDB)
