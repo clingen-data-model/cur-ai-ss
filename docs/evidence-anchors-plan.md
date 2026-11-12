@@ -257,15 +257,15 @@ keeps its `(image_id, is_supplement)` signature; `PedigreeDB.image_id` (and
 -- no migration, the re-run rewrites every pedigree row. `identifier_quote`, passed to
 the demographics/occurrence/phenotype agents (L736, L1284, L1521), becomes
 `quote or describe_anchors(anchors)` (e.g. "Table 2 row 7"), and the two prompts that
-describe it (`patient_variant_occurrence_agent.py:24`,
+describe it (`individual_variant_occurrence_agent.py:24`,
 `patient_phenotype_linking_agent.py:24`) say so.
 
 **Prompts** -- rewrite the evidence contract in `lib/agents/core_extraction_rules.py`
 (anchors grammar; copy ids exactly as printed; cite *every* location the value rests on;
 quote is an optional verbatim excerpt of a cited block; `supp-` = supplement; pedigree →
 `f<N>`; EXTRACTION WARNING rule kept; delete the "count the tables" rules) and the
-per-agent restatements: `patient_extraction_agent.py:36-42,110-112,158-162`,
-`patient_demographics_agent.py:24-30,83-85`, `segregation_evidence_extractor.py:41-45`,
+per-agent restatements: `individual_extraction_agent.py:36-42,110-112,158-162`,
+`individual_demographics_agent.py:24-30,83-85`, `segregation_evidence_extractor.py:41-45`,
 `patient_phenotype_linking_agent.py:39-41,125,329,383`,
 `variant_extraction_agent.py:17,153,216`, `manual_output.py:36-51`,
 `lib/agents/AGENT_GUIDE.md`.

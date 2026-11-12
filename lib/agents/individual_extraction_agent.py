@@ -4,9 +4,9 @@ from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
-from lib.models.patient import PatientExtractionOutput
+from lib.models.patient import IndividualExtractionOutput
 
-PATIENT_EXTRACTION_INSTRUCTIONS = f"""
+INDIVIDUAL_EXTRACTION_INSTRUCTIONS = f"""
 System: You are an expert clinical data curator.
 
 CONTEXT:
@@ -400,8 +400,8 @@ Output format:
   II-1", "Family A sister"), or a family identifier, or null.
 """
 
-PATIENT_EXTRACTION_AGENT_INSTRUCTIONS = (
-    PATIENT_EXTRACTION_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
+INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS = (
+    INDIVIDUAL_EXTRACTION_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
 )
 
 
@@ -412,5 +412,5 @@ agent = Agent(
     model_settings=extraction_model_settings(),
     # 0 union/nullable schema nodes since slice 4 of the evidence-anchors work,
     # under Anthropic's limit of 16; test_output_schema_census guards it.
-    output_type=model_facing_output(PatientExtractionOutput),
+    output_type=model_facing_output(IndividualExtractionOutput),
 )

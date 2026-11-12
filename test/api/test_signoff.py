@@ -134,7 +134,7 @@ def _occurrence(db_session, paper, patient, variant):
 def _flag(db_session, paper, subject, **links):
     flag = FlagDB(
         paper_id=paper.id,
-        source='PATIENT_EXTRACTION',
+        source='INDIVIDUAL_EXTRACTION',
         kind='excluded',
         subject=subject,
         evidence={'value': subject, 'reasoning': 'test', 'citations': []},

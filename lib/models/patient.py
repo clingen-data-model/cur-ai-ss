@@ -377,7 +377,7 @@ class PatientIdentity(BaseModel):
     (proband identification is a comparison across all patients in a family,
     and family assignment relates patients to one another), so they stay in the
     first-pass extraction agent. Per-patient demographics are attached later by
-    the patient demographics agent (see ``PatientDemographics``).
+    the patient demographics agent (see ``IndividualDemographics``).
     """
 
     identifier: EvidenceBlock[str]
@@ -385,7 +385,7 @@ class PatientIdentity(BaseModel):
     proband_status: EvidenceBlock[ProbandStatus]
 
 
-class PatientDemographics(BaseModel):
+class IndividualDemographics(BaseModel):
     """Per-patient demographic/clinical attributes.
 
     Attached to an already-identified patient by the patient demographics agent.
@@ -444,7 +444,7 @@ class PatientDemographics(BaseModel):
     flags: List[ExtractionFlag] = Field(default_factory=list)
 
     @model_validator(mode='after')
-    def validate_age_units(self) -> 'PatientDemographics':
+    def validate_age_units(self) -> 'IndividualDemographics':
         """Ensure age fields and their units are both populated or both null."""
         age_pairs = [
             ('age_diagnosis', 'age_diagnosis_unit'),
@@ -462,7 +462,7 @@ class PatientDemographics(BaseModel):
         return self
 
 
-def placeholder_demographics() -> 'PatientDemographics':
+def placeholder_demographics() -> 'IndividualDemographics':
     """All-Unknown demographics for a patient whose demographics agent hasn't run.
 
     Patient extraction inserts the patient row before demographics are known;
@@ -473,7 +473,7 @@ def placeholder_demographics() -> 'PatientDemographics':
     ``relationship_to_proband`` and ``twin_type`` fall back to their field defaults.
     """
     reason = 'Not yet extracted'
-    return PatientDemographics(
+    return IndividualDemographics(
         sex=EvidenceBlock(value=SexAtBirth.Unknown, reasoning=reason),
         age_diagnosis=EvidenceBlock(value=None, reasoning=reason),
         age_report=EvidenceBlock(value=None, reasoning=reason),
@@ -492,7 +492,7 @@ class FamilyEntry(BaseModel):
     patient_identifiers: List[EvidenceBlock[str]]
 
 
-class PatientExtractionOutput(BaseModel):
+class IndividualExtractionOutput(BaseModel):
     patients: List[PatientIdentity]
     families: List[FamilyEntry]
     # Decisions a curator should look at, including things deliberately not
@@ -501,7 +501,7 @@ class PatientExtractionOutput(BaseModel):
     flags: List[ExtractionFlag] = Field(default_factory=list)
 
     @model_validator(mode='after')
-    def validate_family_coverage(self) -> 'PatientExtractionOutput':
+    def validate_family_coverage(self) -> 'IndividualExtractionOutput':
         """Ensure every patient is assigned to exactly one family."""
         patient_identifiers = {p.identifier.value for p in self.patients}
         assigned_identifiers: set[str] = set()
@@ -523,7 +523,7 @@ class PatientExtractionOutput(BaseModel):
         return self
 
     @model_validator(mode='after')
-    def validate_patients_named_apart(self) -> 'PatientExtractionOutput':
+    def validate_patients_named_apart(self) -> 'IndividualExtractionOutput':
         """No two patients share a family and an identifier. The family is not
         part of the identifier, so two families may each have a II-1, but
         within a family the identifier is the only thing telling people apart,

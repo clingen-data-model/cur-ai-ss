@@ -20,7 +20,7 @@ import { taskLabel } from '@/lib/taskLabel'
 export type TaskState = 'not-started' | 'waiting' | 'running' | 'failed' | 'complete'
 
 /** Which row a scoped task belongs to. Several task types run once per patient
- * (Phenotype Extraction, HPO Linking, Patient Demographics) or per family (the
+ * (Phenotype Extraction, HPO Linking, Individual Demographics) or per family (the
  * Segregation pair), so a paper holds many rows of the same type and a single
  * per-row panel must ask about its own. */
 export interface TaskScope {

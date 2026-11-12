@@ -3,7 +3,9 @@
 import pytest
 
 from lib.agents.figure_describer import FigureRef
-from lib.agents.patient_extraction_agent import PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+from lib.agents.individual_extraction_agent import (
+    INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS,
+)
 from lib.misc.pdf.figure_text import figure_description_block
 from lib.misc.pdf.paths import document_anchored_md_path
 from lib.models import GeneDB, PaperDB
@@ -11,8 +13,8 @@ from lib.models.figure import CaptionSource, FigureDescriptionDB, FigureKind
 from lib.tasks.handlers import (
     cited_text,
     format_paper_context,
+    individual_extraction_message,
     paper_input,
-    patient_extraction_message,
 )
 
 
@@ -49,7 +51,7 @@ def test_message_is_paper_with_figures_then_instructions(db_session, paper):
     path = document_anchored_md_path(paper.id)
     path.write_text(path.read_text() + '\n[figure-3] ![](x/3.png)\n')
 
-    paper_item, instructions_item = patient_extraction_message(db_session, paper.id)
+    paper_item, instructions_item = individual_extraction_message(db_session, paper.id)
 
     assert {i['role'] for i in (paper_item, instructions_item)} == {'user'}
     assert paper_item['content'] == format_paper_context(
@@ -64,11 +66,11 @@ def test_message_is_paper_with_figures_then_instructions(db_session, paper):
         'MSX1',
     )
     assert paper_item['content'].endswith('Gene: MSX1')
-    assert instructions_item['content'] == PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert instructions_item['content'] == INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
 
 
 def test_message_without_described_figures_is_the_plain_paper(db_session, paper):
-    paper_item, _ = patient_extraction_message(db_session, paper.id)
+    paper_item, _ = individual_extraction_message(db_session, paper.id)
 
     assert paper_item['content'] == format_paper_context(
         '## Results\n\n[paragraph-13] Eleven additional family members were affected.\n',
@@ -168,7 +170,7 @@ def test_citation_check_reads_the_paper_once_and_rejects_bad_citations(paper):
 def _flag_output(patients: list[str], flags: list[dict]):
     from lib.models.patient import (
         FamilyEntry,
-        PatientExtractionOutput,
+        IndividualExtractionOutput,
         PatientIdentity,
         ProbandStatus,
     )
@@ -180,7 +182,7 @@ def _flag_output(patients: list[str], flags: list[dict]):
             'citations': [{'anchor': 'paragraph-13', 'quote': 'Eleven'}],
         }
 
-    return PatientExtractionOutput(
+    return IndividualExtractionOutput(
         patients=[
             PatientIdentity(
                 identifier=block(p),
@@ -209,7 +211,7 @@ def test_two_patients_named_alike_in_one_family_fail_the_output():
 
     from lib.models.patient import (
         FamilyEntry,
-        PatientExtractionOutput,
+        IndividualExtractionOutput,
         PatientIdentity,
         ProbandStatus,
     )
@@ -221,9 +223,9 @@ def test_two_patients_named_alike_in_one_family_fail_the_output():
             'citations': [{'anchor': 'paragraph-1', 'quote': 'q'}],
         }
 
-    def output(pairs: list[tuple[str, str]]) -> PatientExtractionOutput:
+    def output(pairs: list[tuple[str, str]]) -> IndividualExtractionOutput:
         families = sorted({f for f, _ in pairs})
-        return PatientExtractionOutput(
+        return IndividualExtractionOutput(
             patients=[
                 PatientIdentity(
                     identifier=block(i),
@@ -251,8 +253,8 @@ def test_two_patients_named_alike_in_one_family_fail_the_output():
 
 
 @pytest.fixture
-def run_patient_extraction(monkeypatch, db_session, paper):
-    """Drive handle_patient_extraction with a canned agent output: the agent
+def run_individual_extraction(monkeypatch, db_session, paper):
+    """Drive handle_individual_extraction with a canned agent output: the agent
     call, its session and the citation check are stubbed, the DB is real."""
     from types import SimpleNamespace
 
@@ -273,23 +275,23 @@ def run_patient_extraction(monkeypatch, db_session, paper):
         monkeypatch.setattr(handlers, 'log_run_metrics', lambda *a, **k: None)
         task = TaskDB(
             paper_id=paper.id,
-            type=TaskType.PATIENT_EXTRACTION,
+            type=TaskType.INDIVIDUAL_EXTRACTION,
             status=TaskStatus.RUNNING,
         )
         db_session.add(task)
         db_session.commit()
-        await handlers.handle_patient_extraction(task.id)
+        await handlers.handle_individual_extraction(task.id)
         db_session.expire_all()
 
     return run
 
 
-async def test_patient_extraction_persists_flags_and_links_them_to_patients(
-    db_session, paper, run_patient_extraction
+async def test_individual_extraction_persists_flags_and_links_them_to_patients(
+    db_session, paper, run_individual_extraction
 ):
     from lib.models import FamilyDB, FlagDB, PatientDB
 
-    await run_patient_extraction(
+    await run_individual_extraction(
         _flag_output(
             ['Patient 1', 'Patient 2'],
             [
@@ -328,14 +330,14 @@ async def test_patient_extraction_persists_flags_and_links_them_to_patients(
     family = db_session.query(FamilyDB).filter_by(paper_id=paper.id).one()
     rows = db_session.query(FlagDB).filter_by(paper_id=paper.id).order_by(FlagDB.id)
     assert [(r.subject, r.patient_id, r.family_id, r.source) for r in rows] == [
-        ('status implied', p2.id, None, 'PATIENT_EXTRACTION'),
-        ('untested sister', None, None, 'PATIENT_EXTRACTION'),
-        ('no proband marked', None, family.id, 'PATIENT_EXTRACTION'),
+        ('status implied', p2.id, None, 'INDIVIDUAL_EXTRACTION'),
+        ('untested sister', None, None, 'INDIVIDUAL_EXTRACTION'),
+        ('no proband marked', None, family.id, 'INDIVIDUAL_EXTRACTION'),
     ]
 
 
-async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
-    db_session, paper, run_patient_extraction
+async def test_rerunning_individual_extraction_replaces_only_its_own_flags(
+    db_session, paper, run_individual_extraction
 ):
     from lib.models import FlagDB
 
@@ -358,8 +360,8 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
             'citations': [{'anchor': 'paragraph-13', 'quote': 'Eleven'}],
         },
     }
-    await run_patient_extraction(_flag_output(['Patient 1'], [sister]))
-    await run_patient_extraction(_flag_output(['Patient 1'], []))
+    await run_individual_extraction(_flag_output(['Patient 1'], [sister]))
+    await run_individual_extraction(_flag_output(['Patient 1'], []))
 
     rows = db_session.query(FlagDB).filter_by(paper_id=paper.id).all()
     assert [r.subject for r in rows] == ['kept']
@@ -508,7 +510,7 @@ async def test_a_note_is_a_follow_up_only_for_its_own_task_with_a_conversation()
     assert await continues_conversation(_ItemsSession([{'role': 'user'}]), note, None)
     # Inherited from a predecessor: the inputs just changed, so never a follow-up.
     assert not await continues_conversation(
-        _ItemsSession([{'role': 'user'}]), note, TaskType.PATIENT_EXTRACTION
+        _ItemsSession([{'role': 'user'}]), note, TaskType.INDIVIDUAL_EXTRACTION
     )
     # Own note but nothing to follow up on (a retry cleared the session).
     assert not await continues_conversation(_ItemsSession([]), note, None)
@@ -518,9 +520,9 @@ def test_curator_note_section_names_the_step_an_inherited_note_was_given_to():
     from lib.tasks.handlers import curator_note_section
     from lib.tasks.models import TaskType
 
-    inherited = curator_note_section('Use Brazil.', TaskType.PATIENT_DEMOGRAPHICS)
+    inherited = curator_note_section('Use Brazil.', TaskType.INDIVIDUAL_DEMOGRAPHICS)
     assert inherited.startswith(
-        'This user-provided context was supplied to Patient Demographics, '
+        'This user-provided context was supplied to Individual Demographics, '
     )
     assert 'might also be relevant here' in inherited
     assert inherited.endswith('\nUse Brazil.')
@@ -541,18 +543,18 @@ def test_with_curator_note_appends_an_item_or_a_section_and_leaves_none_alone():
 
     items = paper_input('PAPER', 'INSTRUCTIONS', 'DATA')
     assert with_curator_note(items, None, None) is items
-    with_note = with_curator_note(items, 'Use Brazil.', TaskType.PATIENT_EXTRACTION)
+    with_note = with_curator_note(items, 'Use Brazil.', TaskType.INDIVIDUAL_EXTRACTION)
     assert isinstance(with_note, list)
     assert [i['content'] for i in with_note[:3]] == ['PAPER', 'INSTRUCTIONS', 'DATA']
     assert str(with_note[3]['content']).endswith('\nUse Brazil.')
-    assert 'supplied to Patient Extraction' in str(with_note[3]['content'])
+    assert 'supplied to Individual Extraction' in str(with_note[3]['content'])
 
     text = with_curator_note('Variant JSON: {}', 'Use GRCh37.', None)
     assert isinstance(text, str)
     assert text.startswith('Variant JSON: {}\n\nA human curator re-ran this step')
 
 
-async def test_patient_extraction_runs_fresh_with_an_inherited_note_last(
+async def test_individual_extraction_runs_fresh_with_an_inherited_note_last(
     monkeypatch, db_session, paper
 ):
     """A note that came down from Figure Description starts a fresh run whose
@@ -577,7 +579,7 @@ async def test_patient_extraction_runs_fresh_with_an_inherited_note_last(
     monkeypatch.setattr(handlers, 'log_run_metrics', lambda *a, **k: None)
     task = TaskDB(
         paper_id=paper.id,
-        type=TaskType.PATIENT_EXTRACTION,
+        type=TaskType.INDIVIDUAL_EXTRACTION,
         status=TaskStatus.RUNNING,
         additional_context='Read every figure for family members.',
         context_origin=TaskType.FIGURE_DESCRIPTION,
@@ -585,7 +587,7 @@ async def test_patient_extraction_runs_fresh_with_an_inherited_note_last(
     db_session.add(task)
     db_session.commit()
 
-    await handlers.handle_patient_extraction(task.id)
+    await handlers.handle_individual_extraction(task.id)
 
     assert session.cleared
     message = seen['message']
@@ -704,7 +706,7 @@ async def test_demographics_follow_up_carries_the_proband_set_since_the_first_ru
     db_session.flush()
     task = TaskDB(
         paper_id=paper.id,
-        type=TaskType.PATIENT_DEMOGRAPHICS,
+        type=TaskType.INDIVIDUAL_DEMOGRAPHICS,
         status=TaskStatus.RUNNING,
         patient_id=rows['II-1'].id,
         additional_context='Update the relationships now that there is a proband.',
@@ -728,7 +730,7 @@ async def test_demographics_follow_up_carries_the_proband_set_since_the_first_ru
     monkeypatch.setattr(handlers, 'citation_check', lambda paper_id: None)
 
     with pytest.raises(_Captured):
-        await handlers.handle_patient_demographics(task.id)
+        await handlers.handle_individual_demographics(task.id)
 
     message = seen['message']
     assert isinstance(message, str)  # a follow-up turn, not a fresh first message
@@ -752,7 +754,7 @@ async def test_a_quick_task_runs_its_agent_on_the_budget_model(
     from agents.extensions.models.litellm_model import LitellmModel
 
     from lib.core.environment import env
-    from lib.models.patient import PatientExtractionOutput
+    from lib.models.patient import IndividualExtractionOutput
     from lib.tasks import handlers
     from lib.tasks.models import TaskDB, TaskStatus, TaskType
 
@@ -768,7 +770,7 @@ async def test_a_quick_task_runs_its_agent_on_the_budget_model(
     async def fake_run(agent, message, check, session):
         seen.append(agent)
         return SimpleNamespace(
-            final_output=PatientExtractionOutput(patients=[], families=[]),
+            final_output=IndividualExtractionOutput(patients=[], families=[]),
             raw_responses=[],
         )
 
@@ -779,18 +781,18 @@ async def test_a_quick_task_runs_its_agent_on_the_budget_model(
     for budget in (True, False):
         task = TaskDB(
             paper_id=paper.id,
-            type=TaskType.PATIENT_EXTRACTION,
+            type=TaskType.INDIVIDUAL_EXTRACTION,
             status=TaskStatus.RUNNING,
             budget_model=budget,
         )
         db_session.add(task)
         db_session.commit()
-        await handlers.handle_patient_extraction(task.id)
+        await handlers.handle_individual_extraction(task.id)
 
     quick, ordinary = seen
     assert isinstance(quick.model, LitellmModel)
     assert quick.model.model == 'anthropic/claude-haiku-5-5'
-    assert ordinary is handlers.patient_extraction_agent
+    assert ordinary is handlers.individual_extraction_agent
 
 
 async def test_the_classifier_stores_its_basis_beside_the_verdict(

@@ -32,17 +32,19 @@ from agents import AgentOutputSchema
 
 from lib.agents.compound_het_agent import agent as compound_het_agent
 from lib.agents.hpo_linking_agent import agent as hpo_linking_agent
+from lib.agents.individual_demographics_agent import (
+    agent as individual_demographics_agent,
+)
+from lib.agents.individual_extraction_agent import agent as individual_extraction_agent
+from lib.agents.individual_variant_occurrence_agent import (
+    agent as individual_variant_occurrence_agent,
+)
 from lib.agents.model_facing import ModelFacingOutputSchema
 from lib.agents.mondo_linking_agent import agent as mondo_linking_agent
 from lib.agents.paper_classifier_agent import agent as paper_classifier_agent
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
-from lib.agents.patient_demographics_agent import agent as patient_demographics_agent
-from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.patient_phenotype_linking_agent import (
     agent as patient_phenotype_linking_agent,
-)
-from lib.agents.patient_variant_occurrence_agent import (
-    agent as patient_variant_occurrence_agent,
 )
 from lib.agents.segregation_analysis_computed_agent import (
     agent as segregation_analysis_computed_agent,
@@ -53,7 +55,7 @@ from lib.agents.segregation_evidence_extractor import (
 from lib.agents.table_correction_agent import TableCorrectionResult
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
-from lib.models.patient import PatientDemographics
+from lib.models.patient import IndividualDemographics
 from lib.models.variant import VariantExtractionOutput
 
 ANTHROPIC_UNION_NODE_LIMIT = 16
@@ -69,10 +71,10 @@ OUTPUT_TYPES: dict[str, Any] = {
         mondo_linking_agent,
         paper_extraction_agent,
         paper_classifier_agent,
-        patient_demographics_agent,
-        patient_extraction_agent,
+        individual_demographics_agent,
+        individual_extraction_agent,
         patient_phenotype_linking_agent,
-        patient_variant_occurrence_agent,
+        individual_variant_occurrence_agent,
         segregation_analysis_computed_agent,
         segregation_evidence_agent,
         variant_extraction_agent,
@@ -89,17 +91,17 @@ UNDER_THE_UNION_LIMIT_SINCE_SLICE_4 = {
     'patient_info_extractor': 1,
     # +3 since #455 (ancestry and onset): ancestry (str | None), age_onset (int | None)
     # and age_onset_unit (AgeUnit | None).
-    'patient_demographics_extractor': 11,
+    'individual_demographics_extractor': 11,
     'patient_variant_occurrence': 3,
 }
 
 # The two whose dereferenced schema is still too large for the grammar
 # compiler; their output_type is None and the schema travels in the prompt.
-MANUAL_OUTPUT = {'variant_extractor', 'patient_demographics_extractor'}
+MANUAL_OUTPUT = {'variant_extractor', 'individual_demographics_extractor'}
 
 MODELS_BEHIND_MANUAL_OUTPUT: dict[str, Any] = {
     'variant_extractor': VariantExtractionOutput,
-    'patient_demographics_extractor': PatientDemographics,
+    'individual_demographics_extractor': IndividualDemographics,
 }
 
 

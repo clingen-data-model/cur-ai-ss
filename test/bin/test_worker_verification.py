@@ -104,7 +104,7 @@ def test_an_earlier_verification_is_reset_when_the_paper_settles_again(
     and its own completed row does not count as in flight."""
     _task(db_session, paper, TaskStatus.COMPLETED, VERIFY, tries=1)
     rerun = _task(
-        db_session, paper, TaskStatus.COMPLETED, TaskType.PATIENT_DEMOGRAPHICS
+        db_session, paper, TaskStatus.COMPLETED, TaskType.INDIVIDUAL_DEMOGRAPHICS
     )
 
     _maybe_queue_verification(db_session, rerun)

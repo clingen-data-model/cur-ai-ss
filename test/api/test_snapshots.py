@@ -275,7 +275,7 @@ def snapshot_paper(db_session):
     )
     scoped_task = TaskDB(
         paper_id=paper.id,
-        type=TaskType.PATIENT_DEMOGRAPHICS,
+        type=TaskType.INDIVIDUAL_DEMOGRAPHICS,
         status=TaskStatus.COMPLETED,
         patient_id=p1.id,
     )
@@ -364,7 +364,7 @@ def test_reset_roundtrip(client, db_session, test_user, snapshot_paper):
     tasks = db_session.query(TaskDB).filter_by(paper_id=paper.id).all()
     types = {t.type for t in tasks}
     assert TaskType.PDF_PARSING in types
-    scoped = next(t for t in tasks if t.type == TaskType.PATIENT_DEMOGRAPHICS)
+    scoped = next(t for t in tasks if t.type == TaskType.INDIVIDUAL_DEMOGRAPHICS)
     assert scoped.patient_id == snapshot_paper['p1'].id
     assert scoped.id == snapshot_paper['scoped_task'].id  # PK preserved
     assert TaskType.PHENOTYPE_EXTRACTION not in types
@@ -492,7 +492,7 @@ def test_snapshot_descriptions(db_session, test_user, snapshot_paper):
     # A user rerun labels the next snapshot with the cascade ROOT's type and
     # scope. enqueue_successors propagates the user stamp down the cascade, so
     # a stamped terminal task finishing later must not win (it used to:
-    # a Patient Extraction rerun got labeled "Segregation Analysis Computed").
+    # a Individual Extraction rerun got labeled "Segregation Analysis Computed").
     # updated_at is set explicitly: SQLite's onupdate timestamp is
     # second-granular, so within a test it wouldn't sort after the previous
     # snapshot's microsecond-granular created_at.
@@ -513,7 +513,7 @@ def test_snapshot_descriptions(db_session, test_user, snapshot_paper):
     write_snapshot(paper.id, db_session)
     assert (
         list_snapshots(paper.id, db_session)[0].description
-        == f'Patient Demographics re-run (patient {scoped.patient_id})'
+        == f'Individual Demographics re-run (patient {scoped.patient_id})'
     )
 
     # An explicit description (e.g. the backfill script) wins over the heuristic.
@@ -663,13 +663,13 @@ def test_create_task_writes_pre_rerun_snapshot(client, db_session, snapshot_pape
 
     response = client.post(
         f'/papers/{paper.id}/tasks',
-        json=TaskCreateRequest(type=TaskType.PATIENT_DEMOGRAPHICS).model_dump(),
+        json=TaskCreateRequest(type=TaskType.INDIVIDUAL_DEMOGRAPHICS).model_dump(),
     )
     assert response.status_code == 200, response.text
 
     snapshots = list_snapshots(paper.id, db_session)
     assert len(snapshots) == 1
-    assert snapshots[0].description == 'Before re-running Patient Demographics'
+    assert snapshots[0].description == 'Before re-running Individual Demographics'
 
 
 def test_worker_hook_writes_snapshot_when_pipeline_done(db_session, snapshot_paper):
@@ -771,7 +771,7 @@ def test_flags_revert_with_snapshot(db_session, test_user, snapshot_paper):
     about_p1 = FlagDB(
         paper_id=paper.id,
         patient_id=p1.id,
-        source='PATIENT_EXTRACTION',
+        source='INDIVIDUAL_EXTRACTION',
         kind='excluded',
         subject='chosen as proband',
         evidence=_ev('chosen as proband'),
@@ -781,7 +781,7 @@ def test_flags_revert_with_snapshot(db_session, test_user, snapshot_paper):
     )
     about_nobody = FlagDB(
         paper_id=paper.id,
-        source='PATIENT_EXTRACTION',
+        source='INDIVIDUAL_EXTRACTION',
         kind='excluded',
         subject='untested sister',
         evidence=_ev('untested sister'),
@@ -800,7 +800,7 @@ def test_flags_revert_with_snapshot(db_session, test_user, snapshot_paper):
     db_session.add(
         FlagDB(
             paper_id=paper.id,
-            source='PATIENT_EXTRACTION',
+            source='INDIVIDUAL_EXTRACTION',
             kind='excluded',
             subject='added after the snapshot',
             evidence=_ev('later'),

@@ -53,7 +53,7 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
         <h4 className="text-sm font-semibold">Individual</h4>
         <ScopedRerunButton
           paperId={paperId}
-          taskType={TaskType.PATIENT_DEMOGRAPHICS}
+          taskType={TaskType.INDIVIDUAL_DEMOGRAPHICS}
           scope={{ patient_id: patient.id }}
           label="Re-run demographics"
           description="Re-runs demographics for this individual only -- sex, ages, ancestry, affected status, carrier status and relationship to the proband -- overwriting the fields below. Then re-runs this individual's phenotype extraction and the paper's individual-variant links."

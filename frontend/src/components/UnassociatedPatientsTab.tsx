@@ -148,7 +148,7 @@ export function UnassociatedPatientsTab({
   return (
     <PipelineGate
       tasks={tasks}
-      task={TaskType.PATIENT_VARIANT_OCCURRENCES}
+      task={TaskType.INDIVIDUAL_VARIANT_OCCURRENCES}
       label="Individual/variant linking"
     >
       {patients.length === 0 ? (

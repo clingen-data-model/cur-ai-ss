@@ -180,21 +180,21 @@ def _task_completed(session: Session, paper_id: int, task_type: TaskType) -> boo
     )
 
 
-def _patient_demographics_ready(session: Session, paper_id: int) -> bool:
+def _individual_demographics_ready(session: Session, paper_id: int) -> bool:
     """Whether patient identity + all per-patient demographics are complete.
 
-    True once PATIENT_EXTRACTION has completed and every per-patient
-    PATIENT_DEMOGRAPHICS task (if any) has completed. With zero patients there
+    True once INDIVIDUAL_EXTRACTION has completed and every per-patient
+    INDIVIDUAL_DEMOGRAPHICS task (if any) has completed. With zero patients there
     are no demographics tasks, so this reduces to "patient extraction done",
     preserving the pre-split behavior for papers with no extractable patients.
     """
-    if not _task_completed(session, paper_id, TaskType.PATIENT_EXTRACTION):
+    if not _task_completed(session, paper_id, TaskType.INDIVIDUAL_EXTRACTION):
         return False
     demographics_tasks = (
         session.query(TaskDB)
         .filter(
             TaskDB.paper_id == paper_id,
-            TaskDB.type == TaskType.PATIENT_DEMOGRAPHICS,
+            TaskDB.type == TaskType.INDIVIDUAL_DEMOGRAPHICS,
         )
         .all()
     )
@@ -233,17 +233,17 @@ def paper_busy_message(session: Session, paper_id: int, action: str) -> str | No
 def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType) -> int:
     """Delete every downstream task row for a paper before a user-triggered re-run.
 
-    The readiness gates (``_task_completed``, ``_patient_demographics_ready``)
+    The readiness gates (``_task_completed``, ``_individual_demographics_ready``)
     ask only whether a COMPLETED row of some type exists for the paper -- a
     question with no notion of *this* run. On a re-run the previous run's rows
     are still present and still COMPLETED, so a fan-in successor can be enqueued
     against state the re-run is about to replace.
 
     That is not hypothetical. Re-running PAPER_CLASSIFIER lets VARIANT_EXTRACTION
-    (fast) satisfy the gate using the *previous* run's PATIENT_EXTRACTION and
-    PATIENT_DEMOGRAPHICS rows, because PATIENT_EXTRACTION sits behind the slow
-    FIGURE_DESCRIPTION and has not been re-queued yet. PATIENT_VARIANT_OCCURRENCES
-    then runs concurrently with PATIENT_EXTRACTION -- which deletes and recreates
+    (fast) satisfy the gate using the *previous* run's INDIVIDUAL_EXTRACTION and
+    INDIVIDUAL_DEMOGRAPHICS rows, because INDIVIDUAL_EXTRACTION sits behind the slow
+    FIGURE_DESCRIPTION and has not been re-queued yet. INDIVIDUAL_VARIANT_OCCURRENCES
+    then runs concurrently with INDIVIDUAL_EXTRACTION -- which deletes and recreates
     the paper's patients -- and its INSERT dies on a FOREIGN KEY constraint
     against a patient that no longer exists.
 
@@ -287,7 +287,7 @@ def _enqueue_segregation_for_all_families(
     origin: TaskType | None = None,
 ) -> None:
     """Queue SEGREGATION_EVIDENCE_EXTRACTION for each family of the paper: the
-    fan-in of PATIENT_VARIANT_OCCURRENCES and the last PATIENT_DEMOGRAPHICS,
+    fan-in of INDIVIDUAL_VARIANT_OCCURRENCES and the last INDIVIDUAL_DEMOGRAPHICS,
     called from whichever completes second."""
     from lib.models import FamilyDB
 
@@ -308,7 +308,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
     Each case is explicit about what successors to create and any entity ID
-    filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES (patients and
+    filtering/expansion needed. INDIVIDUAL_VARIANT_OCCURRENCES (patients and
     variants) and SEGREGATION_EVIDENCE_EXTRACTION (occurrences and every
     patient's demographics) are the tasks that wait on multiple independent
     predecessors.
@@ -378,15 +378,15 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.PATIENT_EXTRACTION,
+                task_type=TaskType.INDIVIDUAL_EXTRACTION,
                 updated_by_user_id=user_id,
                 additional_context=note,
                 context_origin=origin,
                 budget_model=budget,
             )
 
-        case TaskType.PATIENT_EXTRACTION:
-            # Expand to per-patient PATIENT_DEMOGRAPHICS tasks
+        case TaskType.INDIVIDUAL_EXTRACTION:
+            # Expand to per-patient INDIVIDUAL_DEMOGRAPHICS tasks
             patients = (
                 session.query(PatientDB)
                 .filter(PatientDB.paper_id == task.paper_id)
@@ -396,7 +396,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.PATIENT_DEMOGRAPHICS,
+                    task_type=TaskType.INDIVIDUAL_DEMOGRAPHICS,
                     patient_id=patient.id,
                     updated_by_user_id=user_id,
                     additional_context=note,
@@ -411,14 +411,14 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    task_type=TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
                     updated_by_user_id=user_id,
                     additional_context=note,
                     context_origin=origin,
                     budget_model=budget,
                 )
 
-        case TaskType.PATIENT_DEMOGRAPHICS:
+        case TaskType.INDIVIDUAL_DEMOGRAPHICS:
             # Per-patient PHENOTYPE_EXTRACTION for this patient, unless the
             # demographics just said they are unaffected: an unaffected
             # relative's features are not evidence for the gene, and on dev
@@ -442,14 +442,16 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     budget_model=budget,
                 )
 
-            # Fan-in with PATIENT_VARIANT_OCCURRENCES: segregation reads every
+            # Fan-in with INDIVIDUAL_VARIANT_OCCURRENCES: segregation reads every
             # patient's affected status, so it waits for the last demographics
             # run. Queued for every family, not just this patient's: a re-run
             # of demographics (scoped or not) has already cleared every
             # family's segregation rows (invalidate_descendants), and the
             # paper settles with a full set only if each is queued again.
-            if _patient_demographics_ready(session, task.paper_id) and _task_completed(
-                session, task.paper_id, TaskType.PATIENT_VARIANT_OCCURRENCES
+            if _individual_demographics_ready(
+                session, task.paper_id
+            ) and _task_completed(
+                session, task.paper_id, TaskType.INDIVIDUAL_VARIANT_OCCURRENCES
             ):
                 _enqueue_segregation_for_all_families(
                     session, task.paper_id, user_id, note, origin
@@ -474,12 +476,12 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     budget_model=budget,
                 )
 
-            # Fan-in with PATIENT_EXTRACTION (see that case).
-            if _task_completed(session, task.paper_id, TaskType.PATIENT_EXTRACTION):
+            # Fan-in with INDIVIDUAL_EXTRACTION (see that case).
+            if _task_completed(session, task.paper_id, TaskType.INDIVIDUAL_EXTRACTION):
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    task_type=TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
                     updated_by_user_id=user_id,
                     additional_context=note,
                     context_origin=origin,
@@ -498,11 +500,11 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 budget_model=budget,
             )
 
-        case TaskType.PATIENT_VARIANT_OCCURRENCES:
+        case TaskType.INDIVIDUAL_VARIANT_OCCURRENCES:
             # Per-family SEGREGATION_EVIDENCE_EXTRACTION, once every patient's
-            # demographics is in (the PATIENT_DEMOGRAPHICS case covers the
+            # demographics is in (the INDIVIDUAL_DEMOGRAPHICS case covers the
             # other order).
-            if _patient_demographics_ready(session, task.paper_id):
+            if _individual_demographics_ready(session, task.paper_id):
                 _enqueue_segregation_for_all_families(
                     session, task.paper_id, user_id, note, origin
                 )

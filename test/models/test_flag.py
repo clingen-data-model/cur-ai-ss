@@ -10,7 +10,7 @@ from lib.models.flag import (
     FlagKind,
     ReasoningFlag,
 )
-from lib.models.patient import PatientExtractionOutput
+from lib.models.patient import IndividualExtractionOutput
 from lib.models.phenotype import PhenotypeExtractionOutput
 from lib.models.variant import VariantExtractionOutput
 from lib.tasks.flags import (
@@ -34,10 +34,10 @@ def _flag(subject: str, about: str | None = None) -> ExtractionFlag:
 
 @pytest.mark.parametrize(
     'model',
-    [PatientExtractionOutput, VariantExtractionOutput, PhenotypeExtractionOutput],
+    [IndividualExtractionOutput, VariantExtractionOutput, PhenotypeExtractionOutput],
 )
 def test_flags_default_to_empty_so_an_older_output_still_loads(model):
-    field = 'patients' if model is PatientExtractionOutput else None
+    field = 'patients' if model is IndividualExtractionOutput else None
     kwargs = (
         {'patients': [], 'families': []}
         if field
@@ -166,7 +166,7 @@ def test_replace_flags_resolves_about_and_keeps_an_unmatched_one(db_session, pap
     rows = replace_flags(
         db_session,
         paper_id=paper_db.id,
-        source='PATIENT_EXTRACTION',
+        source='INDIVIDUAL_EXTRACTION',
         flags=[
             _flag('chosen as proband', about='patient 1'),
             _flag('untested sister'),
@@ -181,7 +181,7 @@ def test_replace_flags_resolves_about_and_keeps_an_unmatched_one(db_session, pap
         ('someone the output lost', None),
     ]
     assert rows[0].evidence['citations'][0]['anchor'] == 'paragraph-3'
-    assert rows[0].source == 'PATIENT_EXTRACTION'
+    assert rows[0].source == 'INDIVIDUAL_EXTRACTION'
     assert rows[0].kind == 'excluded'
 
 
@@ -211,7 +211,7 @@ def test_replace_flags_scope_bounds_the_delete_and_stamps_new_rows(db_session, p
     replace_flags(
         db_session,
         paper_id=paper_db.id,
-        source='PATIENT_EXTRACTION',
+        source='INDIVIDUAL_EXTRACTION',
         flags=[_flag('paper level')],
     )
     db_session.flush()
@@ -228,7 +228,7 @@ def test_replace_flags_scope_bounds_the_delete_and_stamps_new_rows(db_session, p
     rows = db_session.query(FlagDB).filter_by(paper_id=paper_db.id).order_by(FlagDB.id)
     assert [(r.subject, r.patient_id, r.source) for r in rows] == [
         ('about Patient 2', p2.id, 'PHENOTYPE_EXTRACTION'),
-        ('paper level', None, 'PATIENT_EXTRACTION'),
+        ('paper level', None, 'INDIVIDUAL_EXTRACTION'),
         ('p1 again, stamped with the scope', p1.id, 'PHENOTYPE_EXTRACTION'),
     ]
 
@@ -244,7 +244,7 @@ def test_replace_flags_without_scope_replaces_all_of_that_source(db_session, pap
     replace_flags(
         db_session,
         paper_id=paper_db.id,
-        source='PATIENT_EXTRACTION',
+        source='INDIVIDUAL_EXTRACTION',
         flags=[_flag('other agent')],
     )
     replace_flags(

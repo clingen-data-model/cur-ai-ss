@@ -439,7 +439,7 @@ def test_compound_het_confidence_becomes_a_flag(monkeypatch, tmp_path):
             )
         ).fetchall()
         assert len(flags) == 2
-        assert flags[0][0:3] == ('PATIENT_VARIANT_OCCURRENCES', 'older flag', e)
+        assert flags[0][0:3] == ('INDIVIDUAL_VARIANT_OCCURRENCES', 'older flag', e)
         (
             source,
             subject,
@@ -524,6 +524,90 @@ def test_pedigree_description_tasks_are_renamed(monkeypatch, tmp_path):
             .all()
         )
     assert types == ['PEDIGREE_DESCRIPTION', 'PATIENT_EXTRACTION']
+
+
+def test_patient_task_types_become_individual(monkeypatch, tmp_path):
+    """d5f1b3a7c9e2 rewrites the three Patient task types' stored names
+    wherever a task type name is kept: a task's type and context origin, and
+    a flag's source. Other names are untouched; downgrade restores them."""
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'c8e2a4f6b9d1')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        for task_type, origin in (
+            ('PATIENT_EXTRACTION', None),
+            ('PATIENT_DEMOGRAPHICS', 'PATIENT_EXTRACTION'),
+            ('PATIENT_VARIANT_OCCURRENCES', 'PDF_PARSING'),
+            ('VARIANT_EXTRACTION', None),
+        ):
+            connection.execute(
+                text(
+                    'INSERT INTO tasks (paper_id, type, context_origin, status, '
+                    'tries, skip_successors) '
+                    "VALUES (:paper_id, :type, :origin, 'COMPLETED', 1, 0)"
+                ),
+                {'paper_id': paper_id, 'type': task_type, 'origin': origin},
+            )
+        for source in ('PATIENT_DEMOGRAPHICS', 'VARIANT_EXTRACTION'):
+            connection.execute(
+                text(
+                    'INSERT INTO flags (paper_id, source, kind, subject, evidence) '
+                    "VALUES (:paper_id, :source, 'inferred', 's', '{}')"
+                ),
+                {'paper_id': paper_id, 'source': source},
+            )
+
+    def stored():
+        with engine.begin() as connection:
+            tasks = connection.execute(
+                text('SELECT type, context_origin FROM tasks ORDER BY id')
+            ).fetchall()
+            sources = (
+                connection.execute(text('SELECT source FROM flags ORDER BY id'))
+                .scalars()
+                .all()
+            )
+        return [tuple(row) for row in tasks], sources
+
+    command.upgrade(cfg, 'd5f1b3a7c9e2')
+    assert stored() == (
+        [
+            ('INDIVIDUAL_EXTRACTION', None),
+            ('INDIVIDUAL_DEMOGRAPHICS', 'INDIVIDUAL_EXTRACTION'),
+            ('INDIVIDUAL_VARIANT_OCCURRENCES', 'PDF_PARSING'),
+            ('VARIANT_EXTRACTION', None),
+        ],
+        ['INDIVIDUAL_DEMOGRAPHICS', 'VARIANT_EXTRACTION'],
+    )
+
+    command.downgrade(cfg, 'c8e2a4f6b9d1')
+    assert stored() == (
+        [
+            ('PATIENT_EXTRACTION', None),
+            ('PATIENT_DEMOGRAPHICS', 'PATIENT_EXTRACTION'),
+            ('PATIENT_VARIANT_OCCURRENCES', 'PDF_PARSING'),
+            ('VARIANT_EXTRACTION', None),
+        ],
+        ['PATIENT_DEMOGRAPHICS', 'VARIANT_EXTRACTION'],
+    )
 
 
 def test_pedigrees_become_figure_descriptions(monkeypatch, tmp_path):

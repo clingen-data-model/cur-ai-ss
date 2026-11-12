@@ -5,14 +5,14 @@ The patient extraction prompt decides who counts as a patient. When it leaves
 room for interpretation, the same paper yields a different patient list on every
 call (paper 80 gave 9, 20 and 25 on 2026-09-30). This script is the check to run
 after touching that prompt: it sends the agent exactly the message production
-sends (``lib.tasks.handlers.patient_extraction_message``) N times, each in a
+sends (``lib.tasks.handlers.individual_extraction_message``) N times, each in a
 fresh conversation, and compares the identifier sets. Nothing is written to the
 database or to disk; the runs cost only model calls.
 
 Exit status is 1 when any paper's runs disagree, so it can gate a re-run.
 
 Usage:
-    uv run python -m lib.bin.patient_extraction_stability --paper-id 80 [--paper-id N ...] [--runs 3]
+    uv run python -m lib.bin.individual_extraction_stability --paper-id 80 [--paper-id N ...] [--runs 3]
 """
 
 import argparse
@@ -26,11 +26,11 @@ from uuid import uuid4
 
 from agents import Runner, SQLiteSession
 
-from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
+from lib.agents.individual_extraction_agent import agent as individual_extraction_agent
 from lib.api.db import session_scope
 from lib.core.logging import setup_logging
-from lib.models.patient import PatientExtractionOutput, ProbandStatus
-from lib.tasks.handlers import patient_extraction_message
+from lib.models.patient import IndividualExtractionOutput, ProbandStatus
+from lib.tasks.handlers import individual_extraction_message
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ def compare_runs(sets: list[set[str]]) -> Report:
 async def run_paper(paper_id: int, runs: int) -> Report:
     """Run the agent ``runs`` times on one paper and log each result."""
     with session_scope() as session:
-        message = patient_extraction_message(session, paper_id)
+        message = individual_extraction_message(session, paper_id)
 
     sets: list[set[str]] = []
     for run in range(runs):
@@ -79,9 +79,9 @@ async def run_paper(paper_id: int, runs: int) -> Report:
             session_id=f'stability-{paper_id}-{uuid4()}', db_path=':memory:'
         )
         result = await Runner.run(
-            patient_extraction_agent, message, session=conversation
+            individual_extraction_agent, message, session=conversation
         )
-        parsed = cast(PatientExtractionOutput, result.final_output)
+        parsed = cast(IndividualExtractionOutput, result.final_output)
         identifiers = {p.identifier.value for p in parsed.patients}
         probands = sorted(
             p.identifier.value

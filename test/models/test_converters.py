@@ -1,6 +1,6 @@
 from lib.models import PaperDB, PaperExtractionOutput, PaperType
 from lib.models.converters import (
-    apply_patient_demographics,
+    apply_individual_demographics,
     harmonized_variant_to_db,
     patient_identity_to_db,
 )
@@ -10,8 +10,8 @@ from lib.models.patient import (
     AgeUnit,
     CountryCode,
     Ethnicity,
+    IndividualDemographics,
     OnsetCategory,
-    PatientDemographics,
     PatientIdentity,
     ProbandStatus,
     Race,
@@ -129,10 +129,10 @@ def test_patient_identity_to_db_sets_identity_and_placeholder_demographics():
     assert row.race_evidence['value'] == 'Unknown'
 
 
-def test_apply_patient_demographics_overwrites_placeholders():
+def test_apply_individual_demographics_overwrites_placeholders():
     row = patient_identity_to_db('paper123', _identity())
 
-    demographics = PatientDemographics(
+    demographics = IndividualDemographics(
         sex=EvidenceBlock(
             value=SexAtBirth.Female,
             reasoning='stated female',
@@ -190,7 +190,7 @@ def test_apply_patient_demographics_overwrites_placeholders():
             citations=[_cite('affected individual')],
         ),
     )
-    apply_patient_demographics(row, demographics)
+    apply_individual_demographics(row, demographics)
 
     # Identity is untouched
     assert row.identifier == 'P1'
@@ -219,11 +219,11 @@ def test_apply_patient_demographics_overwrites_placeholders():
     ]
 
 
-def test_apply_patient_demographics_maps_segregation_analysis_fields():
+def test_apply_individual_demographics_maps_segregation_analysis_fields():
     """Segregation analysis fields carried on demographics are applied."""
     row = patient_identity_to_db('paper_seg', _identity())
 
-    demographics = PatientDemographics(
+    demographics = IndividualDemographics(
         sex=EvidenceBlock(
             value=SexAtBirth.Male, reasoning='stated', citations=[_cite('male')]
         ),
@@ -264,7 +264,7 @@ def test_apply_patient_demographics_maps_segregation_analysis_fields():
             citations=[_cite('identical twins')],
         ),
     )
-    apply_patient_demographics(row, demographics)
+    apply_individual_demographics(row, demographics)
 
     assert row.is_obligate_carrier is True
     assert row.relationship_to_proband == 'Parent'
@@ -353,10 +353,10 @@ def test_harmonized_variant_to_db_with_partial_fields():
     assert result.reasoning == 'Normalized via transcript-based projection.'
 
 
-def test_apply_patient_demographics_stores_citations():
+def test_apply_individual_demographics_stores_citations():
     """The stored evidence dict carries the citations the agent produced."""
     row = patient_identity_to_db('paper_cite', _identity())
-    demographics = PatientDemographics(
+    demographics = IndividualDemographics(
         sex=EvidenceBlock(
             value=SexAtBirth.Female,
             reasoning='stated',
@@ -375,7 +375,7 @@ def test_apply_patient_demographics_stores_citations():
         ),
     )
 
-    apply_patient_demographics(row, demographics)
+    apply_individual_demographics(row, demographics)
 
     assert row.sex_evidence['citations'] == [{'anchor': 'table-1-row-2', 'quote': 'F'}]
     assert 'quote' not in row.sex_evidence

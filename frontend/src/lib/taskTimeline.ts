@@ -12,7 +12,7 @@
  * permanently blanking out everything downstream. Judging each row by its own
  * instances alone sidesteps both. The one type created in more than one batch
  * from independent predecessors (MONDO_LINKING, from both Paper Metadata and
- * Patient Variant Occurrences finishing) can in principle un-check briefly
+ * Individual Variant Occurrences finishing) can in principle un-check briefly
  * between batches -- accepted as a minor, rare cosmetic cost.
  */
 import { RERUNNABLE_TASK_TYPES } from '@/components/PaperActions'

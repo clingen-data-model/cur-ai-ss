@@ -13,7 +13,7 @@ from lib.bin import worker
 from lib.models import GeneDB, PaperDB, TaskDB
 from lib.tasks.models import TaskStatus, TaskType
 
-TYPE = TaskType.PATIENT_DEMOGRAPHICS
+TYPE = TaskType.INDIVIDUAL_DEMOGRAPHICS
 
 
 @pytest.fixture

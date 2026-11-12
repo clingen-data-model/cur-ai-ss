@@ -1652,7 +1652,7 @@ def test_a_note_on_pdf_parsing_is_the_run_all_note(
     db_session.add(
         TaskDB(
             paper_id=seeded_paper.id,
-            type=TaskType.PATIENT_EXTRACTION,
+            type=TaskType.INDIVIDUAL_EXTRACTION,
             status=TaskStatus.COMPLETED,
         )
     )
@@ -1681,7 +1681,7 @@ def test_a_note_on_pdf_parsing_is_the_run_all_note(
         db_session.query(TaskDB)
         .filter(
             TaskDB.paper_id == seeded_paper.id,
-            TaskDB.type == TaskType.PATIENT_EXTRACTION,
+            TaskDB.type == TaskType.INDIVIDUAL_EXTRACTION,
         )
         .count()
         == 0
@@ -2578,7 +2578,7 @@ def test_paper_metadata_successor_enqueues_paper_mondo_linking(
     assert mondo_task.patient_variant_occurrence_id is None
 
 
-def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mondo(
+def test_individual_variant_occurrence_successor_enqueues_paper_and_occurrence_mondo(
     db_session, seeded_paper, seeded_variant
 ):
     """Re-links paper-level MONDO linking, and fans out occurrence-level MONDO
@@ -2613,13 +2613,13 @@ def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mond
     db_session.add(
         TaskDB(
             paper_id=seeded_paper.id,
-            type=TaskType.PATIENT_EXTRACTION,
+            type=TaskType.INDIVIDUAL_EXTRACTION,
             status=TaskStatus.COMPLETED,
         )
     )
     task = TaskDB(
         paper_id=seeded_paper.id,
-        type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+        type=TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
         status=TaskStatus.COMPLETED,
     )
     db_session.add(task)
@@ -3489,7 +3489,7 @@ def test_phenotype_extraction_queues_hpo_linking_whatever_the_patients_variants(
     }
 
 
-def test_patient_variant_occurrences_queues_no_hpo_linking(
+def test_individual_variant_occurrences_queues_no_hpo_linking(
     db_session, seeded_paper, seeded_variant
 ):
     """Linking hangs off phenotype extraction alone now; occurrences
@@ -3502,7 +3502,7 @@ def test_patient_variant_occurrences_queues_no_hpo_linking(
     _seed_phenotype(db_session, occurrence.patient)
     task = TaskDB(
         paper_id=seeded_paper.id,
-        type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+        type=TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
         status=TaskStatus.COMPLETED,
     )
     db_session.add(task)
@@ -4039,7 +4039,7 @@ def _seed_flag(db_session, seeded_paper, *, subject, patient_id=None):
     flag = FlagDB(
         paper_id=seeded_paper.id,
         patient_id=patient_id,
-        source='PATIENT_EXTRACTION',
+        source='INDIVIDUAL_EXTRACTION',
         kind='excluded',
         subject=subject,
         evidence={
@@ -4208,7 +4208,7 @@ def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
     )
     assert resp.status_code == 200, resp.text
     task = resp.json()
-    assert task['type'] == TaskType.PATIENT_EXTRACTION.value
+    assert task['type'] == TaskType.INDIVIDUAL_EXTRACTION.value
     assert task['patient_id'] is None
     assert task['skip_successors'] is True
     assert (

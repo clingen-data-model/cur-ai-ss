@@ -15,7 +15,7 @@ union nodes, 24 optional parameters: test_output_schema_census) but hit the
 undocumented one behind "The compiled grammar is too large" (400, live on
 2026-09-30, slice 4 of docs/evidence-anchors-plan.md; a probe with
 max_tokens=1 accepts a Variant with 8 evidence fields and refuses 12, and
-accepts PatientExtractionOutput at 16 / 39). For those two, `Agent(
+accepts IndividualExtractionOutput at 16 / 39). For those two, `Agent(
 output_type=None)` sends no schema to any provider (see
 agents.agent_output.AgentOutputSchema.is_plain_text), the schema is described
 in the prompt instead, and the reply is validated here, with the same repair
