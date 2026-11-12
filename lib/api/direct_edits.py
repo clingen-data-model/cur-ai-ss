@@ -433,6 +433,18 @@ def _choices(kind: Any) -> list[str] | None:
     return None
 
 
+def _as_choice(raw: Value, choices: list[str]) -> Value:
+    """A choice in the case its field spells it: the model writes
+    'frameshift' as readily as 'Frameshift', and either means the one value.
+    Anything that matches no choice is left for validation to refuse."""
+    by_case = {choice.casefold(): choice for choice in choices}
+    if isinstance(raw, str):
+        return by_case.get(raw.casefold(), raw)
+    if isinstance(raw, list):
+        return [by_case.get(item.casefold(), item) for item in raw]
+    return raw
+
+
 def _check_values(
     spec: EntitySpec, values: dict[str, Value], allowed: set[str] | frozenset[str]
 ) -> dict[str, Any]:
@@ -447,10 +459,12 @@ def _check_values(
     checked: dict[str, Any] = {}
     for name, raw in values.items():
         kind = spec.fields[name]
+        choices = _choices(kind)
         try:
-            checked[name] = TypeAdapter(kind).validate_python(raw)
+            checked[name] = TypeAdapter(kind).validate_python(
+                _as_choice(raw, choices) if choices else raw
+            )
         except ValidationError:
-            choices = _choices(kind)
             hint = f'; one of {choices}' if choices else ''
             raise EditProblem(f'{name}: {raw!r} is not a valid value{hint}') from None
     methods = checked.get('testing_methods')
