@@ -14,17 +14,27 @@ from dataclasses import dataclass
 from typing import Any
 
 from agents import Agent, RunContextWrapper, function_tool
+from pydantic import BaseModel, Field
 
 from lib.agents.model_factory import chat_model, chat_model_settings
 from lib.api.db import session_scope
+from lib.api.direct_edits import EditProblem, EditRequest, prepare_edits
+from lib.api.entity_edits import variant_text
 from lib.misc.snapshots import write_snapshot_safe
 from lib.models.base import row_to_dict
+from lib.models.chat_message import ChatProposal
 from lib.models.family import FamilyDB
 from lib.models.paper import PaperDB
 from lib.models.patient import PatientDB
+from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
 from lib.models.phenotype import PhenotypeDB
 from lib.models.variant import VariantDB
-from lib.tasks.handlers import QA_UNSUPPORTED_TASK_TYPES, ask_task_agent
+from lib.tasks.flags import patient_label
+from lib.tasks.handlers import (
+    QA_UNSUPPORTED_TASK_TYPES,
+    ask_task_agent,
+    paper_citation_texts,
+)
 from lib.tasks.misc import (
     enqueue_all_instances,
     enqueue_task,
@@ -122,15 +132,24 @@ def build_paper_chat_context(paper_id: int) -> str:
         return json.dumps(context, default=str)
 
 
+def _record(row: Any) -> dict:
+    """A row's columns without its evidence blocks: the values, not the
+    reasoning and citations behind each, which multiply a paper's records
+    several times over and answer no question the record itself does not."""
+    return {k: v for k, v in row_to_dict(row).items() if not k.endswith('_evidence')}
+
+
 def _make_list_entities_tool(paper_id: int) -> Any:
     @function_tool
     def list_paper_entities() -> str:
-        """List this paper's families, patients, variants, and phenotypes as
-        full records, so an entity the user names can be matched on any of
-        its fields. Each variant also includes its harmonized and annotated
-        records (the transcript-qualified HGVS lives there). Use the
-        top-level ``id`` of the matched entity when queueing a task. Returns
-        JSON."""
+        """List this paper's families, patients, variants, occurrences (which
+        individual carries which variant) and phenotypes, every field but
+        their evidence, so a row the user names can be matched on any of its
+        fields. Every row has its ``id`` and a ``label``, the name the paper
+        page and the edit card show it by ("Family 2 II-3", "Family 2 II-3:
+        c.7696C>T"), with the family already joined in. Each variant also
+        includes its harmonized and annotated records (the
+        transcript-qualified HGVS lives there). Returns JSON."""
         with session_scope() as session:
             families = (
                 session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
@@ -146,23 +165,50 @@ def _make_list_entities_tool(paper_id: int) -> Any:
                 .filter(PhenotypeDB.paper_id == paper_id)
                 .all()
             )
+            occurrences = (
+                session.query(PatientVariantOccurrenceDB)
+                .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
+                .all()
+            )
+
+            def patient_name(patient: PatientDB) -> str:
+                return patient_label(patient.family.identifier, patient.identifier)
 
             def variant_entry(variant: VariantDB) -> dict:
-                entry = row_to_dict(variant)
+                entry = {'label': variant_text(variant), **_record(variant)}
                 if variant.harmonized_variant is not None:
-                    entry['harmonized_variant'] = row_to_dict(
-                        variant.harmonized_variant
-                    )
+                    entry['harmonized_variant'] = _record(variant.harmonized_variant)
                 if variant.annotated_variant is not None:
-                    entry['annotated_variant'] = row_to_dict(variant.annotated_variant)
+                    entry['annotated_variant'] = _record(variant.annotated_variant)
                 return entry
 
             return json.dumps(
                 {
-                    'families': [row_to_dict(f) for f in families],
-                    'patients': [row_to_dict(p) for p in patients],
+                    'families': [
+                        {'label': f.identifier, **_record(f)} for f in families
+                    ],
+                    'patients': [
+                        {'label': patient_name(p), **_record(p)} for p in patients
+                    ],
                     'variants': [variant_entry(v) for v in variants],
-                    'phenotypes': [row_to_dict(ph) for ph in phenotypes],
+                    'occurrences': [
+                        {
+                            'label': f'{patient_name(o.patient)}: '
+                            f'{variant_text(o.variant)}',
+                            **_record(o),
+                        }
+                        for o in occurrences
+                    ],
+                    'phenotypes': [
+                        {
+                            'label': ph.concept,
+                            'individual': patient_name(ph.patient),
+                            **_record(ph),
+                            'hpo_id': ph.hpo.hpo_id if ph.hpo else None,
+                            'hpo_name': ph.hpo.hpo_name if ph.hpo else None,
+                        }
+                        for ph in phenotypes
+                    ],
                 },
                 default=str,
             )
@@ -191,7 +237,7 @@ def _make_ask_extraction_agent_tool(paper_id: int) -> Any:
         task_type MUST be one of the askable types listed in your instructions.
 
         For an entity-scoped step, first call list_paper_entities and pass the
-        matched entity's top-level id in the right field (family_id/patient_id/
+        matched row's id in the right field (family_id/patient_id/
         variant_id/phenotype_id/patient_variant_occurrence_id) -- the same
         scope enqueue_task uses. Leave every id null for a paper-wide step.
         Returns the agent's answer, or a message explaining why none is
@@ -240,8 +286,8 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
         """Queue an extraction/analysis task for this paper, mirroring what
         the "Rerun Agents" button does. Leave every entity id null to queue
         every instance of a paper-wide task type. For an entity-specific task
-        type, first call list_paper_entities and pass the matched entity's
-        top-level id in the right field, plus its label as entity_label. If
+        type, first call list_paper_entities and pass the matched row's id in
+        the right field, plus its label as entity_label. If
         the user gave extra guidance for the rerun (e.g. "treat patient 3 as
         the proband"), pass it as additional_context. Returns a user-facing
         confirmation -- reply with exactly that text."""
@@ -326,6 +372,38 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
     return queue_task
 
 
+class ChatReply(BaseModel):
+    """The chat's answer to one message. ``edits`` is set only for a direct
+    edit the model could express; the API checks them and, when they pass,
+    shows them for the curator to confirm (lib.api.direct_edits)."""
+
+    message: str = Field(
+        description='What to say to the user. For a direct edit you could '
+        'express, one short line introducing the edits; for one you could '
+        'not, why not and what they can do next.'
+    )
+    edits: list[EditRequest] = Field(
+        default_factory=list,
+        description='The direct edits the user asked for, or empty.',
+    )
+    note: str = Field(
+        default='',
+        description='With edits: one plain line saying what the curator asked '
+        'for, naming each row by its label ("Set F7285 IV:3 to male."). It is '
+        "recorded on every edit, ahead of the curator's own messages. Empty "
+        'without edits.',
+    )
+    request_messages: int = Field(
+        default=1,
+        ge=1,
+        description="With edits: how many of the curator's most recent "
+        'messages, counting this one, make up the request: 1 when this message '
+        'asks for the edits on its own; more when it continues one earlier in '
+        'the chat ("make IV:3 a male", "the latter", "try again" is 3). Leave '
+        'out earlier messages about something else.',
+    )
+
+
 CHAT_AGENT_INSTRUCTIONS = f"""
 You are a genomics-curation assistant embedded in a paper's chat panel.
 
@@ -344,16 +422,81 @@ with Y as additional_context, not a separate question.
   - Pick a task_type. It MUST be one of these runnable types:
 {_RUNNABLE_TASK_TYPE_LIST}
   - If the request clearly targets one entity (a patient/family label, or any
-    variant identifier), call list_paper_entities and match it against any
-    field of the returned records -- users never know internal ids. Use the
-    matched entity's top-level id in the right field (family_id/patient_id/
-    variant_id/phenotype_id/patient_variant_occurrence_id) and pass its label
-    as entity_label. If nothing clearly matches, ask which entity they mean
-    instead of guessing.
+    variant identifier), call list_paper_entities and match the user's words
+    against each row's label and fields -- users never know internal ids.
+    Use the matched row's id in the right field (family_id/patient_id/variant_id/phenotype_id/
+    patient_variant_occurrence_id) and pass its label as entity_label. If
+    nothing matches, or two rows match equally, ask which they mean instead
+    of guessing.
   - If the request is paper-wide (no entity named), call queue_task with every
     entity id left null.
   - Pass any extra guidance as additional_context.
   - Call queue_task, then reply with exactly its return value and nothing else.
+
+DIRECT EDITS
+If the user wants to change the data themselves -- add, remove or change a
+family, an individual, a variant, an occurrence or a phenotype ("add
+seizures to II-1", "II-3 is female", "remove the c.123A>G variant", "II-1 is
+homozygous for it", "add Family 4") -- this is a DIRECT EDIT, not an
+ACTION. Never queue a task for it, and never queue a task as well: a
+re-run reads the paper again and replaces what it wrote, which is a
+different thing from the curator changing one value.
+  - Resolve every row the request names with list_paper_entities, as for an
+    ACTION. If the request is ambiguous (which individual, in a paper with
+    several families; which of two similar variants), ask instead of
+    guessing.
+  - A phenotype is added without an HPO term; never pick one. To link or
+    relink one, the curator uses the HPO picker on the paper page, or asks
+    for HPO linking to be re-run, which is an ACTION.
+  - Evidence comes from the curator only. When their message quotes the
+    paper as the edit's evidence ("... -- the paper says 'had recurrent
+    seizures from age two'"), pass that quote, copied exactly from their
+    message. When it gives none, leave quote empty: never find, write or
+    paraphrase evidence yourself. If they ask for a citation without giving
+    the sentence, ask them for it.
+  - Put the edits in ``edits``, every edit of the request; one short line
+    introducing them in ``message``; and in ``note`` one plain line saying
+    what the curator asked for, naming rows by label ("Set F7285 IV:3 to
+    male."), which every edit records ahead of the curator's own messages;
+    and in ``request_messages`` how many of the curator's recent messages,
+    this one included, the request is made of. They are checked, then shown to
+    the curator to confirm; nothing is changed until they do, so never say
+    the edits are made.
+  - When you cannot express the request as edits -- it is ambiguous, it
+    names a row that does not exist, it needs a row the same request would
+    create (a new family and an individual in it), or it asks for something
+    listed below as not available -- leave ``edits`` empty and say in
+    ``message`` why, and what the curator can do next (which row they mean;
+    to add the family first and then the individual; to use the paper page).
+    Never add an edit the curator did not ask for.
+
+  Each edit names an entity and an action. update and delete take
+  entity_id, the row's id from list_paper_entities; create takes parent_id
+  where the row belongs to another. ``values`` are the fields to set, by
+  their names in list_paper_entities, each a string, number, boolean or
+  (testing_methods) list of strings; a choice must be one of its allowed
+  values. On an update, send only the fields whose value changes: a field
+  that already holds the value (a unit that stays the same beside a new
+  age) is left out.
+    family: create (identifier, optionally consanguinity), update
+      (identifier, consanguinity), delete (only once it has no individuals:
+      otherwise tell the curator to delete all individuals in the family
+      first).
+    patient (an individual): create (parent_id = the family's id;
+      identifier, and any demographics; the rest default to Unknown), update
+      (any demographic field), delete (also removes their occurrences and
+      phenotypes).
+    variant: create (at least one of variant, hgvs_c, hgvs_p, hgvs_g, rsid;
+      any other descriptive field), update (variant_type,
+      functional_evidence, main_focus, and the harmonized fields hgvs_c,
+      hgvs_p, hgvs_g, rsid, caid, gnomad_style_coordinates), delete (also
+      removes its occurrences).
+    occurrence (an individual carrying a variant): create (parent_id = the
+      individual's id; variant_id, and optionally zygosity, inheritance,
+      variant_inheritance, testing_methods (at most two), disease_name),
+      update (those same fields), delete.
+    phenotype: create (parent_id = the individual's id; concept only), and
+      delete. Not available: changing its HPO term.
 
 QUESTIONS
 Otherwise, answer using the PAPER CONTEXT block. Call list_paper_entities only
@@ -369,26 +512,32 @@ that work answers from its own memory of what it considered. task_type MUST
 be one of these askable types:
 {_ASKABLE_TASK_TYPE_LIST}
 Resolve an entity-scoped question's target the same way as an ACTION (call
-list_paper_entities, match by any field, pass the matched id). If it returns
+list_paper_entities, match it, pass the matched id). If it returns
 that no task/conversation is available, say so rather than falling back to a
 guess.
 
-Keep replies short and conversational -- this is a chat panel, not a report.
+Whatever the request, your reply to the user goes in ``message``. Name rows
+there as the paper page does, by label ("F7285 IV:3", a variant as the paper
+writes it), never by id, and call a patient an individual. Keep it
+short and conversational -- this is a chat panel, not a report.
 """
 
 
 def make_chat_agent(paper_id: int, user_id: int) -> Agent:
-    """One agent per chat turn. For a QUESTION it answers in prose. For an
-    ACTION it calls queue_task, which enqueues the task (attributed to
-    user_id) and records a confirmation on the run context; the caller
-    treats a populated ``ChatRunContext.confirmation`` as "a task was queued"
-    and uses that text verbatim as the assistant's reply.
+    """One agent per chat turn, answering with a ``ChatReply``. For a
+    QUESTION its message is the answer. For an ACTION it calls queue_task,
+    which enqueues the task (attributed to user_id) and records a
+    confirmation on the run context; the caller treats a populated
+    ``ChatRunContext.confirmation`` as "a task was queued" and uses that
+    text verbatim as the assistant's reply. For a DIRECT EDIT its edits are
+    checked and proposed by the caller (lib.api.direct_edits.propose).
     """
     return Agent(
         name='chat_agent',
         instructions=CHAT_AGENT_INSTRUCTIONS,
         model=chat_model(),
         model_settings=chat_model_settings(),
+        output_type=ChatReply,
         tools=[  # type: ignore[list-item]
             _make_list_entities_tool(paper_id),
             _make_ask_extraction_agent_tool(paper_id),

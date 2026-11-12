@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { MessageCircleIcon, SendIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { usePaperChat } from '@/hooks/usePaperChat'
+import { EditProposalDialog, ProposalStatus } from '@/components/EditProposalCard'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -28,15 +29,26 @@ import {
  * -- today that's just the patients page, but it requires no changes when
  * occurrences/variants get their own React routes later. */
 export function ChatBubble({ paperId }: { paperId: number }) {
-  const { messages, isLoading, sendMessage, clearChat } = usePaperChat(paperId)
+  const { messages, isLoading, sendMessage, clearChat, applyProposal, cancelProposal } =
+    usePaperChat(paperId)
   const [draft, setDraft] = useState('')
   const [open, setOpen] = useState(false)
+  // The reply whose proposed edits the confirmation dialog shows. It opens
+  // by itself when a reply proposes edits; "Review" reopens it. Once the
+  // proposal is applied or cancelled it is no longer pending, so it closes.
+  const [reviewingId, setReviewingId] = useState<number | null>(null)
+  const reviewing =
+    messages.find((m) => m.id === reviewingId && m.proposal_status === 'pending') ?? null
 
   const handleSend = () => {
     const message = draft.trim()
     if (!message || sendMessage.isPending) return
     setDraft('')
-    sendMessage.mutate(message)
+    sendMessage.mutate(message, {
+      onSuccess: (reply) => {
+        if (reply?.proposal_status === 'pending') setReviewingId(reply.id)
+      },
+    })
   }
 
   return (
@@ -103,8 +115,8 @@ export function ChatBubble({ paperId }: { paperId: number }) {
                       <MessageScrollerItem key={message.id}>
                         <div
                           className={cn(
-                            'flex',
-                            message.role === 'user' ? 'justify-end' : 'justify-start',
+                            'flex flex-col',
+                            message.role === 'user' ? 'items-end' : 'items-start',
                           )}
                         >
                           <div
@@ -117,6 +129,10 @@ export function ChatBubble({ paperId }: { paperId: number }) {
                           >
                             {message.content}
                           </div>
+                          <ProposalStatus
+                            message={message}
+                            onReview={() => setReviewingId(message.id)}
+                          />
                         </div>
                       </MessageScrollerItem>
                     ))}
@@ -147,7 +163,7 @@ export function ChatBubble({ paperId }: { paperId: number }) {
                     handleSend()
                   }
                 }}
-                placeholder="Ask a question, or request a rerun..."
+                placeholder="Ask a question, request a rerun, or ask for a change..."
                 className="min-h-14"
               />
               <Button
@@ -162,6 +178,16 @@ export function ChatBubble({ paperId }: { paperId: number }) {
           </CardFooter>
         </Card>
       </PopoverContent>
+      <EditProposalDialog
+        message={reviewing}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setReviewingId(null)
+        }}
+        onApply={() => reviewing && applyProposal.mutate(reviewing.id)}
+        onCancel={() => reviewing && cancelProposal.mutate(reviewing.id)}
+        isApplying={applyProposal.isPending}
+        isCancelling={cancelProposal.isPending}
+      />
     </Popover>
   )
 }

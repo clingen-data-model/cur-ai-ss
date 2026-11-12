@@ -85,6 +85,7 @@ class FamilyResp(BaseModel):
 
 class FamilyCreateRequest(BaseModel):
     identifier: str
+    consanguinity: bool = False
 
 
 class FamilyUpdateRequest(PatchModel):

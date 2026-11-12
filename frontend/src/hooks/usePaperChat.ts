@@ -1,13 +1,61 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  applyChatProposalPapersPaperIdChatMessagesMessageIdApplyPost,
+  cancelChatProposalPapersPaperIdChatMessagesMessageIdCancelPost,
   clearChatMessagesPapersPaperIdChatMessagesDelete,
   listChatMessagesPapersPaperIdChatMessagesGet,
   sendChatMessagePapersPaperIdChatMessagesPost,
 } from '@/api/generated'
 import type { ChatMessageResp } from '@/api/generated/types.gen'
+import { apiErrorMessage } from '@/lib/apiError'
 
 export type { ChatMessageResp }
+
+/** Apply or cancel the direct edits a chat reply proposed. Applying changes
+ * the paper's data, so every view of it refetches; the chat refetches either
+ * way to show the card resolved. */
+const APPLIED_EDIT_QUERIES = [
+  'families',
+  'patients',
+  'variants',
+  'occurrences',
+  'phenotypes',
+  'flags',
+  'review-cases',
+  'segregation-analysis',
+]
+
+function useResolveProposal(paperId: number, outcome: 'apply' | 'cancel') {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (messageId: number) => {
+      const options = {
+        path: { paper_id: paperId, message_id: messageId },
+        throwOnError: true as const,
+      }
+      return outcome === 'apply'
+        ? applyChatProposalPapersPaperIdChatMessagesMessageIdApplyPost(options)
+        : cancelChatProposalPapersPaperIdChatMessagesMessageIdCancelPost(options)
+    },
+    onSuccess: () => {
+      if (outcome === 'apply') {
+        // A proposal can touch any of the paper's tables (a deleted
+        // individual takes their occurrences and phenotypes with them).
+        for (const key of APPLIED_EDIT_QUERIES) {
+          queryClient.invalidateQueries({ queryKey: [key, paperId] })
+        }
+        queryClient.invalidateQueries({ queryKey: ['papers'] })
+        toast.success('Changes applied')
+      }
+    },
+    onError: (err) =>
+      toast.error(
+        apiErrorMessage(err, outcome === 'apply' ? 'Could not apply the changes' : 'Could not cancel'),
+      ),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['paper-chat', paperId] }),
+  })
+}
 
 export function usePaperChat(paperId: number) {
   const queryClient = useQueryClient()
@@ -65,11 +113,16 @@ export function usePaperChat(paperId: number) {
     },
   })
 
+  const applyProposal = useResolveProposal(paperId, 'apply')
+  const cancelProposal = useResolveProposal(paperId, 'cancel')
+
   return {
     messages: messagesQuery.data ?? [],
     isLoading: messagesQuery.isPending,
     isError: messagesQuery.isError,
     sendMessage,
     clearChat,
+    applyProposal,
+    cancelProposal,
   }
 }
