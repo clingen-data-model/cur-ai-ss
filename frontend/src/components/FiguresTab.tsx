@@ -1,9 +1,12 @@
 /* The figures the Figure Description step described, one sub-tab per figure,
  * main text first: the kinds the step saw in it (a pedigree, a chromatogram,
- * a gel...), its image, the legend as printed and the vision model's reading.
+ * a gel...), its image, the legend as printed and the vision model's reading,
+ * which is long and folded away under its own heading until opened.
  * A tab is named by the paper's own figure number when its legend starts with
  * one ("Figure 2.", "Fig. S1"), else by the figure's anchor in the paper text. */
+import { Collapsible } from '@base-ui/react/collapsible'
 import { useQuery } from '@tanstack/react-query'
+import { ChevronRight } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getFiguresPapersPaperIdFiguresGet } from '@/api/generated'
@@ -121,8 +124,13 @@ function DescribedFigure({ figure }: { figure: FigureDescriptionResp }) {
           </figcaption>
         )}
       </figure>
-      <div
-        className="w-full text-sm text-muted-foreground
+      <Collapsible.Root className="w-full rounded-lg border">
+        <Collapsible.Trigger className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted/50">
+          <ChevronRight className="size-4 text-muted-foreground transition-transform group-data-[panel-open]:rotate-90" />
+          Vision model's description
+        </Collapsible.Trigger>
+        <Collapsible.Panel
+          className="border-t px-3 pb-2 text-sm text-muted-foreground
           [&_h1]:text-base [&_h1]:font-semibold [&_h1]:text-foreground [&_h1]:mt-3 [&_h1]:mb-1
           [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-foreground [&_h2]:mt-3 [&_h2]:mb-1
           [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground [&_h3]:mt-2 [&_h3]:mb-1
@@ -130,9 +138,10 @@ function DescribedFigure({ figure }: { figure: FigureDescriptionResp }) {
           [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1.5
           [&_li]:my-0.5 [&_table]:border-collapse [&_table]:my-2
           [&_th]:border [&_th]:px-2 [&_th]:py-1 [&_th]:text-foreground [&_td]:border [&_td]:px-2 [&_td]:py-1"
-      >
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{figure.description}</ReactMarkdown>
-      </div>
+        >
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{figure.description}</ReactMarkdown>
+        </Collapsible.Panel>
+      </Collapsible.Root>
     </section>
   )
 }
