@@ -28,6 +28,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  deleteFamilyPapersPaperIdFamiliesFamilyIdDelete,
   getFamiliesPapersPaperIdFamiliesGet,
   getPatientsPapersPaperIdPatientsGet,
   getSegregationAnalysisPapersPaperIdSegregationAnalysisGet,
@@ -42,6 +43,7 @@ import type {
   SegregationAnalysisResp,
   SegregationEvidenceUpdateRequest,
 } from '@/api/generated/types.gen'
+import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { EditableNumberRow, EditableSwitchRow, EditableTextRow, ReadOnlyRow } from '@/components/EditableField'
 import { FlagIndicator } from '@/components/FlagIndicator'
 import { usePaperFlags } from '@/hooks/usePaperFlags'
@@ -376,6 +378,39 @@ function FamilyRow({
   const unknown = members.length - affected - unaffected
   const criteria = seg?.computed?.meets_minimum_criteria
 
+  // An empty family only: its individuals are the curation, and each is
+  // deleted on its own first (the API refuses a family with members).
+  const queryClient = useQueryClient()
+  const deleteMutation = useMutation({
+    mutationKey: ['paper-edit', paperId],
+    mutationFn: () =>
+      deleteFamilyPapersPaperIdFamiliesFamilyIdDelete({
+        path: { paper_id: paperId, family_id: family.id },
+        throwOnError: true,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['families', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['segregation-analysis', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+      toast.success('Family deleted')
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete family')),
+  })
+  const deleteButton = (
+    <DeleteIconButton
+      title="Delete family?"
+      description={
+        <>
+          This will permanently delete{' '}
+          <span className="font-medium text-foreground">{family.identifier}</span>. This cannot be
+          undone.
+        </>
+      }
+      disabled={members.length > 0 || deleteMutation.isPending}
+      onDelete={() => deleteMutation.mutate()}
+    />
+  )
+
   return (
     <Fragment>
       <TableRow ref={rowRef} className="cursor-pointer scroll-mt-4" onClick={onToggle}>
@@ -403,10 +438,20 @@ function FamilyRow({
             '—'
           )}
         </TableCell>
+        <TableCell onClick={(e) => e.stopPropagation()}>
+          {members.length > 0 ? (
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex" />}>{deleteButton}</TooltipTrigger>
+              <TooltipContent>Delete all individuals in the family first</TooltipContent>
+            </Tooltip>
+          ) : (
+            deleteButton
+          )}
+        </TableCell>
       </TableRow>
       {expanded && (
         <TableRow>
-          <TableCell colSpan={9} className="p-0">
+          <TableCell colSpan={10} className="p-0">
             <FamilyDetail
               paperId={paperId}
               family={family}
@@ -534,6 +579,7 @@ export function FamiliesTab({
             <TableHead>Unknown</TableHead>
             <TableHead>Consanguineous</TableHead>
             <TableHead>Segregation criteria</TableHead>
+            <TableHead className="w-8" />
           </TableRow>
         </TableHeader>
         <TableBody>

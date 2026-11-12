@@ -2405,6 +2405,47 @@ def test_delete_patient(client, db_session, seeded_paper, test_user):
     assert resp.status_code == 404
 
 
+def test_delete_family(client, db_session, seeded_paper, test_user):
+    """A family with individuals is refused, with what to do first; once
+    they are gone it is deleted and logged like any other delete."""
+    family_id = client.post(
+        f'/papers/{seeded_paper.id}/families', json={'identifier': 'Family 9'}
+    ).json()['id']
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family_id,
+        identifier='Member',
+        **_patient_required_fields('Member'),
+    )
+    db_session.add(patient)
+    db_session.commit()
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/families/{family_id}')
+    assert resp.status_code == 409
+    assert 'delete all individuals in the family first' in resp.json()['detail']
+    assert db_session.get(FamilyDB, family_id) is not None
+
+    client.delete(f'/papers/{seeded_paper.id}/patients/{patient.id}')
+    resp = client.delete(f'/papers/{seeded_paper.id}/families/{family_id}')
+    assert resp.status_code == 204
+    db_session.expire_all()
+    assert db_session.get(FamilyDB, family_id) is None
+
+    log_entry = (
+        db_session.query(DeletionLogDB)
+        .filter(
+            DeletionLogDB.entity_type == 'family',
+            DeletionLogDB.entity_id == family_id,
+        )
+        .one()
+    )
+    assert log_entry.identifier_snapshot == 'Family 9'
+    assert log_entry.deleted_by_user_id == test_user.id
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/families/999999')
+    assert resp.status_code == 404
+
+
 def test_delete_variant(client, db_session, seeded_paper, seeded_variant, test_user):
     variant_id = seeded_variant.id
     resp = client.delete(f'/papers/{seeded_paper.id}/variants/{variant_id}')
