@@ -60,7 +60,7 @@ export function DataTable<TData, TValue>({
   filterPlaceholder = 'Filter...',
   toolbar,
   compact = false,
-  pageSize = 10,
+  pageSize = 20,
   renderSubComponent,
   getRowCanExpand,
   className,
