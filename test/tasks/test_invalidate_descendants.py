@@ -4,7 +4,7 @@ import pytest
 
 from lib.models import GeneDB, PaperDB
 from lib.tasks.misc import (
-    _patient_demographics_ready,
+    _individual_demographics_ready,
     _task_completed,
     invalidate_descendants,
 )
@@ -31,7 +31,7 @@ def _task(db_session, paper, task_type, status=TaskStatus.COMPLETED, **kw):
 
 def test_clears_completed_descendants(db_session, paper):
     _task(db_session, paper, TaskType.PAPER_CLASSIFIER)
-    _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
+    _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)
     _task(db_session, paper, TaskType.VARIANT_EXTRACTION)
     _task(db_session, paper, TaskType.HPO_LINKING)
 
@@ -56,7 +56,7 @@ def test_spares_in_flight_rows(db_session, paper):
     """A handler is mid-flight against these; deleting the row out from under it
     relocates the failure rather than removing it."""
     live = _task(
-        db_session, paper, TaskType.PATIENT_EXTRACTION, status=TaskStatus.RUNNING
+        db_session, paper, TaskType.INDIVIDUAL_EXTRACTION, status=TaskStatus.RUNNING
     )
 
     removed = invalidate_descendants(db_session, paper.id, TaskType.PAPER_CLASSIFIER)
@@ -70,7 +70,7 @@ def test_does_not_touch_other_papers(db_session, paper):
     other = PaperDB(content_hash='def456', gene_id=gene.id, filename='other.pdf')
     db_session.add(other)
     db_session.flush()
-    theirs = _task(db_session, other, TaskType.PATIENT_EXTRACTION)
+    theirs = _task(db_session, other, TaskType.INDIVIDUAL_EXTRACTION)
 
     invalidate_descendants(db_session, paper.id, TaskType.PAPER_CLASSIFIER)
 
@@ -86,21 +86,21 @@ def test_terminal_task_has_no_descendants(db_session, paper):
 def test_closes_the_patient_variant_occurrence_race(db_session, paper):
     """The actual bug, in the order it happened on paper 27.
 
-    PATIENT_EXTRACTION sits behind the slow FIGURE_DESCRIPTION, so when the
+    INDIVIDUAL_EXTRACTION sits behind the slow FIGURE_DESCRIPTION, so when the
     fast VARIANT_EXTRACTION finishes it asks the gate whether patients are
     ready -- and the *previous* run's COMPLETED rows say yes. That enqueues
-    PATIENT_VARIANT_OCCURRENCES against a patient set PATIENT_EXTRACTION is
+    INDIVIDUAL_VARIANT_OCCURRENCES against a patient set INDIVIDUAL_EXTRACTION is
     about to delete and rebuild, and its INSERT dies on a foreign key.
     """
     _task(db_session, paper, TaskType.PAPER_CLASSIFIER)
-    _task(db_session, paper, TaskType.PATIENT_EXTRACTION)  # stale, previous run
+    _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)  # stale, previous run
 
     # Before the fix the stale row satisfies the gate.
-    assert _task_completed(db_session, paper.id, TaskType.PATIENT_EXTRACTION)
-    assert _patient_demographics_ready(db_session, paper.id)
+    assert _task_completed(db_session, paper.id, TaskType.INDIVIDUAL_EXTRACTION)
+    assert _individual_demographics_ready(db_session, paper.id)
 
     invalidate_descendants(db_session, paper.id, TaskType.PAPER_CLASSIFIER)
 
-    # After it, the gate holds until this run's PATIENT_EXTRACTION actually runs.
-    assert not _task_completed(db_session, paper.id, TaskType.PATIENT_EXTRACTION)
-    assert not _patient_demographics_ready(db_session, paper.id)
+    # After it, the gate holds until this run's INDIVIDUAL_EXTRACTION actually runs.
+    assert not _task_completed(db_session, paper.id, TaskType.INDIVIDUAL_EXTRACTION)
+    assert not _individual_demographics_ready(db_session, paper.id)

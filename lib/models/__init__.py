@@ -69,12 +69,12 @@ from lib.models.patient import (
     PatientUpdateRequest,
 )
 from lib.models.patient_variant_occurrences import (
+    IndividualVariantOccurrenceOutput,
     Inheritance,
     OccurrencePairRequest,
     PatientVariantOccurrence,
     PatientVariantOccurrenceCreateRequest,
     PatientVariantOccurrenceDB,
-    PatientVariantOccurrenceOutput,
     PatientVariantOccurrenceResp,
     PatientVariantOccurrenceUpdateRequest,
     TestingMethod,

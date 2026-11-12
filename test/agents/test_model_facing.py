@@ -16,7 +16,7 @@ from lib.agents.model_facing import (
     to_model_schema,
 )
 from lib.models.evidence_block import EvidenceBlock
-from lib.models.patient import PatientExtractionOutput
+from lib.models.patient import IndividualExtractionOutput
 
 _WORD = re.compile(STORED_WORD, re.IGNORECASE)
 
@@ -69,11 +69,11 @@ def test_keys_map_back_at_any_depth_but_values_do_not() -> None:
 
 
 def test_wrapped_output_type_presents_basis_and_validates_reasoning() -> None:
-    schema = model_facing_output(PatientExtractionOutput)
+    schema = model_facing_output(IndividualExtractionOutput)
     assert isinstance(schema, ModelFacingOutputSchema)
     assert not schema.is_plain_text()
     assert schema.is_strict_json_schema()
-    assert schema.name() == 'PatientExtractionOutput'
+    assert schema.name() == 'IndividualExtractionOutput'
     text = json.dumps(schema.json_schema())
     assert not _WORD.search(text)
     assert f'"{MODEL_FACING_WORD}"' in text
@@ -107,7 +107,7 @@ def test_wrapped_output_type_presents_basis_and_validates_reasoning() -> None:
         }
     )
     out = schema.validate_json(reply)
-    assert isinstance(out, PatientExtractionOutput)
+    assert isinstance(out, IndividualExtractionOutput)
     assert out.patients[0].identifier.reasoning == 'named in the text'
     assert out.patients[0].proband_status.reasoning == 'the index case'
     assert out.families[0].patient_identifiers[0].reasoning == 'listed above'
@@ -117,7 +117,7 @@ def test_malformed_json_still_raises_the_sdk_error() -> None:
     from agents.exceptions import ModelBehaviorError
 
     with pytest.raises(ModelBehaviorError):
-        model_facing_output(PatientExtractionOutput).validate_json('{not json')
+        model_facing_output(IndividualExtractionOutput).validate_json('{not json')
 
 
 def test_manual_output_directive_and_schema_use_the_model_facing_word() -> None:
@@ -143,13 +143,13 @@ def _all_agents() -> list[Agent]:
         compound_het_agent,
         extraction_verification_agent,
         hpo_linking_agent,
+        individual_demographics_agent,
+        individual_extraction_agent,
+        individual_variant_occurrence_agent,
         mondo_linking_agent,
         paper_classifier_agent,
         paper_extraction_agent,
-        patient_demographics_agent,
-        patient_extraction_agent,
         patient_phenotype_linking_agent,
-        patient_variant_occurrence_agent,
         segregation_analysis_computed_agent,
         segregation_evidence_extractor,
         variant_extraction_agent,
@@ -165,10 +165,10 @@ def _all_agents() -> list[Agent]:
             mondo_linking_agent,
             paper_classifier_agent,
             paper_extraction_agent,
-            patient_demographics_agent,
-            patient_extraction_agent,
+            individual_demographics_agent,
+            individual_extraction_agent,
             patient_phenotype_linking_agent,
-            patient_variant_occurrence_agent,
+            individual_variant_occurrence_agent,
             segregation_analysis_computed_agent,
             segregation_evidence_extractor,
             variant_extraction_agent,
@@ -189,11 +189,11 @@ def test_every_structured_agent_output_schema_is_model_facing() -> None:
     'constant',
     [
         'lib.agents.core_extraction_rules.CORE_EXTRACTION_SPEC',
-        'lib.agents.patient_extraction_agent.PATIENT_EXTRACTION_AGENT_INSTRUCTIONS',
-        'lib.agents.patient_demographics_agent.PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS',
+        'lib.agents.individual_extraction_agent.INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS',
+        'lib.agents.individual_demographics_agent.INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS',
         'lib.agents.variant_extraction_agent.VARIANT_EXTRACTION_AGENT_INSTRUCTIONS',
         'lib.agents.patient_phenotype_linking_agent.PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS',
-        'lib.agents.patient_variant_occurrence_agent.PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS',
+        'lib.agents.individual_variant_occurrence_agent.INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS',
         'lib.agents.compound_het_agent.COMPOUND_HET_AGENT_INSTRUCTIONS',
         'lib.agents.paper_classifier_agent.PAPER_CLASSIFIER_AGENT_INSTRUCTIONS',
         'lib.agents.paper_extraction_agent.PAPER_EXTRACTION_AGENT_INSTRUCTIONS',

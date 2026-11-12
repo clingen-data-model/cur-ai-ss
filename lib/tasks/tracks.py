@@ -23,7 +23,7 @@ class PipelineTrack(NamedTuple):
 
 
 # After Paper Classifier the pipeline forks into branches that run
-# concurrently and rejoin at Patient Variant Occurrences, so these are parallel
+# concurrently and rejoin at Individual Variant Occurrences, so these are parallel
 # tracks rather than sequential phases. The cut is by subject, matching the
 # entities the UI already names.
 #
@@ -33,9 +33,9 @@ class PipelineTrack(NamedTuple):
 # Reading TASK_SUCCESSORS: nothing starts until PDF Parsing and Paper Classifier
 # have run, and Patients and Variants both hang off the classifier -- so Paper
 # comes first and those two fork from it. Analysis begins at Patient Variant
-# Occurrences, which waits on Patient Extraction *and* Variant Extraction, so
+# Occurrences, which waits on Individual Extraction *and* Variant Extraction, so
 # it joins after both (segregation, further in, also waits on the last
-# Patient Demographics).
+# Individual Demographics).
 #
 #     Paper -> { Patients || Variants } -> Analysis -> Verification
 #
@@ -58,8 +58,8 @@ PIPELINE_TRACKS: list[PipelineTrack] = [
         'Patients',
         [
             TaskType.FIGURE_DESCRIPTION,
-            TaskType.PATIENT_EXTRACTION,
-            TaskType.PATIENT_DEMOGRAPHICS,
+            TaskType.INDIVIDUAL_EXTRACTION,
+            TaskType.INDIVIDUAL_DEMOGRAPHICS,
             TaskType.PHENOTYPE_EXTRACTION,
             TaskType.HPO_LINKING,
         ],
@@ -79,7 +79,7 @@ PIPELINE_TRACKS: list[PipelineTrack] = [
         'analysis',
         'Analysis',
         [
-            TaskType.PATIENT_VARIANT_OCCURRENCES,
+            TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
             TaskType.SEGREGATION_ANALYSIS_COMPUTED,
             TaskType.COMPOUND_HET_EVALUATION,

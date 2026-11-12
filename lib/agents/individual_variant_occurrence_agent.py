@@ -4,7 +4,7 @@ from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
-from lib.models.patient_variant_occurrences import PatientVariantOccurrenceOutput
+from lib.models.patient_variant_occurrences import IndividualVariantOccurrenceOutput
 
 INSTRUCTIONS = """
 You are an expert clinical genetic data curator performing structured evidence extraction
@@ -276,7 +276,7 @@ BEFORE RETURNING, CHECK:
   protein or functional assay, no PCR that only amplified for sequencing.
 """
 
-PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (
+INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (
     INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
 )
 
@@ -287,5 +287,5 @@ agent = Agent(
     model_settings=extraction_model_settings(),
     # 2 union/nullable schema nodes since slice 4 of the evidence-anchors work,
     # under Anthropic's limit of 16; test_output_schema_census guards it.
-    output_type=model_facing_output(PatientVariantOccurrenceOutput),
+    output_type=model_facing_output(IndividualVariantOccurrenceOutput),
 )

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 # TaskType member name -> the TaskDB column its handler reads (see
 # TaskType.scope_column). Everything else runs over the whole paper.
 _SCOPE_COLUMNS: dict[str, str] = {
-    'PATIENT_DEMOGRAPHICS': 'patient_id',
+    'INDIVIDUAL_DEMOGRAPHICS': 'patient_id',
     'PHENOTYPE_EXTRACTION': 'patient_id',
     'COMPOUND_HET_EVALUATION': 'patient_id',
     'SEGREGATION_EVIDENCE_EXTRACTION': 'family_id',
@@ -42,21 +42,24 @@ class TaskType(StrEnum):
     # a3f9c2e7d1b4 renamed the stored name; snapshots written before it carry
     # the old value and lib.misc.snapshots maps it back.
     FIGURE_DESCRIPTION = 'Figure Description'
-    PATIENT_EXTRACTION = 'Patient Extraction'
-    PATIENT_DEMOGRAPHICS = 'Patient Demographics'  # per-patient
+    # The three Individual types were PATIENT_* / 'Patient ...' until
+    # migration d5f1b3a7c9e2 renamed the stored names (tasks and flags);
+    # lib.misc.snapshots maps the old values in snapshot files.
+    INDIVIDUAL_EXTRACTION = 'Individual Extraction'
+    INDIVIDUAL_DEMOGRAPHICS = 'Individual Demographics'  # per-patient
 
     SEGREGATION_EVIDENCE_EXTRACTION = 'Segregation Evidence Extraction'  # per-family
     SEGREGATION_ANALYSIS_COMPUTED = 'Segregation Analysis Computed'  # per-family
     VARIANT_HARMONIZATION = 'Variant Harmonization'
     VARIANT_ANNOTATION = 'Variant Annotation'
-    PATIENT_VARIANT_OCCURRENCES = 'Patient Variant Occurrences'
+    INDIVIDUAL_VARIANT_OCCURRENCES = 'Individual Variant Occurrences'
     COMPOUND_HET_EVALUATION = 'Compound Het Evaluation'  # per-patient
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
     # Two distinct types rather than one shared by both scopes: the paper-level
     # task is a single row, re-triggered (reset in place, not duplicated) by
     # either predecessor; the occurrence-level task fans out per occurrence,
-    # atomically, from Patient Variant Occurrences alone. Kept separate so a
+    # atomically, from Individual Variant Occurrences alone. Kept separate so a
     # paper-level re-run can never look like the fan-out type's row count
     # jumping back up after it already read complete.
     PAPER_MONDO_LINKING = 'Paper MONDO Linking'
@@ -87,13 +90,13 @@ class TaskType(StrEnum):
             TaskType.PAPER_METADATA: 'Finds the title, authors, journal and year, and matches the paper to its PubMed record.',
             TaskType.VARIANT_EXTRACTION: 'Finds the genetic variants the paper reports, written as the paper writes them.',
             TaskType.FIGURE_DESCRIPTION: 'Looks at every figure, says which show a pedigree or genotyping evidence (Sanger traces, gels, copy-number plots, read pileups, karyotypes or FISH), and describes those for the later steps.',
-            TaskType.PATIENT_EXTRACTION: 'Identifies each patient the paper describes, marks the probands and groups patients into families.',
-            TaskType.PATIENT_DEMOGRAPHICS: "Fills in each patient's sex, ages, ancestry, affected status and relationship to the proband.",
+            TaskType.INDIVIDUAL_EXTRACTION: 'Identifies each patient the paper describes, marks the probands and groups patients into families.',
+            TaskType.INDIVIDUAL_DEMOGRAPHICS: "Fills in each patient's sex, ages, ancestry, affected status and relationship to the proband.",
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects what the paper says about whether variants track with disease in each family, such as LOD scores.',
             TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Calculates segregation counts and points for each family from its extracted patients and variants.',
             TaskType.VARIANT_HARMONIZATION: 'Converts each variant to standard coordinates and identifiers (HGVS, rsID, ClinGen allele) using ClinVar, the Allele Registry and VariantValidator.',
             TaskType.VARIANT_ANNOTATION: 'Adds predictions and scores, such as SpliceAI, to each harmonized variant.',
-            TaskType.PATIENT_VARIANT_OCCURRENCES: 'Links each patient to the variants they carry, with inheritance and testing details.',
+            TaskType.INDIVIDUAL_VARIANT_OCCURRENCES: 'Links each patient to the variants they carry, with inheritance and testing details.',
             TaskType.COMPOUND_HET_EVALUATION: "Works out whether a patient's two variants sit on opposite copies of the gene (compound heterozygous).",
             TaskType.PHENOTYPE_EXTRACTION: "Pulls each patient's clinical features out of the text as the paper describes them.",
             TaskType.HPO_LINKING: "Matches each patient's clinical features to standard HPO terms.",
@@ -159,7 +162,7 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.VARIANT_EXTRACTION,
         TaskType.FIGURE_DESCRIPTION,
     ],
-    TaskType.FIGURE_DESCRIPTION: [TaskType.PATIENT_EXTRACTION],
+    TaskType.FIGURE_DESCRIPTION: [TaskType.INDIVIDUAL_EXTRACTION],
     # Occurrences hangs off patient *identity*, not demographics: its agent is
     # given each patient's id, identifier and citations and nothing
     # demographics fills in. Demographics used to sit between the two as an
@@ -167,23 +170,23 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     # the whole paper. What demographics does feed -- affected status,
     # proband status, sex -- is read by the two segregation steps, so those
     # hang off it instead (gated below on every patient's run being in).
-    TaskType.PATIENT_EXTRACTION: [
-        TaskType.PATIENT_DEMOGRAPHICS,
-        TaskType.PATIENT_VARIANT_OCCURRENCES,
+    TaskType.INDIVIDUAL_EXTRACTION: [
+        TaskType.INDIVIDUAL_DEMOGRAPHICS,
+        TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
     ],
-    TaskType.PATIENT_DEMOGRAPHICS: [
+    TaskType.INDIVIDUAL_DEMOGRAPHICS: [
         TaskType.PHENOTYPE_EXTRACTION,
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
     ],
     TaskType.PAPER_METADATA: [TaskType.PAPER_MONDO_LINKING],
     TaskType.VARIANT_EXTRACTION: [
         TaskType.VARIANT_HARMONIZATION,
-        TaskType.PATIENT_VARIANT_OCCURRENCES,
+        TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
     ],
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ANNOTATION],
     TaskType.VARIANT_ANNOTATION: [TaskType.EXTRACTION_VERIFICATION],
-    TaskType.PATIENT_VARIANT_OCCURRENCES: [
-        # Fan-in with PATIENT_DEMOGRAPHICS: segregation reads the links and
+    TaskType.INDIVIDUAL_VARIANT_OCCURRENCES: [
+        # Fan-in with INDIVIDUAL_DEMOGRAPHICS: segregation reads the links and
         # the affected statuses, so whichever of the two finishes last
         # queues it (see enqueue_successors).
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION,

@@ -29,6 +29,24 @@ from lib.agents.hpo_linking_agent import (
 from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
 )
+from lib.agents.individual_demographics_agent import (
+    INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
+)
+from lib.agents.individual_demographics_agent import (
+    agent as individual_demographics_agent,
+)
+from lib.agents.individual_extraction_agent import (
+    INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS,
+)
+from lib.agents.individual_extraction_agent import (
+    agent as individual_extraction_agent,
+)
+from lib.agents.individual_variant_occurrence_agent import (
+    INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
+)
+from lib.agents.individual_variant_occurrence_agent import (
+    agent as individual_variant_occurrence_agent,
+)
 from lib.agents.manual_output import (
     AgentInput,
     Check,
@@ -54,29 +72,11 @@ from lib.agents.paper_extraction_agent import (
 from lib.agents.paper_extraction_agent import (
     agent as paper_extraction_agent,
 )
-from lib.agents.patient_demographics_agent import (
-    PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
-)
-from lib.agents.patient_demographics_agent import (
-    agent as patient_demographics_agent,
-)
-from lib.agents.patient_extraction_agent import (
-    PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
-)
-from lib.agents.patient_extraction_agent import (
-    agent as patient_extraction_agent,
-)
 from lib.agents.patient_phenotype_linking_agent import (
     PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
 )
 from lib.agents.patient_phenotype_linking_agent import (
     agent as patient_phenotype_linking_agent,
-)
-from lib.agents.patient_variant_occurrence_agent import (
-    PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
-)
-from lib.agents.patient_variant_occurrence_agent import (
-    agent as patient_variant_occurrence_agent,
 )
 from lib.agents.segregation_analysis_computed_agent import (
     SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
@@ -149,7 +149,7 @@ from lib.models import (
     Zygosity,
 )
 from lib.models.converters import (
-    apply_patient_demographics,
+    apply_individual_demographics,
     family_to_db,
     figure_description_to_db,
     harmonized_variant_to_db,
@@ -179,11 +179,11 @@ from lib.models.mondo import (
 )
 from lib.models.paper import FileFormat
 from lib.models.patient import (
-    PatientDemographics,
-    PatientExtractionOutput,
+    IndividualDemographics,
+    IndividualExtractionOutput,
     ProbandStatus,
 )
-from lib.models.patient_variant_occurrences import PatientVariantOccurrenceOutput
+from lib.models.patient_variant_occurrences import IndividualVariantOccurrenceOutput
 from lib.models.phenotype import HPOTerm
 from lib.models.signoff import clear_signoff
 from lib.models.variant import (
@@ -389,12 +389,12 @@ def _agent_for_task_type(task_type: TaskType, paper_id: int) -> Agent | None:
         TaskType.PAPER_CLASSIFIER: paper_classifier_agent,
         TaskType.PAPER_METADATA: paper_extraction_agent,
         TaskType.VARIANT_EXTRACTION: variant_extraction_agent,
-        TaskType.PATIENT_EXTRACTION: patient_extraction_agent,
-        TaskType.PATIENT_DEMOGRAPHICS: patient_demographics_agent,
+        TaskType.INDIVIDUAL_EXTRACTION: individual_extraction_agent,
+        TaskType.INDIVIDUAL_DEMOGRAPHICS: individual_demographics_agent,
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION: segregation_evidence_extractor,
         TaskType.SEGREGATION_ANALYSIS_COMPUTED: segregation_analysis_computed_agent,
         TaskType.VARIANT_HARMONIZATION: variant_harmonization_agent,
-        TaskType.PATIENT_VARIANT_OCCURRENCES: patient_variant_occurrence_agent,
+        TaskType.INDIVIDUAL_VARIANT_OCCURRENCES: individual_variant_occurrence_agent,
         TaskType.PHENOTYPE_EXTRACTION: patient_phenotype_linking_agent,
         TaskType.HPO_LINKING: hpo_linking_agent,
         TaskType.PAPER_MONDO_LINKING: mondo_linking_agent,
@@ -862,14 +862,14 @@ def cited_text(block: dict[str, Any]) -> str:
     )
 
 
-def patient_extraction_message(
+def individual_extraction_message(
     session: Session, paper_id: int
 ) -> list[TResponseInputItem]:
     """The initial message the patient extraction agent gets for a paper.
 
     Paper context (with the figure descriptions spliced in) and the
     instructions. One function so anything that wants to run the agent
-    outside the worker (lib/bin/patient_extraction_stability.py) sends
+    outside the worker (lib/bin/individual_extraction_stability.py) sends
     exactly what production sends.
     """
     paper = session.get(PaperDB, paper_id)
@@ -879,11 +879,11 @@ def patient_extraction_message(
     paper_markdown = paper_text(paper_id, supplement_format)
     return paper_input(
         format_paper_context(paper_markdown, gene_symbol),
-        PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
+        INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS,
     )
 
 
-async def handle_patient_extraction(task_id: int) -> None:
+async def handle_individual_extraction(task_id: int) -> None:
     """Extract patient information from paper."""
     paper_id: int
     additional_context: str | None
@@ -897,7 +897,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         additional_context = task.additional_context
         budget_model = task.budget_model
         context_origin = task.context_origin
-        initial_message = patient_extraction_message(session, paper_id)
+        initial_message = individual_extraction_message(session, paper_id)
 
     agent_sess = agent_session(task_id)
 
@@ -906,13 +906,13 @@ async def handle_patient_extraction(task_id: int) -> None:
     ):
         # Follow-up: agent has context from conversation, just pass new instructions
         message: AgentInput = build_followup_prompt(additional_context)
-        agent = patient_extraction_agent
+        agent = individual_extraction_agent
     else:
         # Initial query: full message with paper + pedigree + instructions
         await agent_sess.clear_session()
         assert initial_message is not None
         message = initial_message
-        agent = patient_extraction_agent
+        agent = individual_extraction_agent
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
@@ -921,8 +921,8 @@ async def handle_patient_extraction(task_id: int) -> None:
         citation_check(paper_id),
         session=agent_sess,
     )
-    parsed = cast(PatientExtractionOutput, result.final_output)
-    log_run_metrics('PATIENT_EXTRACTION', result)
+    parsed = cast(IndividualExtractionOutput, result.final_output)
+    log_run_metrics('INDIVIDUAL_EXTRACTION', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -974,7 +974,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         replace_flags(
             session,
             paper_id=paper_id,
-            source=TaskType.PATIENT_EXTRACTION.name,
+            source=TaskType.INDIVIDUAL_EXTRACTION.name,
             flags=parsed.flags,
             resolve=resolve_patient_or_family,
         )
@@ -985,7 +985,7 @@ def family_identifier(patient: PatientDB) -> str | None:
     return patient.family.identifier if patient.family else None
 
 
-async def handle_patient_demographics(task_id: int) -> None:
+async def handle_individual_demographics(task_id: int) -> None:
     """Extract demographics for a single already-identified patient."""
     paper_id: int
     patient_id: int | None = None
@@ -1003,7 +1003,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         patient_id = task.patient_id
         if patient_id is None:
             raise ValueError(
-                f'Task {task_id}: PATIENT_DEMOGRAPHICS requires patient_id'
+                f'Task {task_id}: INDIVIDUAL_DEMOGRAPHICS requires patient_id'
             )
 
         additional_context = task.additional_context
@@ -1053,27 +1053,27 @@ async def handle_patient_demographics(task_id: int) -> None:
     ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context, task_data)
-        agent = patient_demographics_agent
+        agent = individual_demographics_agent
     else:
         # Initial query: build full message with paper + patient data + instructions
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
-            PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
+            INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
             task_data,
         )
-        agent = patient_demographics_agent
+        agent = individual_demographics_agent
         message = with_curator_note(message, additional_context, context_origin)
 
     result, parsed = await run_with_manual_output(
         agent_on_tier(agent, budget_model),
         message,
-        PatientDemographics,
+        IndividualDemographics,
         check=citation_check(paper_id),
         session=agent_sess,
     )
-    log_run_metrics('PATIENT_DEMOGRAPHICS', result)
+    log_run_metrics('INDIVIDUAL_DEMOGRAPHICS', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -1083,11 +1083,11 @@ async def handle_patient_demographics(task_id: int) -> None:
         patient_row = session.get(PatientDB, patient_id)
         if not patient_row:
             return
-        apply_patient_demographics(patient_row, parsed)
+        apply_individual_demographics(patient_row, parsed)
         replace_flags(
             session,
             paper_id=paper_id,
-            source=TaskType.PATIENT_DEMOGRAPHICS.name,
+            source=TaskType.INDIVIDUAL_DEMOGRAPHICS.name,
             flags=parsed.flags,
             scope={'patient_id': patient_id},
         )
@@ -1579,7 +1579,7 @@ async def handle_variant_annotation(task_id: int) -> None:
             )
 
 
-async def handle_patient_variant_occurrence(task_id: int) -> None:
+async def handle_individual_variant_occurrence(task_id: int) -> None:
     """Link patients to variants with inheritance info."""
     paper_id: int
     structured_variants: list
@@ -1638,17 +1638,17 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
     ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context, task_data)
-        agent = patient_variant_occurrence_agent
+        agent = individual_variant_occurrence_agent
     else:
         # Initial query: build full message with paper + variant/patient data + instructions
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
-            PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
+            INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
             task_data,
         )
-        agent = patient_variant_occurrence_agent
+        agent = individual_variant_occurrence_agent
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
@@ -1657,8 +1657,8 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         citation_check(paper_id),
         session=agent_sess,
     )
-    parsed = cast(PatientVariantOccurrenceOutput, result.final_output)
-    log_run_metrics('PATIENT_VARIANT_OCCURRENCE', result)
+    parsed = cast(IndividualVariantOccurrenceOutput, result.final_output)
+    log_run_metrics('INDIVIDUAL_VARIANT_OCCURRENCE', result)
 
     with session_scope() as session:
         # Idempotent: delete-then-insert
@@ -1731,7 +1731,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         replace_flags(
             session,
             paper_id=paper_id,
-            source=TaskType.PATIENT_VARIANT_OCCURRENCES.name,
+            source=TaskType.INDIVIDUAL_VARIANT_OCCURRENCES.name,
             flags=parsed.flags,
             resolve=resolve_patient_or_variant,
         )
@@ -1979,7 +1979,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         patient_data = {
             'patient_id': patient_row.id,
             'identifier': patient_row.identifier,
-            # Unique only within its family; see handle_patient_demographics.
+            # Unique only within its family; see handle_individual_demographics.
             'family_identifier': family_identifier(patient_row),
             'identifier_citations': cited_text(patient_row.identifier_evidence),
             # Without it the agent cannot tell a carrier from an affected
@@ -2444,13 +2444,13 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PAPER_METADATA: handle_paper_metadata,
     TaskType.VARIANT_EXTRACTION: handle_variant_extraction,
     TaskType.FIGURE_DESCRIPTION: handle_figure_description,
-    TaskType.PATIENT_EXTRACTION: handle_patient_extraction,
-    TaskType.PATIENT_DEMOGRAPHICS: handle_patient_demographics,
+    TaskType.INDIVIDUAL_EXTRACTION: handle_individual_extraction,
+    TaskType.INDIVIDUAL_DEMOGRAPHICS: handle_individual_demographics,
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: handle_segregation_evidence_extraction,
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: handle_segregation_analysis_computed,
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,
     TaskType.VARIANT_ANNOTATION: handle_variant_annotation,
-    TaskType.PATIENT_VARIANT_OCCURRENCES: handle_patient_variant_occurrence,
+    TaskType.INDIVIDUAL_VARIANT_OCCURRENCES: handle_individual_variant_occurrence,
     TaskType.COMPOUND_HET_EVALUATION: handle_compound_het_evaluation,
     TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,

@@ -88,30 +88,32 @@ def _queued(db_session, task_type):
 
 
 def test_the_edges():
-    assert TASK_SUCCESSORS[TaskType.PATIENT_EXTRACTION] == [
-        TaskType.PATIENT_DEMOGRAPHICS,
-        TaskType.PATIENT_VARIANT_OCCURRENCES,
+    assert TASK_SUCCESSORS[TaskType.INDIVIDUAL_EXTRACTION] == [
+        TaskType.INDIVIDUAL_DEMOGRAPHICS,
+        TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
     ]
-    assert TASK_SUCCESSORS[TaskType.PATIENT_DEMOGRAPHICS] == [
+    assert TASK_SUCCESSORS[TaskType.INDIVIDUAL_DEMOGRAPHICS] == [
         TaskType.PHENOTYPE_EXTRACTION,
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
     ]
     assert (
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION
-        in (TASK_SUCCESSORS[TaskType.PATIENT_VARIANT_OCCURRENCES])
+        in (TASK_SUCCESSORS[TaskType.INDIVIDUAL_VARIANT_OCCURRENCES])
     )
 
 
-def test_patient_extraction_queues_occurrences_once_variants_are_extracted(
+def test_individual_extraction_queues_occurrences_once_variants_are_extracted(
     db_session, paper
 ):
-    extraction = _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
+    extraction = _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)
     enqueue_successors(db_session, extraction)
-    assert _queued(db_session, TaskType.PATIENT_VARIANT_OCCURRENCES) == set()
+    assert _queued(db_session, TaskType.INDIVIDUAL_VARIANT_OCCURRENCES) == set()
 
     _task(db_session, paper, TaskType.VARIANT_EXTRACTION)
     enqueue_successors(db_session, extraction)
-    assert _queued(db_session, TaskType.PATIENT_VARIANT_OCCURRENCES) == {(None, None)}
+    assert _queued(db_session, TaskType.INDIVIDUAL_VARIANT_OCCURRENCES) == {
+        (None, None)
+    }
 
 
 def test_variant_extraction_queues_occurrences_without_waiting_for_demographics(
@@ -122,18 +124,18 @@ def test_variant_extraction_queues_occurrences_without_waiting_for_demographics(
     family = _family(db_session, paper, 'Family 1')
     p1 = _patient(db_session, paper, family, 'II-1')
     p2 = _patient(db_session, paper, family, 'II-2')
-    _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
+    _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)
     _task(
         db_session,
         paper,
-        TaskType.PATIENT_DEMOGRAPHICS,
+        TaskType.INDIVIDUAL_DEMOGRAPHICS,
         TaskStatus.PENDING,
         patient_id=p1.id,
     )
     _task(
         db_session,
         paper,
-        TaskType.PATIENT_DEMOGRAPHICS,
+        TaskType.INDIVIDUAL_DEMOGRAPHICS,
         TaskStatus.RUNNING,
         patient_id=p2.id,
     )
@@ -142,7 +144,9 @@ def test_variant_extraction_queues_occurrences_without_waiting_for_demographics(
         db_session, _task(db_session, paper, TaskType.VARIANT_EXTRACTION)
     )
 
-    assert _queued(db_session, TaskType.PATIENT_VARIANT_OCCURRENCES) == {(None, None)}
+    assert _queued(db_session, TaskType.INDIVIDUAL_VARIANT_OCCURRENCES) == {
+        (None, None)
+    }
 
 
 def test_segregation_waits_for_the_last_demographics(db_session, paper):
@@ -156,18 +160,18 @@ def test_segregation_waits_for_the_last_demographics(db_session, paper):
         _patient(db_session, paper, f1, 'II-1'),
         _patient(db_session, paper, f2, 'II-1'),
     )
-    _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
-    _task(db_session, paper, TaskType.PATIENT_DEMOGRAPHICS, patient_id=p1.id)
+    _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)
+    _task(db_session, paper, TaskType.INDIVIDUAL_DEMOGRAPHICS, patient_id=p1.id)
     last = _task(
         db_session,
         paper,
-        TaskType.PATIENT_DEMOGRAPHICS,
+        TaskType.INDIVIDUAL_DEMOGRAPHICS,
         TaskStatus.RUNNING,
         patient_id=p2.id,
     )
 
     enqueue_successors(
-        db_session, _task(db_session, paper, TaskType.PATIENT_VARIANT_OCCURRENCES)
+        db_session, _task(db_session, paper, TaskType.INDIVIDUAL_VARIANT_OCCURRENCES)
     )
     assert _queued(db_session, TaskType.SEGREGATION_EVIDENCE_EXTRACTION) == set()
 
@@ -185,11 +189,11 @@ def test_occurrences_queues_segregation_when_demographics_is_already_in(
 ):
     f1 = _family(db_session, paper, 'Family 1')
     p1 = _patient(db_session, paper, f1, 'II-1')
-    _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
-    _task(db_session, paper, TaskType.PATIENT_DEMOGRAPHICS, patient_id=p1.id)
+    _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)
+    _task(db_session, paper, TaskType.INDIVIDUAL_DEMOGRAPHICS, patient_id=p1.id)
 
     enqueue_successors(
-        db_session, _task(db_session, paper, TaskType.PATIENT_VARIANT_OCCURRENCES)
+        db_session, _task(db_session, paper, TaskType.INDIVIDUAL_VARIANT_OCCURRENCES)
     )
 
     assert _queued(db_session, TaskType.SEGREGATION_EVIDENCE_EXTRACTION) == {
@@ -200,16 +204,16 @@ def test_occurrences_queues_segregation_when_demographics_is_already_in(
 def test_demographics_before_occurrences_queues_only_phenotypes(db_session, paper):
     f1 = _family(db_session, paper, 'Family 1')
     p1 = _patient(db_session, paper, f1, 'II-1')
-    _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
+    _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)
     demographics = _task(
-        db_session, paper, TaskType.PATIENT_DEMOGRAPHICS, patient_id=p1.id
+        db_session, paper, TaskType.INDIVIDUAL_DEMOGRAPHICS, patient_id=p1.id
     )
 
     enqueue_successors(db_session, demographics)
 
     assert _queued(db_session, TaskType.PHENOTYPE_EXTRACTION) == {(p1.id, None)}
     assert _queued(db_session, TaskType.SEGREGATION_EVIDENCE_EXTRACTION) == set()
-    assert _queued(db_session, TaskType.PATIENT_VARIANT_OCCURRENCES) == set()
+    assert _queued(db_session, TaskType.INDIVIDUAL_VARIANT_OCCURRENCES) == set()
 
 
 def test_a_demographics_rerun_leaves_occurrences_and_their_branch_alone(
@@ -219,7 +223,7 @@ def test_a_demographics_rerun_leaves_occurrences_and_their_branch_alone(
     HPO, segregation and verification -- what reads its output -- and not
     the links, compound-het phasing or MONDO, which do not."""
     for task_type in (
-        TaskType.PATIENT_VARIANT_OCCURRENCES,
+        TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
         TaskType.COMPOUND_HET_EVALUATION,
         TaskType.PAPER_MONDO_LINKING,
         TaskType.OCCURRENCE_MONDO_LINKING,
@@ -231,11 +235,11 @@ def test_a_demographics_rerun_leaves_occurrences_and_their_branch_alone(
     ):
         _task(db_session, paper, task_type)
 
-    invalidate_descendants(db_session, paper.id, TaskType.PATIENT_DEMOGRAPHICS)
+    invalidate_descendants(db_session, paper.id, TaskType.INDIVIDUAL_DEMOGRAPHICS)
 
     remaining = {t.type for t in db_session.query(TaskDB).all()}
     assert remaining == {
-        TaskType.PATIENT_VARIANT_OCCURRENCES,
+        TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
         TaskType.COMPOUND_HET_EVALUATION,
         TaskType.PAPER_MONDO_LINKING,
         TaskType.OCCURRENCE_MONDO_LINKING,
@@ -255,7 +259,10 @@ def test_demographics_skips_phenotypes_for_an_unaffected_patient(db_session, pap
         enqueue_successors(
             db_session,
             _task(
-                db_session, paper, TaskType.PATIENT_DEMOGRAPHICS, patient_id=patient.id
+                db_session,
+                paper,
+                TaskType.INDIVIDUAL_DEMOGRAPHICS,
+                patient_id=patient.id,
             ),
         )
 
@@ -315,15 +322,15 @@ def test_a_note_comes_down_to_every_successor_naming_the_task_it_was_given_to(
     extraction = _task(
         db_session,
         paper,
-        TaskType.PATIENT_EXTRACTION,
+        TaskType.INDIVIDUAL_EXTRACTION,
         additional_context='Name patients by pedigree position.',
     )
 
     enqueue_successors(db_session, extraction)
 
-    assert _context(db_session, TaskType.PATIENT_DEMOGRAPHICS) == {
-        (p1.id, 'Name patients by pedigree position.', TaskType.PATIENT_EXTRACTION),
-        (p2.id, 'Name patients by pedigree position.', TaskType.PATIENT_EXTRACTION),
+    assert _context(db_session, TaskType.INDIVIDUAL_DEMOGRAPHICS) == {
+        (p1.id, 'Name patients by pedigree position.', TaskType.INDIVIDUAL_EXTRACTION),
+        (p2.id, 'Name patients by pedigree position.', TaskType.INDIVIDUAL_EXTRACTION),
     }
 
     # One level further: demographics did not get the note itself, so the
@@ -331,7 +338,7 @@ def test_a_note_comes_down_to_every_successor_naming_the_task_it_was_given_to(
     demographics = (
         db_session.query(TaskDB)
         .filter(
-            TaskDB.type == TaskType.PATIENT_DEMOGRAPHICS, TaskDB.patient_id == p1.id
+            TaskDB.type == TaskType.INDIVIDUAL_DEMOGRAPHICS, TaskDB.patient_id == p1.id
         )
         .one()
     )
@@ -339,7 +346,7 @@ def test_a_note_comes_down_to_every_successor_naming_the_task_it_was_given_to(
     enqueue_successors(db_session, demographics)
 
     assert _context(db_session, TaskType.PHENOTYPE_EXTRACTION) == {
-        (p1.id, 'Name patients by pedigree position.', TaskType.PATIENT_EXTRACTION),
+        (p1.id, 'Name patients by pedigree position.', TaskType.INDIVIDUAL_EXTRACTION),
     }
 
 
@@ -351,14 +358,14 @@ def test_a_run_without_a_note_passes_none_and_clears_an_inherited_one(
     stale = _task(
         db_session,
         paper,
-        TaskType.PATIENT_DEMOGRAPHICS,
+        TaskType.INDIVIDUAL_DEMOGRAPHICS,
         patient_id=p1.id,
         additional_context='from an earlier run',
-        context_origin=TaskType.PATIENT_EXTRACTION,
+        context_origin=TaskType.INDIVIDUAL_EXTRACTION,
     )
 
     enqueue_successors(
-        db_session, _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
+        db_session, _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)
     )
 
     db_session.refresh(stale)

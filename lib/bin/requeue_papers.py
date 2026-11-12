@@ -14,7 +14,7 @@ for every paper in the database -- the backfill after a schema change that
 added an extracted field, such as the occurrence ``variant_inheritance`` of a4e7c2d9f1b3::
 
     uv run python -m lib.bin.requeue_papers --all \\
-        --from-task 'Patient Variant Occurrences'
+        --from-task 'Individual Variant Occurrences'
 
 To compare a new model against the old one, write baseline snapshots *before*
 deploying the change::

@@ -67,7 +67,7 @@ def paper(db_session):
 
 
 def _flag(
-    paper_id, subject, *, source='PATIENT_DEMOGRAPHICS', kind='inferred', **links
+    paper_id, subject, *, source='INDIVIDUAL_DEMOGRAPHICS', kind='inferred', **links
 ):
     return FlagDB(
         paper_id=paper_id,
@@ -95,7 +95,7 @@ def taiwan(db_session, paper):
             paper_db.id,
             'Younger sister label differs',
             kind='conflict',
-            source='PATIENT_EXTRACTION',
+            source='INDIVIDUAL_EXTRACTION',
         ),
     ]
     db_session.add_all(rows)
@@ -115,8 +115,8 @@ def _groups(*groups, inconsistencies=()):
 def test_the_agent_sees_labels_not_ids(db_session, paper, taiwan):
     rows = verification_input(open_flags(db_session, paper[0].id))
     assert [r['about'] for r in rows] == ['patient HYS272', 'patient HYS273', None]
-    assert rows[0]['agent'] == 'Patient Demographics'
-    assert rows[2]['agent'] == 'Patient Extraction'
+    assert rows[0]['agent'] == 'Individual Demographics'
+    assert rows[2]['agent'] == 'Individual Extraction'
     assert (
         rows[0]['reasoning'] == 'because Country of origin taken from recruitment site'
     )
@@ -140,7 +140,7 @@ def test_a_decision_flagged_for_two_relatives_becomes_one_family_flag(
     assert survivor.family_id == family.id
     assert survivor.evidence['reasoning'] == (
         'because Country of origin taken from recruitment site\n\n'
-        f'{ALSO_RAISED} Patient Demographics for patient HYS273: '
+        f'{ALSO_RAISED} Individual Demographics for patient HYS273: '
         'Country of origin from study site.'
     )
     # The rest of the evidence block is untouched.
@@ -168,7 +168,7 @@ def test_flags_for_the_same_patient_keep_the_patient(db_session, paper):
     assert survivor.patient_id == father.id
     assert survivor.family_id is None
     assert (
-        f'{ALSO_RAISED} Patient Demographics for patient HYS272'
+        f'{ALSO_RAISED} Individual Demographics for patient HYS272'
         in survivor.evidence['reasoning']
     )
 
@@ -443,7 +443,7 @@ def test_flags_of_different_kinds_or_agents_are_kept_apart(db_session, paper):
     other_agent = _flag(
         paper_db.id,
         'Country from site',
-        source='PATIENT_EXTRACTION',
+        source='INDIVIDUAL_EXTRACTION',
         patient_id=mother.id,
     )
     twin = _flag(paper_db.id, 'Country from the site', patient_id=mother.id)
@@ -492,7 +492,7 @@ def test_occurrence_flags_for_one_variant_in_different_people_merge(db_session, 
     a = _flag(
         paper_db.id,
         'Affected status from pedigree',
-        source='PATIENT_VARIANT_OCCURRENCES',
+        source='INDIVIDUAL_VARIANT_OCCURRENCES',
         patient_id=father.id,
         variant_id=shared,
         occurrence_id=fa.id,
@@ -500,7 +500,7 @@ def test_occurrence_flags_for_one_variant_in_different_people_merge(db_session, 
     b = _flag(
         paper_db.id,
         'Affected status from pedigree',
-        source='PATIENT_VARIANT_OCCURRENCES',
+        source='INDIVIDUAL_VARIANT_OCCURRENCES',
         patient_id=mother.id,
         variant_id=shared,
         occurrence_id=ma.id,

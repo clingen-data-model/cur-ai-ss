@@ -235,7 +235,7 @@ export function ExtractionPage() {
           <TabsContent value="occurrences" className="pt-3">
             <PipelineGate
               tasks={tasks}
-              task={TaskType.PATIENT_VARIANT_OCCURRENCES}
+              task={TaskType.INDIVIDUAL_VARIANT_OCCURRENCES}
               label="Individual/variant linking"
             >
               <OccurrencesTab
@@ -247,7 +247,7 @@ export function ExtractionPage() {
             </PipelineGate>
           </TabsContent>
           <TabsContent value="families" className="pt-3">
-            <PipelineGate tasks={tasks} task={TaskType.PATIENT_EXTRACTION} label="Individual extraction">
+            <PipelineGate tasks={tasks} task={TaskType.INDIVIDUAL_EXTRACTION} label="Individual extraction">
               <FamiliesTab
                 paperId={paperId}
                 focus={focus?.kind === 'family' || focus?.kind === 'patient' ? focus : null}

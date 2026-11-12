@@ -416,8 +416,8 @@ as the right choice — for a more specific reason than the original argument ga
 ### Prompt caching, second pass (2026-09-30): the paper as a shared prefix
 
 The one-line mechanism above was on, and every run still reported `cached=0` unless
-it was an exact repeat (worker log 2026-09-29/30: 59/59 PATIENT_DEMOGRAPHICS misses,
-every PATIENT_VARIANT_OCCURRENCE and SEGREGATION run a miss, PHENOTYPE_EXTRACTION 49
+it was an exact repeat (worker log 2026-09-29/30: 59/59 INDIVIDUAL_DEMOGRAPHICS misses,
+every INDIVIDUAL_VARIANT_OCCURRENCE and SEGREGATION run a miss, PHENOTYPE_EXTRACTION 49
 misses vs 10 hits that were identical re-runs within the hour). Two reasons:
 
 - **The breakpoints were on the wrong blocks.** Anthropic writes a cache entry only
@@ -497,7 +497,7 @@ data actually came *above* the instructions.
 patients across two families) — the first real trial of the sessions work from
 Blocker 2, and it surfaced a blocker that section didn't anticipate.
 
-**Executed.** `VARIANT_EXTRACTION` and `PATIENT_EXTRACTION` failed on every one
+**Executed.** `VARIANT_EXTRACTION` and `INDIVIDUAL_EXTRACTION` failed on every one
 of 3 automatic retries with a 400 from Anthropic:
 
 ```
@@ -506,7 +506,7 @@ arrays or anyOf). This causes exponential compilation cost. Reduce the number
 of nullable or union-typed parameters (limit: 16 parameters with unions).
 ```
 
-(61 for `VariantExtractionOutput`; `PatientExtractionOutput` hit the same wall
+(61 for `VariantExtractionOutput`; `IndividualExtractionOutput` hit the same wall
 at 18.)
 
 **Root cause: EvidenceBlock reuse, dereferenced.** Every extracted field is
@@ -540,9 +540,9 @@ there too. Trust our own live, reproducible result over a secondhand report.
 | Agent | Union count | Anthropic-safe? |
 |---|---|---|
 | `variant_extraction_agent` | 61 | no |
-| `patient_demographics_agent` | 40 | no (never reached in the first live run — patient extraction failed before its successor could queue) |
-| `patient_variant_occurrence_agent` | 20 | no (also never reached) |
-| `patient_extraction_agent` | 18 | no |
+| `individual_demographics_agent` | 40 | no (never reached in the first live run — patient extraction failed before its successor could queue) |
+| `individual_variant_occurrence_agent` | 20 | no (also never reached) |
+| `individual_extraction_agent` | 18 | no |
 | `mondo_linking_agent` | 11 | yes |
 | `paper_extraction_agent` / `patient_phenotype_linking_agent` / `segregation_evidence_extractor` | 7 | yes |
 | `variant_harmonization_agent` | 6 | yes |
@@ -586,8 +586,8 @@ way `vision.py` already bypasses it for VLM calls) because the empirical
 result below didn't show a need to.
 
 **Executed, on the real paper**: all 4 previously-failing calls succeeded on
-the **first attempt** — `VARIANT_EXTRACTION`, `PATIENT_EXTRACTION`, all 6
-per-patient `PATIENT_DEMOGRAPHICS` calls, and `PATIENT_VARIANT_OCCURRENCES` —
+the **first attempt** — `VARIANT_EXTRACTION`, `INDIVIDUAL_EXTRACTION`, all 6
+per-patient `INDIVIDUAL_DEMOGRAPHICS` calls, and `INDIVIDUAL_VARIANT_OCCURRENCES` —
 zero repair-loop warnings logged across 8 calls. Final extraction: 6 patients,
 2 probands, 4 variants, 5 patient-variant links. Small sample — 8 calls is not
 a production reliability estimate — so this is worth watching once
@@ -613,8 +613,8 @@ table; both schemas clear every explicit limit (13 and 7 union nodes, no
 optional parameters in the SDK's strict rendering). Probed with the strict
 schema and `max_tokens: 1` (a refused schema is a 400 before generation, an
 accepted one costs a few tokens): `VariantExtractionOutput` (34 objects / 97
-properties dereferenced) refused, `PatientDemographics` (23 / 69) refused,
-`PatientExtractionOutput` (16 / 39) accepted, a `Variant` cut to its first 8
+properties dereferenced) refused, `IndividualDemographics` (23 / 69) refused,
+`IndividualExtractionOutput` (16 / 39) accepted, a `Variant` cut to its first 8
 evidence fields (17 / 49) accepted, cut to 12 (25 / 69) refused. So the ceiling
 sits somewhere around 20 objects / 50-70 properties, and every `EvidenceBlock`
 costs two objects and five properties once `Citation` is inlined. Patient

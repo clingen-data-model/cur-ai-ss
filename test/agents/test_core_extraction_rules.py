@@ -5,18 +5,20 @@ import pytest
 from lib.agents.compound_het_agent import COMPOUND_HET_AGENT_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC, FLAG_RULES
 from lib.agents.hpo_linking_agent import HPO_LINKING_AGENT_INSTRUCTIONS
+from lib.agents.individual_demographics_agent import (
+    INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
+)
+from lib.agents.individual_extraction_agent import (
+    INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS,
+)
+from lib.agents.individual_variant_occurrence_agent import (
+    INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
+)
 from lib.agents.manual_output import _JSON_OUTPUT_DIRECTIVE
 from lib.agents.mondo_linking_agent import MONDO_LINKING_AGENT_INSTRUCTIONS
 from lib.agents.paper_extraction_agent import PAPER_EXTRACTION_AGENT_INSTRUCTIONS
-from lib.agents.patient_demographics_agent import (
-    PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
-)
-from lib.agents.patient_extraction_agent import PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
 from lib.agents.patient_phenotype_linking_agent import (
     PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
-)
-from lib.agents.patient_variant_occurrence_agent import (
-    PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
 )
 from lib.agents.segregation_analysis_computed_agent import (
     SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
@@ -47,8 +49,8 @@ def test_spec_tells_the_agent_to_cite_a_header_cell_through_the_table_id():
     )
 
 
-def test_patient_extraction_covers_patient_labels_in_a_header_row():
-    text = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+def test_individual_extraction_covers_patient_labels_in_a_header_row():
+    text = INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
 
     assert 'one patient per column' in text
     assert 'the quote is "Pat. 1 *"' in text
@@ -73,10 +75,10 @@ def test_manual_output_directive_speaks_in_citations():
     'instructions',
     [
         PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
-        PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
-        PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
+        INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS,
+        INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
         VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
-        PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
+        INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
         PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
         SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
     ],
@@ -120,7 +122,7 @@ def test_variant_prompt_keeps_literature_variants_and_labels_them_not_main_focus
 def test_patient_prompt_uses_pedigree_labels_even_for_a_single_case_report():
     """Papers 53 and 68 named the patient "patient" and dropped the labeled
     relatives although the pedigree labels them (II-2, II-1)."""
-    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'use the pedigree label' in prompt
     assert 'this rule does not\n   apply' in prompt
     assert 'including a single case report' in prompt
@@ -131,7 +133,7 @@ def test_patient_prompt_names_the_three_haiku_misses():
     comparison column and (once) the role-named parents, paper 65 dropped P21's
     father and mother although each transmitted an allele, and paper 76 returned
     the bare table cells "1"/"2A" where the text says "Individual 5"."""
-    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'headed by the citation' in prompt
     assert 'is a label for that\n   individual, not an author mention' in prompt
     assert 'The single-case rule names the proband only' in prompt
@@ -146,7 +148,7 @@ def test_patient_prompt_makes_candidate_enumeration_a_step():
     max effort alike, then agreed it qualified the moment a follow-up pointed at
     it: it never listed the column as a candidate. The procedure makes listing
     come before deciding."""
-    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'PROCEDURE -- work in this order' in prompt
     assert '1. Enumerate candidates.' in prompt
     assert 'every row label and every column header in every table' in prompt
@@ -164,14 +166,14 @@ def test_patient_prompt_makes_candidate_enumeration_a_step():
 def test_patient_prompt_extracts_every_pedigree_symbol_and_role_named_relative():
     """The prompt used to skip pedigree members the paper prints no label for
     and relatives the text names collectively ("the parents"): seven of the
-    ten PATIENT_EXTRACTION exclusion flags on dev were exactly those people,
+    ten INDIVIDUAL_EXTRACTION exclusion flags on dev were exactly those people,
     genotyped parents and untested siblings included -- the individuals
     segregation evidence is built from. Every symbol is now a patient, married-in
     spouses included, with an "inferred" flag in place of the old "excluded"
     one. The describer's positional label is the last resort, used if and only
     if the paper names the person nowhere: a role in the text ("the proband's
     father") is a label the paper gives and always wins over "I-1"."""
-    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'A person needs no printed label to count' in prompt
     assert 'labeled or not, affected or not, blood relative or married in' in prompt
     assert '5. Only when the paper names a person nowhere' in prompt
@@ -197,7 +199,7 @@ def test_patient_prompt_scopes_to_the_target_gene_and_fills_the_schema():
     member vs "has no proband") so that one family could end up with none.
     The one family allowed none is spelled out as an exception (see the
     re-reported test below), not left to two rules fighting."""
-    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'SCOPE -- the target gene' in prompt
     assert 'only reported finding is in another gene is out of' in prompt
     assert 'Every family the paper reports for the first time has exactly one' in (
@@ -217,7 +219,7 @@ def test_patient_prompt_never_makes_a_re_reported_individual_the_proband():
     whose parents are the evidence, each became the proband of a singleton
     family: three papers over-counted the unrelated probands curators score
     by one each. Curation counts the probands a paper adds."""
-    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'is never the\n  proband here' in prompt
     assert 'the one exception to\n  the one-proband rule' in prompt
     assert 'no re-reported individual is one' in prompt
@@ -226,7 +228,7 @@ def test_patient_prompt_never_makes_a_re_reported_individual_the_proband():
 def test_patient_prompt_examples_are_not_lifted_from_the_eval_papers():
     """The misses were found on papers 53, 65 and 76; an example copied from one
     of them verbatim teaches the model that paper, not the rule."""
-    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
     for verbatim in (
         'Lam et al',
         'Indiv ID',
@@ -305,10 +307,10 @@ def test_spec_states_the_flag_rule_once_for_every_agent():
 @pytest.mark.parametrize(
     'instructions',
     [
-        PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
-        PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
+        INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS,
+        INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
         VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
-        PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
+        INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
         PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
         SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
         VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
@@ -333,7 +335,7 @@ def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
     from these links, and a run that excluded them (the COG4 paper, third
     local run) left segregation with nothing while another paper's run
     linked every parent -- the policy had to be stated."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert "A parent named as the origin of a patient's variant carries it" in prompt
     assert 'Make the link in every case' in prompt
     assert 'the link is flagged as inferred\n  (below)' in prompt
@@ -361,7 +363,7 @@ def test_occurrence_prompt_gives_a_labelled_person_the_familys_testing_method():
     zygosity came from the label, got no method, because only a chromatogram
     counted as a report that a parent was tested. A printed genotype is such
     a report, and the method is the one the paper names for the family."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'so is a genotype label printed against them' in prompt
     assert 'a person\n  with a printed genotype was genotyped' in prompt
     assert (
@@ -386,7 +388,7 @@ def test_occurrence_prompt_reads_a_pedigree_genotype_label_as_a_stated_genotype(
     ways a paper states a parent's genotype and put "a pedigree drawing the
     parent as a carrier" with the inferences; a genotype label is a result,
     a carrier symbol is a convention, and the prompt has to say which."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'a genotype label printed against the person in the pedigree' in prompt
     assert "is the paper stating that person's result, exactly as a table cell" in (
         prompt
@@ -416,7 +418,7 @@ def test_occurrence_prompt_takes_a_whole_cohort_genotype_statement_as_stated():
     member of a group the paper puts the patient in is a statement about
     them; a share places nobody; a group whose members differ leaves the
     differing value to each patient's own result."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'A statement about every member of the cohort or of a family' in prompt
     assert 'stated, cited to the sentence, high confidence, not\n  flagged' in prompt
     assert (
@@ -439,7 +441,7 @@ def test_compound_het_prompt_takes_a_whole_cohort_phase_statement_as_established
 
 
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
-    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'FLAGS for this task' in prompt
     assert 'a rule here left out -- an earlier\n  study' in prompt
     assert 'a patient too, under that role; an empty record' in prompt
@@ -469,7 +471,7 @@ def test_demographics_prompt_reads_sex_from_the_pedigree_and_kinship_words():
     read Male from one square and refused the next. A square or circle is the
     paper stating sex in pedigree notation, and "her brother" states it in
     words; neither is an inference."""
-    prompt = PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS
     assert 'a square is the paper stating Male and a circle\n      Female' in prompt
     assert '"her brother" states Male for the brother' in prompt
     assert 'none of them\n    leaves sex Unknown' in prompt
@@ -492,7 +494,7 @@ def test_demographics_prompt_takes_ancestry_and_status_from_the_cohort_descripti
     as the paper stating that fact for every member, so the prompt says so,
     says which groups count and which do not (a share, a mixed cohort), and
     keeps it off the flag list."""
-    prompt = PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS
     assert 'COHORT AND FAMILY DESCRIPTIONS:' in prompt
     assert 'the paper stating\nthat fact for every member of the group' in prompt
     assert 'This is routine extraction, not a flag' in prompt
@@ -560,7 +562,7 @@ def test_occurrence_prompt_offers_the_alternative_cause_kind():
     variant tables are scoped to the target gene, so the finding had no
     field and reached the curator only in an inheritance basis after a
     re-run with a note."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert (
         '- alternative_cause: a linked patient for whom the paper reports another'
         in prompt
@@ -571,7 +573,7 @@ def test_occurrence_prompt_offers_the_alternative_cause_kind():
 def test_occurrence_prompt_gives_one_family_one_disease_name():
     """Two sibs with one diagnosis came out as "familial ALS" and "ALS" and
     so linked to two MONDO terms, until a curator's note asked for one."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'get the same disease_name' in prompt
     assert 'not "familial cardiomyopathy" for one sib and' in prompt
 
@@ -580,7 +582,7 @@ def test_occurrence_prompt_checks_patient_and_family_facts_agree_across_links():
     """The mechanism, disease name and methods are filled per link, and sibs
     with one basis came out with different mechanisms; the final checklist
     now says which values are the patient's or the family's, not the link's."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     checklist = prompt[prompt.index('BEFORE RETURNING, CHECK') :]
     assert "a patient's links carry the same values" in checklist
     assert "family's links the same mechanism" in checklist
@@ -593,7 +595,7 @@ def test_occurrence_prompt_reads_dominant_from_a_heterozygous_affected_carrier()
     by the paper's own claim, and was coming out Unknown for want of the
     word. A variant the paper calls uncertain or sets beside another cause
     stays Unknown, so the reading never props up a weak case."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert (
         'a heterozygous\naffected patient carrying a variant the paper presents as the cause'
         in prompt
@@ -616,7 +618,7 @@ def test_a_descent_is_ancestry_and_not_the_country():
     as the country for some members and Brazil for others: the word had no
     field of its own. ancestry holds it, and the country rule says a descent
     is not a country."""
-    prompt = PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS
     assert '- ancestry (EvidenceBlock[str | None]):' in prompt
     country = prompt[
         prompt.index('- country_of_origin (') : prompt.index('- ancestry (')
@@ -633,9 +635,9 @@ def test_an_onset_age_has_its_own_field_and_is_not_a_diagnosis_age():
     for one sib and nothing for the other; a congenital onset (TBC1D8B, PMID
     30661770) had no integer to be. age_onset and HPO's onset bucket hold
     them, and the ages rule tells the four moments apart."""
-    from lib.models.patient import OnsetCategory, PatientDemographics
+    from lib.models.patient import IndividualDemographics, OnsetCategory
 
-    prompt = PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS
     assert '- age_diagnosis, age_report, age_death, age_onset (' in prompt
     assert 'An onset is not a diagnosis age' in prompt
     assert 'unless the paper equates the two' in prompt
@@ -646,7 +648,7 @@ def test_an_onset_age_has_its_own_field_and_is_not_a_diagnosis_age():
         'Congenital',
         'Neonatal',
     ]
-    assert 'age_onset_unit' in PatientDemographics.model_fields
+    assert 'age_onset_unit' in IndividualDemographics.model_fields
 
 
 def test_curator_feedback_rules_of_2026_10_29():
@@ -656,7 +658,7 @@ def test_curator_feedback_rules_of_2026_10_29():
     a LOD computed across several families is flagged on each; a phenotype
     read from a number names its threshold and is inferred when the paper
     states none; a cohort statement covers the people the paper examined."""
-    occurrence = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    occurrence = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'A patient the paper tests two ways carries both' in occurrence
     assert 'is Heterozygous, flagged inferred' in occurrence
     assert '(the Heterozygous reading above)' in occurrence
@@ -679,7 +681,7 @@ def test_a_genotype_from_a_redrawn_pedigree_finds_its_patient():
     """The gel under a shortened redrawing of the family labels people from
     its own top row; the occurrence agent matches them to the full pedigree's
     patients rather than linking a label nobody carries."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'redraws a family with fewer generations' in prompt
     assert "its II-4 is the full pedigree's III-4" in prompt
 
@@ -690,7 +692,7 @@ def test_testing_methods_are_dna_tests_checked_patient_by_patient():
     methods, amplification PCR counted. The occurrence prompt defines what
     counts as a method and checks each patient against the group's statement
     before returning."""
-    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert "Only a test of this patient's DNA is a testing method" in prompt
     assert 'screened for or mapped the variant' in prompt
     assert 'PCR that amplifies DNA for sequencing is part of the' in prompt

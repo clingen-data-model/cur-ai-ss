@@ -13,7 +13,7 @@ from lib.core.environment import Env
 from lib.models import GeneDB, PaperDB, TaskDB
 from lib.tasks.models import TaskStatus, TaskType
 
-TYPE = TaskType.PATIENT_DEMOGRAPHICS
+TYPE = TaskType.INDIVIDUAL_DEMOGRAPHICS
 COUNT = 4
 
 

@@ -4,7 +4,7 @@ from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 
-PATIENT_DEMOGRAPHICS_INSTRUCTIONS = """
+INDIVIDUAL_DEMOGRAPHICS_INSTRUCTIONS = """
 System: You are an expert clinical data curator.
 
 CONTEXT:
@@ -237,13 +237,13 @@ Guidelines:
    patient's identifier, or null.
 """
 
-PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS = (
-    PATIENT_DEMOGRAPHICS_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
+INDIVIDUAL_DEMOGRAPHICS_AGENT_INSTRUCTIONS = (
+    INDIVIDUAL_DEMOGRAPHICS_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
 )
 
 
 agent = Agent(
-    name='patient_demographics_extractor',
+    name='individual_demographics_extractor',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),

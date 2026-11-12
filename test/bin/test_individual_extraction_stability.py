@@ -1,6 +1,6 @@
-"""The run comparison behind lib/bin/patient_extraction_stability.py."""
+"""The run comparison behind lib/bin/individual_extraction_stability.py."""
 
-from lib.bin.patient_extraction_stability import compare_runs
+from lib.bin.individual_extraction_stability import compare_runs
 
 
 def test_identical_runs_are_stable():

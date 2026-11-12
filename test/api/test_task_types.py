@@ -16,7 +16,7 @@ def test_each_task_type_lists_the_successors_its_completion_queues(client):
 
     assert rows['Variant Extraction'] == [
         'Variant Harmonization',
-        'Patient Variant Occurrences',
+        'Individual Variant Occurrences',
     ]
     assert rows['Extraction Verification'] == []
     for task_type in TaskType:

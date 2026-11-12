@@ -21,9 +21,9 @@ from lib.models.evidence_block import (
     verify_citations,
 )
 from lib.models.patient_variant_occurrences import (
+    IndividualVariantOccurrenceOutput,
     Inheritance,
     PatientVariantOccurrence,
-    PatientVariantOccurrenceOutput,
     TestingMethod,
     VariantInheritance,
     Zygosity,
@@ -304,7 +304,7 @@ def test_nested_output_is_walked_and_every_problem_has_a_path():
             ],
         )
 
-    output = PatientVariantOccurrenceOutput(
+    output = IndividualVariantOccurrenceOutput(
         links=[occurrence(), occurrence()],
         disease_name=EvidenceBlock(
             value='X', reasoning='r', citations=[Citation(anchor='figure-9')]

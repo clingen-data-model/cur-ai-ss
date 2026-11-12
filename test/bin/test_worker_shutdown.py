@@ -160,7 +160,7 @@ async def test_the_lease_timeout_holds_each_task_to_its_own_types_limit(
     # Both started 25 min ago: past the default 20 min, within PDF Parsing's 30.
     parse = make_task(TaskStatus.RUNNING, tries=1)
     agent = make_task(TaskStatus.RUNNING, tries=1)
-    agent.type = TaskType.PATIENT_DEMOGRAPHICS
+    agent.type = TaskType.INDIVIDUAL_DEMOGRAPHICS
     began = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
         minutes=25
     )

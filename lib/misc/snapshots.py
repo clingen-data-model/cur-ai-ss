@@ -420,7 +420,7 @@ def _snapshot_description(
     pipeline cycle (tasks updated since the previous snapshot) the task the
     user actually clicked is the stamped one that finished FIRST, not last.
     A terminal leaf like Segregation Analysis Computed always finishes last;
-    ordering ascending keeps the label on the root (e.g. Patient Extraction)."""
+    ordering ascending keeps the label on the root (e.g. Individual Extraction)."""
     query = session.query(TaskDB).filter(
         TaskDB.paper_id == paper_id,
         TaskDB.updated_by_user_id.isnot(None),
@@ -532,7 +532,14 @@ def write_snapshot_safe(
 # rather than rewriting files on disk.
 _LEGACY_ENUM_VALUES: dict[type[Enum], dict[str, Enum]] = {
     # a3f9c2e7d1b4: the step grew from the pedigree to every evidence figure.
-    TaskType: {'Pedigree Description': TaskType.FIGURE_DESCRIPTION},
+    TaskType: {
+        'Pedigree Description': TaskType.FIGURE_DESCRIPTION,
+        # d5f1b3a7c9e2: the steps are named for the individual, as curators
+        # see them.
+        'Patient Extraction': TaskType.INDIVIDUAL_EXTRACTION,
+        'Patient Demographics': TaskType.INDIVIDUAL_DEMOGRAPHICS,
+        'Patient Variant Occurrences': TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
+    },
 }
 
 

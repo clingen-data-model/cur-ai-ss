@@ -61,7 +61,7 @@ def test_requeue_resets_the_start_task_and_clears_stale_downstream_rows(
 ):
     paper = _paper(db_session, gene, 'a')
     start = _task(db_session, paper, TaskType.PAPER_CLASSIFIER)
-    _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
+    _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)
     _task(db_session, paper, TaskType.HPO_LINKING)
 
     reason = requeue_paper(db_session, paper.id, TaskType.PAPER_CLASSIFIER, 'test')
@@ -87,7 +87,7 @@ def test_a_busy_paper_is_skipped_untouched(db_session, gene):
     paper = _paper(db_session, gene, 'a')
     _task(db_session, paper, TaskType.PAPER_CLASSIFIER, status=TaskStatus.COMPLETED)
     live = _task(
-        db_session, paper, TaskType.PATIENT_EXTRACTION, status=TaskStatus.RUNNING
+        db_session, paper, TaskType.INDIVIDUAL_EXTRACTION, status=TaskStatus.RUNNING
     )
 
     reason = requeue_paper(db_session, paper.id, TaskType.PAPER_CLASSIFIER, 'test')
@@ -104,7 +104,7 @@ def test_a_busy_paper_is_skipped_untouched(db_session, gene):
 def test_snapshot_only_queues_nothing(db_session, gene):
     paper = _paper(db_session, gene, 'a')
     done = _task(db_session, paper, TaskType.PAPER_CLASSIFIER)
-    _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
+    _task(db_session, paper, TaskType.INDIVIDUAL_EXTRACTION)
 
     assert snapshot_paper(db_session, paper.id, 'Baseline') is None
 

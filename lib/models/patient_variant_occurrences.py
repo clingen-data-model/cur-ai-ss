@@ -134,7 +134,7 @@ class PatientVariantOccurrence(BaseModel):
         return self
 
 
-class PatientVariantOccurrenceOutput(BaseModel):
+class IndividualVariantOccurrenceOutput(BaseModel):
     links: List[PatientVariantOccurrence]
     disease_name: EvidenceBlock[str] | None = None
     flags: List[ExtractionFlag] = Field(default_factory=list)

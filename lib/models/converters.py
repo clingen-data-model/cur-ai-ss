@@ -3,7 +3,7 @@ from lib.models import FigureDescriptionDB, PatientDB, VariantDB
 from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.models.family import Family, FamilyDB
 from lib.models.patient import (
-    PatientDemographics,
+    IndividualDemographics,
     PatientIdentity,
     placeholder_demographics,
 )
@@ -43,7 +43,7 @@ def family_to_db(paper_id: int, family: Family) -> FamilyDB:
     )
 
 
-# Demographic fields carried on both PatientDemographics and PatientDB, each with
+# Demographic fields carried on both IndividualDemographics and PatientDB, each with
 # a paired ``{field}_evidence`` JSON column. ``age_*_unit`` fields are plain enums
 # (no evidence block) and are handled separately.
 _DEMOGRAPHIC_EVIDENCE_FIELDS = [
@@ -67,7 +67,7 @@ _DEMOGRAPHIC_EVIDENCE_FIELDS = [
 def patient_identity_to_db(paper_id: int, identity: PatientIdentity) -> PatientDB:
     """Convert a PatientIdentity to PatientDB with placeholder demographics.
 
-    Demographics are filled in later by ``apply_patient_demographics`` once the
+    Demographics are filled in later by ``apply_individual_demographics`` once the
     patient demographics agent runs. ``family_id``/``family_assignment_evidence``
     are assigned by the caller in handlers.py.
     """
@@ -78,12 +78,12 @@ def patient_identity_to_db(paper_id: int, identity: PatientIdentity) -> PatientD
         proband_status=identity.proband_status.value,
         proband_status_evidence=identity.proband_status.model_dump(),
     )
-    apply_patient_demographics(patient_db, placeholder_demographics())
+    apply_individual_demographics(patient_db, placeholder_demographics())
     return patient_db
 
 
-def apply_patient_demographics(
-    patient_db: PatientDB, demographics: PatientDemographics
+def apply_individual_demographics(
+    patient_db: PatientDB, demographics: IndividualDemographics
 ) -> None:
     """Overwrite an existing PatientDB row's demographic fields in place."""
     patient_db.age_diagnosis_unit = demographics.age_diagnosis_unit
