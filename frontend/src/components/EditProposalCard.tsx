@@ -63,9 +63,10 @@ const SECTIONS: { title: string; entities: ProposedEdit['entity'][] }[] = [
  * an individual's own edit is labelled by identifier and owned by its
  * family; a phenotype's is owned by the individual. */
 function individualOf(edit: ProposedEdit): string {
-  return edit.entity === 'patient'
-    ? [edit.owner_label, edit.label].filter(Boolean).join(' ')
-    : (edit.owner_label ?? '')
+  if (edit.entity !== 'patient') return edit.owner_label ?? ''
+  // A family named after its individual ("Patient 4") is not said twice.
+  if (!edit.owner_label || edit.owner_label === edit.label) return edit.label
+  return `${edit.owner_label} ${edit.label}`
 }
 
 function byIndividual(edits: ProposedEdit[]): [string, ProposedEdit[]][] {

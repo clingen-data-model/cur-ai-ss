@@ -180,7 +180,13 @@ def _values(request: EditRequest) -> dict[str, Value]:
 
 
 def _label(patient: PatientDB) -> str:
-    return patient_label(patient.family.identifier, patient.identifier)
+    """The individual as the curator reads them in a reply: family then
+    identifier, or the identifier alone when the family is named after them
+    ("Patient 4", not "Patient 4 Patient 4")."""
+    family = patient.family.identifier
+    if family == patient.identifier:
+        return patient.identifier
+    return patient_label(family, patient.identifier)
 
 
 def _norm(text: str) -> str:
@@ -845,7 +851,9 @@ def _prepare_phenotype(
             .all()
         )
         if any(p.concept.strip().lower() == concept.lower() for p in existing):
-            raise EditProblem(f'{_label(patient)} already has "{concept}"')
+            # Already as asked, like an update that changes nothing: left out
+            # beside other edits, refused only on its own.
+            raise NoChange(f'{_label(patient)} already has "{concept}"')
         return ProposedEdit(
             entity=EditEntity.PHENOTYPE,
             action=EditAction.CREATE,

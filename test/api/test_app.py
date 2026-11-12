@@ -5278,3 +5278,47 @@ def test_chat_knows_each_step_by_the_name_curators_see():
     assert '(shown to curators as "Matching phenotypes to HPO terms")' in (
         CHAT_AGENT_INSTRUCTIONS
     )
+
+
+def test_a_phenotype_already_there_is_left_out_beside_other_edits(
+    client, db_session, seeded_paper
+):
+    """Adding a phenotype the individual already has is already as asked: it
+    is left out of a proposal with other edits, as an unchanged value is,
+    and refused only on its own."""
+    from lib.api.direct_edits import CuratorWords, EditRequest, propose
+
+    patient = _seed_patient(db_session, seeded_paper, identifier='II-1')
+    client.post(
+        f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+        json={'concept': 'Seizures'},
+    )
+    db_session.commit()
+    add_seizures = EditRequest.model_validate(
+        {
+            'entity': 'phenotype',
+            'action': 'create',
+            'parent_id': patient.id,
+            'values': [{'field': 'concept', 'value': 'seizures'}],
+        }
+    )
+    to_male = EditRequest.model_validate(
+        {
+            'entity': 'patient',
+            'action': 'update',
+            'entity_id': patient.id,
+            'values': [{'field': 'sex', 'value': 'Male'}],
+        }
+    )
+    words = CuratorWords(said='II-1 is male and has seizures', note='II-1')
+
+    reply, proposal = propose(
+        db_session, seeded_paper.id, [to_male, add_seizures], {}, words
+    )
+    assert proposal is not None
+    assert [edit.entity for edit in proposal.edits] == ['patient']
+    assert reply.splitlines()[-1] == '- Family 1 II-1 already has "seizures"'
+
+    reply, proposal = propose(db_session, seeded_paper.id, [add_seizures], {}, words)
+    assert proposal is None
+    assert 'already has "seizures"' in reply
