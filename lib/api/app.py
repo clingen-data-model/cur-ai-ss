@@ -248,6 +248,8 @@ from lib.tasks import (
 from lib.tasks.agent_session import chat_session, closing_sessions
 from lib.tasks.handlers import log_run_metrics, paper_citation_texts
 from lib.tasks.misc import (
+    TaskScopeError,
+    check_task_scope,
     notify_on_next_completion,
     paper_busy_message,
     summarize_paper_task_status,
@@ -1352,6 +1354,21 @@ def create_task(
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
+    # Before the re-run's snapshot and clean-up: a scope the step cannot run
+    # over, or a row of another paper, is refused with nothing changed.
+    try:
+        check_task_scope(
+            session,
+            paper_id,
+            request.type,
+            family_id=request.family_id,
+            patient_id=request.patient_id,
+            variant_id=request.variant_id,
+            phenotype_id=request.phenotype_id,
+            patient_variant_occurrence_id=request.patient_variant_occurrence_id,
+        )
+    except TaskScopeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     _prepare_rerun(
         session, paper_id, request.type, request.skip_successors, current_user.id
     )
