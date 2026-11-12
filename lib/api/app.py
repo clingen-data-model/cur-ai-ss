@@ -1331,7 +1331,7 @@ def _prepare_rerun(
     # Fires regardless of skip_successors -- even a single scoped rerun
     # deletes and recreates rows for that scope.
     write_snapshot_safe(
-        session, paper_id, description=f'Before re-running {task_type.value}'
+        session, paper_id, description=f'Before re-run: {task_type.label}'
     )
     # The person who asked for this run is the one to email when it finishes.
     notify_on_next_completion(session, paper_id, user_id)
@@ -3302,7 +3302,10 @@ def list_task_types(
     help text and its "will also run" tree."""
     return [
         TaskTypeResp(
-            type=t, description=t.description, successors=TASK_SUCCESSORS.get(t, [])
+            type=t,
+            label=t.label,
+            description=t.description,
+            successors=TASK_SUCCESSORS.get(t, []),
         )
         for t in TaskType
     ]

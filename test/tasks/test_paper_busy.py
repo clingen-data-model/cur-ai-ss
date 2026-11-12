@@ -35,7 +35,7 @@ def test_any_active_status_is_busy(db_session, paper, status):
     _task(db_session, paper, TaskType.PDF_PARSING, status)
 
     assert paper_busy_message(db_session, paper.id, 're-running') == (
-        '1 task still pending or running (PDF Parsing). '
+        '1 task still pending or running (Reading the PDF). '
         'Wait for it to finish before re-running.'
     )
 
@@ -46,7 +46,7 @@ def test_message_counts_by_type_most_first(db_session, paper):
     _task(db_session, paper, TaskType.PAPER_MONDO_LINKING, TaskStatus.PENDING)
 
     assert paper_busy_message(db_session, paper.id, 'restoring a snapshot') == (
-        '4 tasks still pending or running (HPO Linking ×3, Paper MONDO Linking). '
+        '4 tasks still pending or running (Matching phenotypes to HPO terms ×3, Matching the disease to MONDO). '
         'Wait for them to finish before restoring a snapshot.'
     )
 

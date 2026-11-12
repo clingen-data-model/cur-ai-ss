@@ -14,6 +14,8 @@ from lib.tasks.models import TaskType
 
 class PipelineTrack(NamedTuple):
     id: str
+    # The stage's name for curators: the progress list groups its steps into
+    # expandable stages under this heading.
     label: str
     task_types: list[TaskType]
     # Where this track sits in the pipeline's ordering, read off TASK_SUCCESSORS.
@@ -45,7 +47,7 @@ class PipelineTrack(NamedTuple):
 PIPELINE_TRACKS: list[PipelineTrack] = [
     PipelineTrack(
         'paper',
-        'Paper',
+        'Reading the paper',
         [
             TaskType.PDF_PARSING,
             TaskType.PAPER_CLASSIFIER,
@@ -55,7 +57,7 @@ PIPELINE_TRACKS: list[PipelineTrack] = [
     ),
     PipelineTrack(
         'patients',
-        'Patients',
+        'Individuals and phenotypes',
         [
             TaskType.FIGURE_DESCRIPTION,
             TaskType.INDIVIDUAL_EXTRACTION,
@@ -77,7 +79,7 @@ PIPELINE_TRACKS: list[PipelineTrack] = [
     ),
     PipelineTrack(
         'analysis',
-        'Analysis',
+        'Linking and segregation',
         [
             TaskType.INDIVIDUAL_VARIANT_OCCURRENCES,
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
@@ -90,7 +92,7 @@ PIPELINE_TRACKS: list[PipelineTrack] = [
     ),
     PipelineTrack(
         'verification',
-        'Verification',
+        'Final check',
         [TaskType.EXTRACTION_VERIFICATION],
         stage=3,
     ),

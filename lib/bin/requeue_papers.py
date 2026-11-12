@@ -186,7 +186,7 @@ def run(
                         session,
                         paper_id,
                         task_type,
-                        f'Before re-running {task_type.value}',
+                        f'Before re-run: {task_type.label}',
                     )
             if reason:
                 skipped[paper_id] = reason

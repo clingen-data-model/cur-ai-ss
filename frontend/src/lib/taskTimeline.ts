@@ -123,6 +123,47 @@ export function taskTypeProgress(
   })
 }
 
+/** One of the pipeline's stages (a track in lib/tasks/tracks.py), as the
+ *  timeline's expandable rows show it: its steps, in pipeline order, and one
+ *  status for the lot. */
+export interface StageProgress {
+  id: string
+  label: string
+  status: TaskRowStatus
+  rows: TaskRowProgress[]
+}
+
+/** A stage's status from its steps. A step with no instances is one that has
+ *  not been queued for this paper, and some never are (compound het with no
+ *  second variant, a MONDO link with no disease named), so those do not keep
+ *  a finished stage open. Any failure, then anything running or still queued
+ *  beside finished work, then done once every queued step is complete. */
+export function stageStatus(rows: TaskRowProgress[]): TaskRowStatus {
+  const started = rows.filter((row) => row.instanceCount > 0)
+  if (started.some((row) => row.status === 'failed')) return 'failed'
+  if (started.some((row) => row.status === 'running')) return 'running'
+  const complete = started.filter((row) => row.status === 'complete').length
+  if (complete === 0) return 'pending'
+  return complete === started.length ? 'complete' : 'running'
+}
+
+/** The timeline's rows grouped by stage, in pipeline order, or null before
+ *  the stages have loaded (the timeline then lists the steps flat). */
+export function stageProgress(
+  rows: TaskRowProgress[],
+  stats: TaskStatsResp | undefined,
+): StageProgress[] | null {
+  const tracks = stats?.tracks ?? []
+  if (!tracks.length) return null
+  return [...tracks]
+    .sort((a, b) => a.stage - b.stage)
+    .map((track) => {
+      const mine = rows.filter((row) => row.trackId === track.id)
+      return { id: track.id, label: track.label, status: stageStatus(mine), rows: mine }
+    })
+    .filter((stage) => stage.rows.length > 0)
+}
+
 /** A whole paper in one line, for the header's collapsed rows: the steps
  *  running now in pipeline order, whether any step has failed, and how many
  *  of the timeline's rows are checked off. */
