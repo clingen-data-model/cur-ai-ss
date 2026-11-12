@@ -156,7 +156,7 @@ function RerunTaskDialog({
               rel="noreferrer"
               className="inline-flex items-center gap-0.5 font-medium text-primary underline-offset-2 hover:underline"
             >
-              See how the steps fit together
+              Guide to the Inner Workings of the Extraction
               <ExternalLink className="size-3" />
             </a>
           </p>
