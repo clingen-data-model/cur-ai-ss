@@ -3179,12 +3179,12 @@ def test_phenotypes_are_listed_alphabetically(client, db_session, seeded_paper):
     patient = _seed_patient(db_session, seeded_paper, 'Sorted Phenotypes Patient')
     for concept in ['seizures', 'Ataxia', 'microcephaly', 'Hypotonia']:
         resp = client.post(
-            f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+            f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes',
             json={'concept': concept},
         )
         assert resp.status_code == 200
 
-    resp = client.get(f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes')
+    resp = client.get(f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes')
     assert resp.status_code == 200
     assert [p['concept'] for p in resp.json()] == [
         'Ataxia',
