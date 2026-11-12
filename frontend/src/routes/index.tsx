@@ -75,8 +75,13 @@ export function HomePage() {
           </p>
         </div>
         <Hint label="Upload a paper and select its gene from the list">
-          <Button onClick={() => setDialogOpen(true)}>
-            <FolderPlus />
+          {/* The page's main action, 30% larger than a default button:
+              42px tall, 18px text, a 20px icon. */}
+          <Button
+            onClick={() => setDialogOpen(true)}
+            className="h-10.5 gap-2 px-3.5 text-lg has-data-[icon=inline-start]:pl-2.5"
+          >
+            <FolderPlus className="size-5" />
             Upload paper
           </Button>
         </Hint>
