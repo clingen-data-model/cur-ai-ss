@@ -191,8 +191,30 @@ def vep_lookup(
     hgvs_g: str | None,
     hgvs_c: str | None,
     gene_symbol: str,
+    gnomad_style_coordinates: str | None = None,
 ) -> AnnotatedVariant:
-    """Query Ensembl VEP for a given variant identifier and extract key annotations from the most relevant transcript."""
+    """Query Ensembl VEP for a given variant identifier and extract key
+    annotations from the most relevant transcript.
+
+    When VEP answers but carries no SpliceAI score, the score is asked of the
+    SpliceAI Lookup (given coordinates). Only then: a VEP failure leaves the
+    variant without SpliceAI rather than sending it to the Lookup, whose
+    public API is rate-limited."""
+    result_variant = _vep_annotations(rsid, hgvs_g, hgvs_c, gene_symbol)
+    if result_variant is None:
+        return AnnotatedVariant(rsid=rsid)
+    if result_variant.spliceai is None and gnomad_style_coordinates:
+        result_variant.spliceai = spliceai_lookup(gnomad_style_coordinates, gene_symbol)
+    return result_variant
+
+
+def _vep_annotations(
+    rsid: str | None,
+    hgvs_g: str | None,
+    hgvs_c: str | None,
+    gene_symbol: str,
+) -> AnnotatedVariant | None:
+    """VEP's annotations of the variant, or None when VEP did not answer."""
     if hgvs_g is not None:
         ext = f'/vep/human/hgvs/{hgvs_g}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
         variant_id = hgvs_g
@@ -217,10 +239,10 @@ def vep_lookup(
         data = r.json()
     except requests.exceptions.RequestException as e:
         logger.error(f'VEP lookup failed for {variant_id}: {e}')
-        return AnnotatedVariant(rsid=rsid)
+        return None
     except ValueError as e:
         logger.error(f'VEP JSON parse failed for {variant_id}: {e}')
-        return AnnotatedVariant(rsid=rsid)
+        return None
 
     result_variant = AnnotatedVariant(rsid=rsid)
 
@@ -452,7 +474,14 @@ def enrich_variant(hv: HarmonizedVariant, gene_symbol: str) -> AnnotatedVariant:
 
         if hv.rsid or hv.hgvs_g or hv.hgvs_c:
             futures.append(
-                executor.submit(vep_lookup, hv.rsid, hv.hgvs_g, hv.hgvs_c, gene_symbol)
+                executor.submit(
+                    vep_lookup,
+                    hv.rsid,
+                    hv.hgvs_g,
+                    hv.hgvs_c,
+                    gene_symbol,
+                    hv.gnomad_style_coordinates,
+                )
             )
 
         # Collect results as they complete
@@ -478,11 +507,6 @@ def enrich_variant(hv: HarmonizedVariant, gene_symbol: str) -> AnnotatedVariant:
             value = getattr(result, field_name, None)
             if value is not None:
                 setattr(annotated, field_name, value)
-
-    # Ensembl's precomputed SpliceAI scores miss some variants (all of
-    # IFT74's, on 2026-11-16); the SpliceAI Lookup runs the model for them.
-    if annotated.spliceai is None and hv.gnomad_style_coordinates:
-        annotated.spliceai = spliceai_lookup(hv.gnomad_style_coordinates, gene_symbol)
     return annotated
 
 

@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from lib.agents import variant_annotation_agent as agent
-from lib.models.variant import AnnotatedVariant, HarmonizedVariant, SpliceAI
+from lib.models.variant import AnnotatedVariant, SpliceAI
 
 
 class _Response:
@@ -199,38 +199,49 @@ def test_lookup_failure_is_none(monkeypatch):
     assert agent.spliceai_lookup('9-27011970-T-G', 'IFT74') is None
 
 
-def _stub_sources(monkeypatch, vep_spliceai: SpliceAI | None) -> list[str]:
-    """gnomAD and ClinVar return nothing; VEP returns vep_spliceai; records
-    the coordinates the Lookup is asked for."""
+def _vep(spliceai: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """A VEP answer for the IFT74 variant, with or without a SpliceAI score."""
+    tx: dict[str, Any] = {
+        'gene_symbol': 'IFT74',
+        'mane_select': 'NM_025103.4',
+        'impact': 'HIGH',
+        'consequence_terms': ['splice_donor_variant'],
+    }
+    if spliceai is not None:
+        tx['spliceai'] = spliceai
+    return [{'transcript_consequences': [tx]}]
+
+
+def _vep_session(monkeypatch, answer: Any) -> list[str]:
+    """VEP gives answer (an exception is raised); records the coordinates the
+    Lookup is asked for."""
     asked: list[str] = []
-    monkeypatch.setattr(agent, 'gnomad_lookup', lambda c: AnnotatedVariant())
-    monkeypatch.setattr(agent, 'clinvar_lookup', lambda *a: AnnotatedVariant())
-    monkeypatch.setattr(
-        agent,
-        'vep_lookup',
-        lambda *a: AnnotatedVariant(
-            vep_consequence='splice_donor_variant', spliceai=vep_spliceai
-        ),
-    )
+
+    class Session:
+        def get(self, url: str, **_: Any) -> _Response:
+            if isinstance(answer, Exception):
+                raise answer
+            return _Response(answer)
 
     def lookup(coords: str, gene: str) -> SpliceAI:
         asked.append(coords)
         return SpliceAI(max_score=0.998, effect_type='DS_DL', position=-2)
 
+    monkeypatch.setattr(agent, '_get_session_with_retries', Session)
     monkeypatch.setattr(agent, 'spliceai_lookup', lookup)
     return asked
 
 
-_HV = HarmonizedVariant(
-    gnomad_style_coordinates='9-27011970-T-G',
-    hgvs_g='NC_000009.12:g.27011970T>G',
-)
+def _vep_lookup() -> AnnotatedVariant:
+    return agent.vep_lookup(
+        None, 'NC_000009.12:g.27011970T>G', None, 'IFT74', '9-27011970-T-G'
+    )
 
 
-def test_enrich_falls_back_to_the_lookup_when_vep_has_no_spliceai(monkeypatch):
-    asked = _stub_sources(monkeypatch, vep_spliceai=None)
+def test_vep_answer_without_spliceai_asks_the_lookup(monkeypatch):
+    asked = _vep_session(monkeypatch, _vep(None))
 
-    result = agent.enrich_variant(_HV, 'IFT74')
+    result = _vep_lookup()
 
     assert asked == ['9-27011970-T-G']
     assert result.spliceai is not None
@@ -238,14 +249,38 @@ def test_enrich_falls_back_to_the_lookup_when_vep_has_no_spliceai(monkeypatch):
     assert result.vep_consequence == 'splice_donor_variant'
 
 
-def test_enrich_keeps_vep_spliceai_without_asking_the_lookup(monkeypatch):
-    vep = SpliceAI(max_score=0.95, effect_type='DS_AG', position=8)
-    asked = _stub_sources(monkeypatch, vep_spliceai=vep)
+def test_vep_spliceai_is_kept_without_asking_the_lookup(monkeypatch):
+    asked = _vep_session(
+        monkeypatch, _vep({'DS_AG': 0.95, 'DS_AL': 0.97, 'DP_AG': 8, 'DP_AL': 2})
+    )
 
-    result = agent.enrich_variant(_HV, 'IFT74')
+    result = _vep_lookup()
 
     assert asked == []
-    assert result.spliceai == vep
+    assert result.spliceai is not None
+    assert result.spliceai.effect_type == 'DS_AL'
+
+
+def test_vep_failure_does_not_ask_the_lookup(monkeypatch):
+    """Only a VEP answer lacking SpliceAI sends a variant to the Lookup, whose
+    public API is rate-limited; a VEP error leaves SpliceAI empty."""
+    asked = _vep_session(
+        monkeypatch, agent.requests.exceptions.ConnectionError('refused')
+    )
+
+    result = _vep_lookup()
+
+    assert asked == []
+    assert result.spliceai is None
+
+
+def test_no_coordinates_no_lookup(monkeypatch):
+    asked = _vep_session(monkeypatch, _vep(None))
+
+    result = agent.vep_lookup(None, 'NC_000009.12:g.27011970T>G', None, 'IFT74')
+
+    assert asked == []
+    assert result.spliceai is None
 
 
 def test_from_raw_reads_string_scores():
