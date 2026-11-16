@@ -22,13 +22,15 @@ logger = logging.getLogger(__name__)
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
 VEP_BASE = 'https://rest.ensembl.org'
-# The SpliceAI Lookup's GRCh38 SpliceAI service (spliceailookup.broadinstitute.org
-# calls it from the browser). It runs the model when no cached score exists, so
-# it has scores for variants Ensembl's precomputed set lacks: IFT74
-# c.789+2T>G (paper 90) got none from VEP and DS_DL 0.998 from here on
-# 2026-11-16. The site moved off spliceailookup-api.broadinstitute.org, which
-# no longer accepts connections; if this URL stops answering, the site's page
-# source lists the current one.
+# The SpliceAI Lookup's public GRCh38 SpliceAI API, as documented in the
+# README of github.com/broadinstitute/SpliceAI-lookup (it replaced
+# spliceailookup-api.broadinstitute.org, which no longer accepts connections).
+# It runs the model when no cached score exists, so it has scores for variants
+# Ensembl's precomputed set lacks: IFT74 c.789+2T>G (paper 90) got none from
+# VEP and DS_DL 0.998 from here on 2026-11-16. The API allows only several
+# requests per user per minute; past that it answers with a rate-limit error,
+# which leaves spliceai empty. For volume, the README's docker image
+# (weisburd/spliceai-38) serves the same API without a limit.
 SPLICEAI_LOOKUP_BASE = 'https://spliceai-38-xwkwwwxdwq-uc.a.run.app'
 # 50 bp either side is the window of the precomputed scores VEP returns;
 # with it the Lookup gave the same scores and positions as VEP for
