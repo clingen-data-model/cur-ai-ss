@@ -1,11 +1,13 @@
-"""clinvar_lookup keeps the variation ID of the record it read the
-classification from, so the UI can link to that record."""
+"""The annotation lookups: clinvar_lookup keeps the variation ID of the record
+it read the classification from, so the UI can link to that record, and
+SpliceAI comes from the SpliceAI Lookup when VEP has none."""
 
 from typing import Any
 
 import pytest
 
 from lib.agents import variant_annotation_agent as agent
+from lib.models.variant import AnnotatedVariant, HarmonizedVariant, SpliceAI
 
 
 class _Response:
@@ -101,3 +103,154 @@ def test_only_malformed_ids_means_no_search(monkeypatch):
     result = agent.clinvar_lookup('rs', '_:CA', None, None)
 
     assert result.pathogenicity is None
+
+
+# --- SpliceAI Lookup fallback -------------------------------------------------
+
+# The Lookup's answer for IFT74 c.789+2T>G (chr9-27011970-T-G), trimmed to one
+# MANE Select and one other IFT74 transcript plus a neighbouring gene; delta
+# scores come back as strings.
+_LOOKUP_IFT74 = {
+    'variant': 'chr9-27011970-T-G',
+    'source': 'spliceai:model',
+    'scores': [
+        {
+            'g_name': 'OTHER',
+            't_priority': 'MS',
+            'DS_AG': '0.999',
+            'DS_AL': '0.000',
+            'DS_DG': '0.000',
+            'DS_DL': '0.000',
+            'DP_AG': 1,
+            'DP_AL': 1,
+            'DP_DG': 1,
+            'DP_DL': 1,
+        },
+        {
+            'g_name': 'IFT74',
+            't_priority': 'N',
+            'DS_AG': '0.004',
+            'DS_AL': '0.000',
+            'DS_DG': '0.302',
+            'DS_DL': '0.500',
+            'DP_AG': 152,
+            'DP_AL': -64,
+            'DP_DG': 162,
+            'DP_DL': -2,
+        },
+        {
+            'g_name': 'IFT74',
+            't_priority': 'MS',
+            'DS_AG': '0.004',
+            'DS_AL': '0.000',
+            'DS_DG': '0.302',
+            'DS_DL': '0.998',
+            'DP_AG': 152,
+            'DP_AL': -64,
+            'DP_DG': 162,
+            'DP_DL': -2,
+        },
+    ],
+}
+
+
+def _lookup_session(monkeypatch, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Answers every GET with payload and records the params it was sent."""
+    calls: list[dict[str, Any]] = []
+
+    class Session:
+        def get(self, url: str, **kwargs: Any) -> _Response:
+            calls.append({'url': url, **kwargs.get('params', {})})
+            return _Response(payload)
+
+    monkeypatch.setattr(agent, '_get_session_with_retries', Session)
+    return calls
+
+
+def test_lookup_reads_the_curated_genes_mane_transcript(monkeypatch):
+    calls = _lookup_session(monkeypatch, _LOOKUP_IFT74)
+
+    result = agent.spliceai_lookup('9-27011970-T-G', 'IFT74')
+
+    assert result is not None
+    assert result.max_score == pytest.approx(0.998)
+    assert result.effect_type == 'DS_DL'
+    assert result.position == -2
+    # Same 50 bp window as VEP's precomputed scores, chr-prefixed coordinates.
+    assert calls[0]['variant'] == 'chr9-27011970-T-G'
+    assert calls[0]['distance'] == 50
+
+
+def test_lookup_error_or_no_scores_is_none(monkeypatch):
+    _lookup_session(monkeypatch, {'error': 'unable to parse variant'})
+    assert agent.spliceai_lookup('9-1-A-AT', 'IFT74') is None
+
+    _lookup_session(monkeypatch, {'scores': []})
+    assert agent.spliceai_lookup('9-1-A-T', 'IFT74') is None
+
+
+def test_lookup_failure_is_none(monkeypatch):
+    class Session:
+        def get(self, url: str, **_: Any) -> _Response:
+            raise agent.requests.exceptions.ConnectionError('refused')
+
+    monkeypatch.setattr(agent, '_get_session_with_retries', Session)
+
+    assert agent.spliceai_lookup('9-27011970-T-G', 'IFT74') is None
+
+
+def _stub_sources(monkeypatch, vep_spliceai: SpliceAI | None) -> list[str]:
+    """gnomAD and ClinVar return nothing; VEP returns vep_spliceai; records
+    the coordinates the Lookup is asked for."""
+    asked: list[str] = []
+    monkeypatch.setattr(agent, 'gnomad_lookup', lambda c: AnnotatedVariant())
+    monkeypatch.setattr(agent, 'clinvar_lookup', lambda *a: AnnotatedVariant())
+    monkeypatch.setattr(
+        agent,
+        'vep_lookup',
+        lambda *a: AnnotatedVariant(
+            vep_consequence='splice_donor_variant', spliceai=vep_spliceai
+        ),
+    )
+
+    def lookup(coords: str, gene: str) -> SpliceAI:
+        asked.append(coords)
+        return SpliceAI(max_score=0.998, effect_type='DS_DL', position=-2)
+
+    monkeypatch.setattr(agent, 'spliceai_lookup', lookup)
+    return asked
+
+
+_HV = HarmonizedVariant(
+    gnomad_style_coordinates='9-27011970-T-G',
+    hgvs_g='NC_000009.12:g.27011970T>G',
+)
+
+
+def test_enrich_falls_back_to_the_lookup_when_vep_has_no_spliceai(monkeypatch):
+    asked = _stub_sources(monkeypatch, vep_spliceai=None)
+
+    result = agent.enrich_variant(_HV, 'IFT74')
+
+    assert asked == ['9-27011970-T-G']
+    assert result.spliceai is not None
+    assert result.spliceai.max_score == pytest.approx(0.998)
+    assert result.vep_consequence == 'splice_donor_variant'
+
+
+def test_enrich_keeps_vep_spliceai_without_asking_the_lookup(monkeypatch):
+    vep = SpliceAI(max_score=0.95, effect_type='DS_AG', position=8)
+    asked = _stub_sources(monkeypatch, vep_spliceai=vep)
+
+    result = agent.enrich_variant(_HV, 'IFT74')
+
+    assert asked == []
+    assert result.spliceai == vep
+
+
+def test_from_raw_reads_string_scores():
+    result = SpliceAI.from_raw({'DS_AG': '0.004', 'DS_DL': '0.998', 'DP_DL': -2})
+
+    assert result.max_score == pytest.approx(0.998)
+    assert result.effect_type == 'DS_DL'
+    assert result.position == -2

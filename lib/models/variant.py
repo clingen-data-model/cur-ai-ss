@@ -535,7 +535,7 @@ class HarmonizedVariantDB(Base):
 
 
 class SpliceAI(BaseModel):
-    """SpliceAI prediction data from VEP."""
+    """SpliceAI prediction data, from VEP or else the SpliceAI Lookup."""
 
     max_score: float = 0.0
     effect_type: Optional[str] = None
@@ -543,7 +543,10 @@ class SpliceAI(BaseModel):
 
     @classmethod
     def from_raw(cls, raw: Dict[str, Any]) -> 'SpliceAI':
-        """Convert raw SpliceAI dict into max_score, effect_type, position."""
+        """Convert raw SpliceAI dict into max_score, effect_type, position.
+
+        VEP gives the delta scores as numbers, the SpliceAI Lookup as
+        strings ('0.998'), so both are read through float()."""
         ds_keys = ['DS_AG', 'DS_AL', 'DS_DG', 'DS_DL']
         dp_keys = ['DP_AG', 'DP_AL', 'DP_DG', 'DP_DL']
 
@@ -552,7 +555,7 @@ class SpliceAI(BaseModel):
         position = None
 
         for ds, dp in zip(ds_keys, dp_keys):
-            score = raw.get(ds, 0)
+            score = float(raw.get(ds) or 0)
             if score > max_score:
                 max_score = score
                 effect_type = ds

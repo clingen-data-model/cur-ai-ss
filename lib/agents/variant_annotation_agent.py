@@ -22,6 +22,18 @@ logger = logging.getLogger(__name__)
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
 VEP_BASE = 'https://rest.ensembl.org'
+# The SpliceAI Lookup's GRCh38 SpliceAI service (spliceailookup.broadinstitute.org
+# calls it from the browser). It runs the model when no cached score exists, so
+# it has scores for variants Ensembl's precomputed set lacks: IFT74
+# c.789+2T>G (paper 90) got none from VEP and DS_DL 0.998 from here on
+# 2026-11-16. The site moved off spliceailookup-api.broadinstitute.org, which
+# no longer accepts connections; if this URL stops answering, the site's page
+# source lists the current one.
+SPLICEAI_LOOKUP_BASE = 'https://spliceai-38-xwkwwwxdwq-uc.a.run.app'
+# 50 bp either side is the window of the precomputed scores VEP returns;
+# with it the Lookup gave the same scores and positions as VEP for
+# BRCA2 c.68-2A>G, so a score from either source means the same thing.
+SPLICEAI_LOOKUP_DISTANCE = 50
 
 
 def _get_session_with_retries() -> requests.Session:
@@ -255,6 +267,50 @@ def vep_lookup(
     return result_variant
 
 
+def spliceai_lookup(gnomad_style_coordinates: str, gene_symbol: str) -> SpliceAI | None:
+    """SpliceAI scores from the SpliceAI Lookup, for a variant VEP returned
+    none for. Prefers the curated gene's MANE Select transcript, as
+    vep_lookup does; None when the service fails or has no scores."""
+    params: dict[str, str | int] = {
+        'hg': 38,
+        'variant': f'chr{gnomad_style_coordinates.removeprefix("chr")}',
+        'distance': SPLICEAI_LOOKUP_DISTANCE,
+        'mask': 1,
+        'bc': 'basic',
+    }
+    session = _get_session_with_retries()
+    try:
+        logger.info(f'SpliceAI Lookup request: {gnomad_style_coordinates}')
+        r = session.get(f'{SPLICEAI_LOOKUP_BASE}/spliceai/', params=params, timeout=60)
+        r.raise_for_status()
+        data = r.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f'SpliceAI Lookup failed for {gnomad_style_coordinates}: {e}')
+        return None
+    except ValueError as e:
+        logger.error(
+            f'SpliceAI Lookup JSON parse failed for {gnomad_style_coordinates}: {e}'
+        )
+        return None
+
+    if data.get('error'):
+        logger.error(
+            f'SpliceAI Lookup error for {gnomad_style_coordinates}: {data["error"]}'
+        )
+        return None
+
+    scores = data.get('scores') or []
+    scores = [s for s in scores if s.get('g_name') == gene_symbol] or scores
+    if not scores:
+        return None
+    # t_priority 'MS' is MANE Select; otherwise take the highest-scoring
+    # transcript, since every transcript is scored at the same position.
+    mane = [s for s in scores if s.get('t_priority') == 'MS']
+    return max(
+        (SpliceAI.from_raw(s) for s in mane or scores), key=lambda sa: sa.max_score
+    )
+
+
 def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
     headers = {'content-type': 'application/json'}
 
@@ -420,6 +476,11 @@ def enrich_variant(hv: HarmonizedVariant, gene_symbol: str) -> AnnotatedVariant:
             value = getattr(result, field_name, None)
             if value is not None:
                 setattr(annotated, field_name, value)
+
+    # Ensembl's precomputed SpliceAI scores miss some variants (all of
+    # IFT74's, on 2026-11-16); the SpliceAI Lookup runs the model for them.
+    if annotated.spliceai is None and hv.gnomad_style_coordinates:
+        annotated.spliceai = spliceai_lookup(hv.gnomad_style_coordinates, gene_symbol)
     return annotated
 
 
