@@ -10,6 +10,8 @@ from lib.agents.variant_harmonization_agent import (
     VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
     _builds_of_chromosome_accessions,
     _clinvar_records,
+    _coding_transcripts,
+    _fits_as_written,
     _registry_gnomad_id,
     _registry_protein_hgvs,
     _registry_query,
@@ -278,3 +280,50 @@ def test_a_rejected_description_is_a_failed_projection():
     state_3 = rules[rules.index('STATE 3') : rules.index('STATE 4')]
     assert 'validation_warnings say why' in state_3
     assert 'not\n        returned as hgvs_c' in state_3
+
+
+def test_every_coding_refseq_transcript_is_tried_in_variantvalidators_order():
+    """gene2transcripts for TSEN2, trimmed: the non-coding NR_ records are
+    left out, every NM_ version is kept."""
+    reply = json.loads(
+        (
+            Path(__file__).parent / 'fixtures' / 'vv_gene2transcripts_tsen2.json'
+        ).read_text()
+    )
+    assert _coding_transcripts(reply) == [
+        'NM_025265.3',
+        'NM_025265.2',
+        'NM_001145393.3',
+        'NM_025265.4',
+    ]
+    assert _coding_transcripts(None) == []
+
+
+@pytest.mark.parametrize(
+    'warning',
+    [
+        'ReferenceMismatchError: NM_022336.4:c.1056T>C: Variant reference (T) does '
+        'not agree with reference sequence (C)',
+        'ExonBoundaryError: Position c.914-5 does not correspond with an exon '
+        'boundary for transcript NM_025265.4',
+        'NM_138793.4:c.-286+1G>A automapped to NM_138793.4:c.-285T>A',
+    ],
+)
+def test_a_description_variantvalidator_changed_or_rejected_does_not_fit(warning):
+    assert not _fits_as_written(
+        {'gnomad_ids': ['17-78997907-A-T'], 'validation_warnings': [warning]}
+    )
+
+
+def test_a_mapped_description_fits():
+    assert _fits_as_written(
+        {'gnomad_ids': ['3-12516615-T-A'], 'validation_warnings': []}
+    )
+    assert not _fits_as_written({'gnomad_ids': [], 'validation_warnings': []})
+
+
+def test_a_rejected_description_is_tried_on_the_genes_other_transcripts():
+    rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
+    state_3 = rules[rules.index('STATE 3') : rules.index('STATE 4')]
+    assert 'Call transcripts_fitting_description(gene, hgvs_c) once' in state_3
+    assert 'flag that the\n          transcript is assumed' in state_3

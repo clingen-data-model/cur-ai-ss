@@ -541,6 +541,11 @@ def gnomad_style_ids_from_variant_validator(
     Example Output:
         {"gnomad_ids": ["1-55051215-G-GA", "1-55051214-GG-G"], "validation_warnings": []}
     """
+    return _validate_with_variant_validator(variant_description)
+
+
+def _validate_with_variant_validator(variant_description: str) -> dict[str, list[str]]:
+    """VariantValidator's GRCh38 gnomAD-style ids and warnings for a description."""
     encoded_variant_description = quote(variant_description, safe='')
     endpoint = (
         VV_VARIANT_VALIDATOR_ENSEMBL_ENDPOINT
@@ -769,6 +774,97 @@ def resolve_transcript_version(transcript: str) -> Optional[dict[str, str]]:
     return best
 
 
+# The most transcripts transcripts_fitting_description sends to
+# VariantValidator, one request each to its public API.
+MAX_TRANSCRIPTS_TRIED = 20
+
+# VariantValidator warnings that mean the description, as written, is not on
+# the transcript: the bases it states are not there, its intronic offset is
+# not counted from an exon edge, or VariantValidator rewrote it to make it fit.
+_REJECTION_MARKERS = (
+    'ReferenceMismatchError',
+    'IntronBaseMismatchWarning',
+    'ExonBoundaryError',
+    'OutOfBoundsError',
+    'automapped to',
+)
+
+
+def _fits_as_written(validation: dict[str, list[str]]) -> bool:
+    """Whether VariantValidator mapped the description without changing it."""
+    return bool(validation['gnomad_ids']) and not any(
+        marker in warning
+        for warning in validation['validation_warnings']
+        for marker in _REJECTION_MARKERS
+    )
+
+
+def _coding_transcripts(gene_transcripts: Any) -> list[str]:
+    """The coding RefSeq transcripts in a gene2transcripts reply, every version,
+    in the order VariantValidator lists them."""
+    if not isinstance(gene_transcripts, dict):
+        return []
+    return [
+        t['reference']
+        for t in gene_transcripts.get('transcripts', [])
+        if t.get('reference', '').startswith('NM_')
+        and t.get('coding_start') is not None
+    ]
+
+
+@function_tool
+def transcripts_fitting_description(gene_symbol: str, hgvs_c: str) -> dict[str, Any]:
+    """
+    Find a transcript of the gene that a coding change fits, when the one
+    tried rejected it. Lists every coding RefSeq transcript of the gene, every
+    version VariantValidator holds, and tries the change on each in turn,
+    stopping at the first VariantValidator accepts unchanged.
+
+    hgvs_c: the change as the paper numbers it, with or without an accession
+    ("c.914-5T>A").
+
+    Returns:
+    {
+      "fitting": {"transcript", "gnomad_ids", "validation_warnings"} or null,
+      "rejected": [{"transcript", "validation_warnings"}],
+      "not_tried": [<accessions past the limit>]
+    }
+    """
+    url = f'{VV_GENE2TRANSCRIPTSV1_ENDPOINT}/{quote(gene_symbol, safe="")}'
+    session = _get_session_with_retries()
+    r = session.get(url, headers={'content-type': 'application/json'}, timeout=10)
+    r.raise_for_status()
+    transcripts = _coding_transcripts(r.json())
+
+    change = hgvs_c.split(':', 1)[-1].strip()
+    rejected: list[dict[str, Any]] = []
+    for transcript in transcripts[:MAX_TRANSCRIPTS_TRIED]:
+        try:
+            validation = _validate_with_variant_validator(f'{transcript}:{change}')
+        except requests.RequestException as e:
+            validation = {
+                'gnomad_ids': [],
+                'validation_warnings': [f'VariantValidator request failed: {e}'],
+            }
+        if _fits_as_written(validation):
+            return {
+                'fitting': {'transcript': transcript, **validation},
+                'rejected': rejected,
+                'not_tried': [],
+            }
+        rejected.append(
+            {
+                'transcript': transcript,
+                'validation_warnings': validation['validation_warnings'],
+            }
+        )
+    return {
+        'fitting': None,
+        'rejected': rejected,
+        'not_tried': transcripts[MAX_TRANSCRIPTS_TRIED:],
+    }
+
+
 VARIANT_HARMONIZATION_INSTRUCTIONS = """
 System: You are an expert genomics curator and deterministic variant normalizer.
 
@@ -976,7 +1072,19 @@ Action
         returned as hgvs_c on it. Quote the warning in basis.
 
     4. If projection fails:
-        Retry once with select_canonical_transcript to handle retired versions.
+        Call transcripts_fitting_description(gene, hgvs_c) once. A paper
+        often numbers a change on a transcript other than the one chosen, or
+        on an older version of it; the tool tries the change, as the paper
+        numbers it, on each coding RefSeq transcript of the gene in turn and
+        returns the first VariantValidator accepts unchanged.
+        - It returns one: continue at step 5 on that transcript, with its
+          gnomad_ids. If the description names no reference bases (c.123del,
+          c.45dup), it fits wherever its positions exist, so the fit is no
+          evidence of the transcript the paper used: flag that the
+          transcript is assumed.
+        - It returns none: State 4.
+        Say in basis which transcript fitted, or for a rejection the warning
+        VariantValidator gave.
 
     5. If projection succeeds:
         Call allele_registry_resolver using hgvs_c and genome_build.
@@ -1194,6 +1302,7 @@ agent = Agent(
         genomic_accession_for_gene_and_transcript,
         allele_registry_resolver,
         gnomad_style_ids_from_variant_validator,
+        transcripts_fitting_description,
         clinvar_lookup,
         dbsnp_lookup,
     ],
