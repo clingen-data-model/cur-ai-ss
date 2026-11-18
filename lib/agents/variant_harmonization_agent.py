@@ -507,12 +507,16 @@ def _variant_validator_projection(data: dict[str, Any]) -> dict[str, list[str]]:
     """
     ids: set[str] = set()
     warnings: list[str] = []
+    proteins: list[str] = []
     for value in data.values():
         if not isinstance(value, dict):
             continue
         for warning in value.get('validation_warnings', []):
             if not warning.startswith('Lovd') and warning not in warnings:
                 warnings.append(warning)
+        protein = (value.get('hgvs_predicted_protein_consequence') or {}).get('tlr')
+        if protein and protein not in proteins:
+            proteins.append(protein)
         vcf = value.get('primary_assembly_loci', {}).get('grch38', {}).get('vcf')
         if not vcf:
             continue
@@ -523,7 +527,11 @@ def _variant_validator_projection(data: dict[str, Any]) -> dict[str, list[str]]:
         if chrom in {'M', 'MT'}:
             chrom = 'M'
         ids.add(f'{chrom}-{pos}-{ref}-{alt}')
-    return {'gnomad_ids': sorted(ids), 'validation_warnings': warnings}
+    return {
+        'gnomad_ids': sorted(ids),
+        'validation_warnings': warnings,
+        'predicted_proteins': proteins,
+    }
 
 
 @function_tool
@@ -539,7 +547,8 @@ def gnomad_style_ids_from_variant_validator(
     VariantValidator corrected before mapping it.
 
     Example Output:
-        {"gnomad_ids": ["1-55051215-G-GA", "1-55051214-GG-G"], "validation_warnings": []}
+        {"gnomad_ids": ["1-55051215-G-GA", "1-55051214-GG-G"], "validation_warnings": [],
+         "predicted_proteins": ["NP_000000.1:p.(Gly12Asp)"]}
     """
     return _validate_with_variant_validator(variant_description)
 
@@ -561,7 +570,7 @@ def _validate_with_variant_validator(variant_description: str) -> dict[str, list
 
     data = r.json()
     if not data:
-        return {'gnomad_ids': [], 'validation_warnings': []}
+        return {'gnomad_ids': [], 'validation_warnings': [], 'predicted_proteins': []}
     return _variant_validator_projection(data)
 
 
@@ -799,6 +808,64 @@ def _fits_as_written(validation: dict[str, list[str]]) -> bool:
     )
 
 
+_EDIT = re.compile(r'^c\.[-*\d+_?()]+(?P<edit>.*)$')
+_STATED = re.compile(
+    r'^(?:(?P<sub>[ACGT]+)>|(?:del|dup|inv)(?P<span>[ACGT]+)(?:ins|$))'
+)
+
+
+def _stated_reference_bases(hgvs_c: str) -> int:
+    """How many reference bases a c. description states: one for T>A, two
+    for delCT, none for del, dup, ins or delinsGG (whose bases are the new
+    sequence, not the reference)."""
+    edit = _EDIT.match(hgvs_c.split(':', 1)[-1].strip())
+    stated = _STATED.match(edit['edit']) if edit else None
+    if not stated:
+        return 0
+    return len(stated['sub'] or stated['span'] or '')
+
+
+_AMINO_ACIDS = {
+    'A': 'Ala', 'R': 'Arg', 'N': 'Asn', 'D': 'Asp', 'C': 'Cys', 'Q': 'Gln',
+    'E': 'Glu', 'G': 'Gly', 'H': 'His', 'I': 'Ile', 'L': 'Leu', 'K': 'Lys',
+    'M': 'Met', 'F': 'Phe', 'P': 'Pro', 'S': 'Ser', 'T': 'Thr', 'W': 'Trp',
+    'Y': 'Tyr', 'V': 'Val', 'U': 'Sec', 'X': 'Ter', '*': 'Ter',
+}  # fmt: skip
+_THREE_LETTER = re.compile(
+    r'(?P<ref>[A-Z][a-z]{2})(?P<pos>\d+)(?P<alt>[A-Z][a-z]{2}|=)?'
+)
+_ONE_LETTER = re.compile(r'(?P<ref>[A-Z*])(?P<pos>\d+)(?P<alt>[A-Z*]|=)?')
+
+
+def _protein_change(text: str) -> tuple[str, int, str | None] | None:
+    """(reference residue, position, new residue) of the first residue a
+    protein change names, in three-letter codes: "p.Leu84Arg", "L84R",
+    "NP_000030.1:p.(Leu84Pro)", "p.Asn98LysfsTer?" (new residue Lys)."""
+    body = text.split(':', 1)[-1].removeprefix('p.').strip('()')
+    three_letter = set(_AMINO_ACIDS.values())
+    found = _THREE_LETTER.match(body)
+    if found and found['ref'] in three_letter:
+        ref, alt = found['ref'], found['alt']
+        if alt is not None and alt != '=' and alt not in three_letter:
+            alt = None
+    else:
+        found = _ONE_LETTER.match(body)
+        if not found:
+            return None
+        ref = _AMINO_ACIDS.get(found['ref'], found['ref'])
+        alt = found['alt'] and _AMINO_ACIDS.get(found['alt'], found['alt'])
+    return (ref, int(found['pos']), ref if alt == '=' else alt)
+
+
+def _same_protein_change(paper: str, predicted: str) -> bool:
+    """Whether a predicted protein change is the paper's: the same residue at
+    the same position, changed to the same residue where both name one."""
+    a, b = _protein_change(paper), _protein_change(predicted)
+    if a is None or b is None or a[:2] != b[:2]:
+        return False
+    return a[2] is None or b[2] is None or a[2] == b[2]
+
+
 def _coding_transcripts(gene_transcripts: Any) -> list[str]:
     """The coding RefSeq transcripts in a gene2transcripts reply, every version,
     in the order VariantValidator lists them."""
@@ -813,19 +880,30 @@ def _coding_transcripts(gene_transcripts: Any) -> list[str]:
 
 
 @function_tool
-def transcripts_fitting_description(gene_symbol: str, hgvs_c: str) -> dict[str, Any]:
+def transcripts_fitting_description(
+    gene_symbol: str, hgvs_c: str, paper_protein_change: str | None = None
+) -> dict[str, Any]:
     """
     Find a transcript of the gene that a coding change fits, when the one
     tried rejected it. Lists every coding RefSeq transcript of the gene, every
-    version VariantValidator holds, and tries the change on each in turn,
-    stopping at the first VariantValidator accepts unchanged.
+    version VariantValidator holds, and tries the change on each in turn.
+
+    A transcript is taken only when the fit is evidence that the paper used
+    it: the change states at least two reference bases (c.547_548delCT), or
+    the protein VariantValidator predicts on it is the paper's protein change.
+    A single stated base matches a wrong transcript one time in four, and a
+    change stating none (c.123del) fits wherever its positions exist; such
+    fits are listed under fits_without_evidence and not taken.
 
     hgvs_c: the change as the paper numbers it, with or without an accession
     ("c.914-5T>A").
+    paper_protein_change: the paper's protein change, if it gives one
+    ("p.Leu178His", "L178H").
 
     Returns:
     {
-      "fitting": {"transcript", "gnomad_ids", "validation_warnings"} or null,
+      "fitting": {"transcript", "gnomad_ids", "validation_warnings", "predicted_proteins"} or null,
+      "fits_without_evidence": [<accessions>],
       "rejected": [{"transcript", "validation_warnings"}],
       "not_tried": [<accessions past the limit>]
     }
@@ -837,7 +915,9 @@ def transcripts_fitting_description(gene_symbol: str, hgvs_c: str) -> dict[str, 
     transcripts = _coding_transcripts(r.json())
 
     change = hgvs_c.split(':', 1)[-1].strip()
+    bases_are_evidence = _stated_reference_bases(change) >= 2
     rejected: list[dict[str, Any]] = []
+    without_evidence: list[str] = []
     for transcript in transcripts[:MAX_TRANSCRIPTS_TRIED]:
         try:
             validation = _validate_with_variant_validator(f'{transcript}:{change}')
@@ -845,21 +925,31 @@ def transcripts_fitting_description(gene_symbol: str, hgvs_c: str) -> dict[str, 
             validation = {
                 'gnomad_ids': [],
                 'validation_warnings': [f'VariantValidator request failed: {e}'],
+                'predicted_proteins': [],
             }
-        if _fits_as_written(validation):
+        if not _fits_as_written(validation):
+            rejected.append(
+                {
+                    'transcript': transcript,
+                    'validation_warnings': validation['validation_warnings'],
+                }
+            )
+            continue
+        protein_is_evidence = bool(paper_protein_change) and any(
+            _same_protein_change(paper_protein_change or '', p)
+            for p in validation['predicted_proteins']
+        )
+        if bases_are_evidence or protein_is_evidence:
             return {
                 'fitting': {'transcript': transcript, **validation},
+                'fits_without_evidence': without_evidence,
                 'rejected': rejected,
                 'not_tried': [],
             }
-        rejected.append(
-            {
-                'transcript': transcript,
-                'validation_warnings': validation['validation_warnings'],
-            }
-        )
+        without_evidence.append(transcript)
     return {
         'fitting': None,
+        'fits_without_evidence': without_evidence,
         'rejected': rejected,
         'not_tried': transcripts[MAX_TRANSCRIPTS_TRIED:],
     }
@@ -1072,17 +1162,19 @@ Action
         returned as hgvs_c on it. Quote the warning in basis.
 
     4. If projection fails:
-        Call transcripts_fitting_description(gene, hgvs_c) once. A paper
-        often numbers a change on a transcript other than the one chosen, or
-        on an older version of it; the tool tries the change, as the paper
-        numbers it, on each coding RefSeq transcript of the gene in turn and
-        returns the first VariantValidator accepts unchanged.
+        Call transcripts_fitting_description(gene, hgvs_c, protein change)
+        once, passing the paper's protein change when there is one (hgvs_p,
+        or one written into the variant string). A paper often numbers a
+        change on a transcript other than the one chosen, or on an older
+        version of it; the tool tries the change, as the paper numbers it, on
+        each coding RefSeq transcript of the gene, and returns the first it
+        fits where the fit is evidence: the change states at least two
+        reference bases, or the protein predicted there is the paper's.
         - It returns one: continue at step 5 on that transcript, with its
-          gnomad_ids. If the description names no reference bases (c.123del,
-          c.45dup), it fits wherever its positions exist, so the fit is no
-          evidence of the transcript the paper used: flag that the
-          transcript is assumed.
-        - It returns none: State 4.
+          gnomad_ids.
+        - It returns none: State 4. Transcripts under fits_without_evidence
+          are not the answer: the change fits them, but would fit a wrong
+          transcript about as often.
         Say in basis which transcript fitted, or for a rejection the warning
         VariantValidator gave.
 

@@ -15,6 +15,8 @@ from lib.agents.variant_harmonization_agent import (
     _registry_gnomad_id,
     _registry_protein_hgvs,
     _registry_query,
+    _same_protein_change,
+    _stated_reference_bases,
     _variant_validator_projection,
 )
 from lib.models.variant import GenomeBuild
@@ -272,6 +274,7 @@ def test_variant_validator_ids_keep_their_warnings():
         'validation_warnings': [
             'NM_138793.4:c.-286+1G>A automapped to NM_138793.4:c.-285T>A'
         ],
+        'predicted_proteins': [],
     }
 
 
@@ -325,5 +328,42 @@ def test_a_mapped_description_fits():
 def test_a_rejected_description_is_tried_on_the_genes_other_transcripts():
     rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
     state_3 = rules[rules.index('STATE 3') : rules.index('STATE 4')]
-    assert 'Call transcripts_fitting_description(gene, hgvs_c) once' in state_3
-    assert 'flag that the\n          transcript is assumed' in state_3
+    assert (
+        'Call transcripts_fitting_description(gene, hgvs_c, protein change)' in state_3
+    )
+    assert 'fits_without_evidence' in state_3
+
+
+@pytest.mark.parametrize(
+    'hgvs_c, bases',
+    [
+        ('NM_000039.3:c.251T>G', 1),
+        ('c.547_548delCT', 2),
+        ('c.960+1delGTAAG', 5),
+        ('c.1-33247_787+101071del', 0),
+        ('c.293dup', 0),
+        ('c.154_155delinsTT', 0),
+        ('c.154_155delCCinsTT', 2),
+        ('c.4397_4398insAAT', 0),
+    ],
+)
+def test_stated_reference_bases(hgvs_c, bases):
+    assert _stated_reference_bases(hgvs_c) == bases
+
+
+@pytest.mark.parametrize(
+    'paper, predicted, same',
+    [
+        ('p.Leu84Arg', 'NP_000030.1:p.(Leu84Arg)', True),
+        ('L84R', 'NP_000030.1:p.(Leu84Arg)', True),
+        ('p.Leu84Arg', 'NP_000030.1:p.(Leu84Pro)', False),
+        # legacy numbering: mature protein, 24 residues short
+        ('p.Leu178His', 'NP_000030.1:p.(Leu202His)', False),
+        ('p.Asn98Lysfs*?', 'NP_000030.1:p.(Asn98LysfsTer106)', True),
+        ('p.Y747*', 'NP_001362737.1:p.(Tyr747Ter)', True),
+        ('Ser439fs', 'NP_001362737.1:p.(Ser439TrpfsTer15)', True),
+        ('p.?', 'NP_598397.1:p.?', False),
+    ],
+)
+def test_a_predicted_protein_is_the_papers(paper, predicted, same):
+    assert _same_protein_change(paper, predicted) is same
