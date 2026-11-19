@@ -10,9 +10,10 @@
  * highlighted by id. Neither writes anything on disk, so this is safe for
  * several curators at once.
  *
- * The review page (routes/papers.$paperId.review.tsx) keeps the viewer open
- * beside the case instead of in a sheet: it passes `inline`, every
- * openHighlight then goes to that callback, and the page renders
+ * The review dialogs (OccurrenceReviewDialog, HpoReviewDialog) and the paper
+ * metadata tab keep the viewer open beside their content instead of in a
+ * sheet: each passes `inline`, every openHighlight then goes to that
+ * callback, and the component renders
  * EvidencePanes itself with whatever target it holds. In that mode a field
  * row's label is a click target too (EditableField's FieldRow reads
  * `inline` off the context), so one click narrows the highlight to a field.
