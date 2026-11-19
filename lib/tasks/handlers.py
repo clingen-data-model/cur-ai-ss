@@ -1434,7 +1434,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
     result = await Runner.run(
         agent_on_tier(variant_harmonization_agent, budget_model),
         message,
-        max_turns=15,
+        max_turns=20,
         session=agent_sess,
     )
     log_run_metrics('VARIANT_HARMONIZATION', result)
