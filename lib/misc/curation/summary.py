@@ -87,6 +87,28 @@ def variant_heading(variant: VariantDB) -> tuple[str, str | None]:
     return title, ' '.join(reported) or None
 
 
+def clinvar_and_caid_lines(variant: VariantDB) -> list[str]:
+    """The Variant Info lines for ClinVar's classification and the CAID.
+
+    The CAID is printed whenever harmonization found one. It used to be
+    printed only for a variant ClinVar did not have, as a stand-in for the
+    missing record, so a variant with a classification showed no CAID, and
+    curators, who look a variant up in ClinGen's tools by it, reported its
+    CAID missing (ALK c.3733T>G and c.3520T>G, paper 86; SLC39A13
+    c.483_491del, paper 88).
+    """
+    annotated = variant.annotated_variant
+    lines = [
+        f'ClinVar: {annotated.pathogenicity}'
+        if annotated and annotated.pathogenicity
+        else 'ClinVar: MISSING'
+    ]
+    caid = variant.harmonized_variant.caid if variant.harmonized_variant else None
+    if caid:
+        lines.append(f'CAID: {caid}')
+    return lines
+
+
 def format_af(af: float) -> str:
     """A gnomAD allele frequency as a plain decimal, never scientific notation.
 
@@ -398,26 +420,8 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                 else:
                     variant_parts.append('gnomAD: MISSING')
 
-                # 5. ClinVar ID and classification
-                if variant.annotated_variant:
-                    if variant.annotated_variant.pathogenicity:
-                        variant_parts.append(
-                            f'ClinVar: {variant.annotated_variant.pathogenicity}'
-                        )
-                    else:
-                        variant_parts.append('ClinVar: MISSING')
-                        # 6. CAID only if not in ClinVar
-                        if (
-                            variant.harmonized_variant
-                            and variant.harmonized_variant.caid
-                        ):
-                            variant_parts.append(
-                                f'CAID: {variant.harmonized_variant.caid}'
-                            )
-                else:
-                    variant_parts.append('ClinVar: MISSING')
-                    if variant.harmonized_variant and variant.harmonized_variant.caid:
-                        variant_parts.append(f'CAID: {variant.harmonized_variant.caid}')
+                # 5. ClinVar classification, then the CAID
+                variant_parts.extend(clinvar_and_caid_lines(variant))
 
                 # Keep REVEL and SpliceAI
                 if variant.annotated_variant:

@@ -1,7 +1,11 @@
 import pytest
 
-from lib.misc.curation.summary import format_af, variant_heading
-from lib.models.variant import HarmonizedVariantDB, VariantDB
+from lib.misc.curation.summary import (
+    clinvar_and_caid_lines,
+    format_af,
+    variant_heading,
+)
+from lib.models.variant import AnnotatedVariantDB, HarmonizedVariantDB, VariantDB
 
 
 @pytest.mark.parametrize(
@@ -115,3 +119,33 @@ def test_harmonized_without_c_names_the_papers_c() -> None:
         hgvs_g='NC_000002.12:g.27217368T>G'
     )
     assert variant_heading(variant) == ('NC_000002.12:g.27217368T>G', 'c.98T>G')
+
+
+@pytest.mark.parametrize(
+    ('pathogenicity', 'caid', 'expected'),
+    [
+        # ALK c.3733T>G (paper 86): classified in ClinVar, and the CAID was
+        # left off the slide, so curators reported it missing.
+        (
+            'Likely pathogenic',
+            'CA345003',
+            ['ClinVar: Likely pathogenic', 'CAID: CA345003'],
+        ),
+        (None, 'CA345003', ['ClinVar: MISSING', 'CAID: CA345003']),
+        ('Pathogenic', None, ['ClinVar: Pathogenic']),
+        (None, None, ['ClinVar: MISSING']),
+    ],
+)
+def test_the_caid_is_printed_whatever_clinvar_says(
+    pathogenicity, caid, expected
+) -> None:
+    variant = VariantDB(id=7, variant_evidence={})
+    variant.harmonized_variant = HarmonizedVariantDB(caid=caid)
+    variant.annotated_variant = AnnotatedVariantDB(pathogenicity=pathogenicity)
+    assert clinvar_and_caid_lines(variant) == expected
+
+
+def test_an_unannotated_variant_still_shows_its_caid() -> None:
+    variant = VariantDB(id=7, variant_evidence={})
+    variant.harmonized_variant = HarmonizedVariantDB(caid='CA345003')
+    assert clinvar_and_caid_lines(variant) == ['ClinVar: MISSING', 'CAID: CA345003']
