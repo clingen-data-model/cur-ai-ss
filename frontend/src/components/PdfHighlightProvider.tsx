@@ -249,6 +249,9 @@ export function PdfHighlightProvider({
           <SheetContent
             side="right"
             showCloseButton={false}
+            // The page stays in sight beside the highlight: curators read the
+            // row they came from against the passage.
+            clearOverlay
             className="gap-0 data-[side=right]:sm:max-w-3xl"
           >
             {/* The viewer's own toolbar carries the close button, so the sheet
