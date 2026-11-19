@@ -2,14 +2,10 @@
  * with click-to-expand Patient/Variant detail panels. A compound-het pair is
  * the exception: its two occurrences share one row, the individual shown
  * once and the two variants on two lines, each with its own fields beside
- * it (see TableRow below). The extraction page's
- * main tab, and the review walk's view of one case's rows
- * (routes/papers.$paperId.review.tsx), which is why it lives here rather
- * than in the extraction route: the walk shows a case the way the paper
- * page shows the paper, same columns, same row markers (curator-created,
- * flags, sign-off), same panels.
+ * it (see TableRow below). The extraction page's main tab; the occurrence
+ * review (OccurrenceReviewDialog.tsx) opens from its header.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ColumnDef, ExpandedState } from '@tanstack/react-table'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -34,7 +30,6 @@ import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
-import { OccurrenceDetailPanel } from '@/components/OccurrenceDetailPanel'
 import { VariantLabel } from '@/components/VariantLabel'
 import { EntityLink } from '@/components/EntityLink'
 import { PatientIdCell, hasSeveralFamilies } from '@/components/PatientIdCell'
@@ -44,8 +39,11 @@ import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { apiErrorMessage } from '@/lib/apiError'
 import { ProbandStatus } from '@/api/generated/types.gen'
 import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
+import { ListChecks } from 'lucide-react'
+import { OccurrenceReviewDialog } from '@/components/OccurrenceReviewDialog'
 
-type ExpandedView = 'patient' | 'variant' | 'occurrence'
+type ExpandedView = 'patient' | 'variant'
 
 /** What the table draws as one row: one occurrence, or the two of a
  * compound-het pair. They used to be two rows, each naming the other in a
@@ -126,22 +124,29 @@ export function OccurrencesTab({
   rows,
   flags,
   focus,
-  compact = false,
+  opened,
+  onOpen,
+  reviewOpen,
+  reviewAt,
+  onReviewOpen,
+  onReviewStep,
 }: {
   paperId: number
   rows: OccurrenceRow[]
   flags: FlagIndex
-  /** The review rail's form: the occurrence's own columns (patient, variant,
-   * zygosity, inheritance, de novo) and the row icons, without the count,
-   * the search box, the proband toggle, the variant type, testing methods,
-   * disease columns or the pair/delete actions, so a row fits half a
-   * viewport. The Patient and Variant panels behind the names are the same;
-   * the caret opens the Occurrence panel, which holds the dropped fields. */
-  compact?: boolean
-  /** An occurrence to open on arrival (from a flag's About chip), on the
-   * panel the chip names. A new object is a new request, so the same row can
-   * be asked for again after the reader has closed it. */
+  /** An occurrence to reveal (from a flag's About chip, or a link): its row
+   * turned to and scrolled to, past the proband filter. A new object is a new
+   * request, so the same row can be asked for again. */
   focus?: Extract<FlagTarget, { kind: 'occurrence' }> | null
+  /** The open panel, which the page keeps in the URL; `onOpen` changes it
+   * (null closes it). */
+  opened: { occurrenceId: number; view: ExpandedView } | null
+  onOpen: (occurrenceId: number | null, view?: ExpandedView) => void
+  /** The occurrence review, open or not, and the occurrence it shows. */
+  reviewOpen: boolean
+  reviewAt?: number
+  onReviewOpen: (open: boolean) => void
+  onReviewStep: (occurrenceId: number) => void
 }) {
   const queryClient = useQueryClient()
   const tableRows = useMemo(() => mergePairs(rows), [rows])
@@ -152,12 +157,10 @@ export function OccurrencesTab({
   }
   // The open panel: which row, and which of the row's occurrences it is
   // about (a pair's two variants each open their own Variant panel).
-  const [expandedCell, setExpandedCell] = useState<{
-    rowId: string
-    occurrenceId: number
-    view: ExpandedView
-  } | null>(
-    focus ? { rowId: rowIdFor(focus.id), occurrenceId: focus.id, view: focus.view ?? 'patient' } : null,
+  const expandedCell = opened ? { ...opened, rowId: rowIdFor(opened.occurrenceId) } : null
+  const setExpandedCell = useCallback(
+    (cell: { occurrenceId: number; view: ExpandedView } | null) => onOpen(cell?.occurrenceId ?? null, cell?.view),
+    [onOpen],
   )
   // Proband-only view: the probands' rows alone, the relatives hidden. Plain
   // page state like the table's search box, and lifted the same way the
@@ -166,10 +169,9 @@ export function OccurrencesTab({
   const [probandOnly, setProbandOnly] = useState(false)
   useEffect(() => {
     if (!focus) return
-    setExpandedCell({ rowId: rowIdFor(focus.id), occurrenceId: focus.id, view: focus.view ?? 'patient' })
     const target = rows.find((r) => r.occurrence.id === focus.id)
     if (target && !isProbandRow(target)) setProbandOnly(false)
-    // rows is read, not watched: a data refresh must not re-open the row.
+    // rows is read, not watched: a data refresh must not lift the filter again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus])
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -182,14 +184,15 @@ export function OccurrencesTab({
     [tableRows, probandOnly],
   )
 
-  const toggleExpanded = (row: TableRow, line: OccurrenceRow, view: ExpandedView) => {
-    const occurrenceId = line.occurrence.id
-    setExpandedCell((prev) =>
-      prev?.occurrenceId === occurrenceId && prev.view === view
-        ? null
-        : { rowId: rowIdOf(row), occurrenceId, view },
-    )
-  }
+  const openId = expandedCell?.occurrenceId
+  const openView = expandedCell?.view
+  const toggleExpanded = useCallback(
+    (line: OccurrenceRow, view: ExpandedView) => {
+      const occurrenceId = line.occurrence.id
+      setExpandedCell(openId === occurrenceId && openView === view ? null : { occurrenceId, view })
+    },
+    [openId, openView, setExpandedCell],
+  )
 
   const deleteMutation = useMutation({
     mutationFn: (occurrenceId: number) =>
@@ -273,9 +276,8 @@ export function OccurrencesTab({
                 expandedCell?.rowId === rowId
                   ? null
                   : {
-                      rowId,
                       occurrenceId: row.original.lines[0].occurrence.id,
-                      view: compact ? 'occurrence' : 'patient',
+                      view: 'patient',
                     },
               )
             }}
@@ -298,7 +300,7 @@ export function OccurrencesTab({
             paperId={paperId}
             patient={row.original.lines[0].patient}
             showFamily={severalFamilies}
-            onClick={() => toggleExpanded(row.original, row.original.lines[0], 'patient')}
+            onClick={() => toggleExpanded(row.original.lines[0], 'patient')}
           />
         ),
       },
@@ -317,10 +319,10 @@ export function OccurrencesTab({
                   expanded={
                     expandedCell?.occurrenceId === line.occurrence.id && expandedCell.view === 'variant'
                   }
-                  onToggle={() => toggleExpanded(row.original, line, 'variant')}
+                  onToggle={() => toggleExpanded(line, 'variant')}
                 />
                 <EntityLink
-                  onClick={() => toggleExpanded(row.original, line, 'variant')}
+                  onClick={() => toggleExpanded(line, 'variant')}
                   hoverContent={<VariantHoverCardContent variant={line.variant} />}
                 >
                   <VariantLabel description={line.variant.variant_description} hgvsP={line.variant.hgvs_p} />
@@ -336,18 +338,16 @@ export function OccurrencesTab({
         ),
       },
     )
-    if (!compact) {
-      cols.push({
-        id: 'variant_type',
-        header: 'Variant Type',
-        accessorFn: (row) => row.lines.map((line) => line.variant.variant_type).join(' '),
-        cell: ({ row }) => (
-          <Lines row={row.original}>
-            {(line) => <EditableVariantTypeCell paperId={paperId} variant={line.variant} />}
-          </Lines>
-        ),
-      })
-    }
+    cols.push({
+      id: 'variant_type',
+      header: 'Variant Type',
+      accessorFn: (row) => row.lines.map((line) => line.variant.variant_type).join(' '),
+      cell: ({ row }) => (
+        <Lines row={row.original}>
+          {(line) => <EditableVariantTypeCell paperId={paperId} variant={line.variant} />}
+        </Lines>
+      ),
+    })
 
     cols.push(
       {
@@ -378,8 +378,6 @@ export function OccurrencesTab({
         ),
       },
     )
-    if (compact) return cols
-
     cols.push({
       id: 'testing_methods',
       header: 'Testing Methods',
@@ -440,7 +438,18 @@ export function OccurrencesTab({
     })
 
     return cols
-  }, [rows, severalFamilies, paperId, expandedCell?.rowId, expandedCell?.occurrenceId, expandedCell?.view, deleteMutation, flags, compact])
+  }, [
+    rows,
+    severalFamilies,
+    paperId,
+    expandedCell?.rowId,
+    expandedCell?.occurrenceId,
+    expandedCell?.view,
+    deleteMutation,
+    flags,
+    setExpandedCell,
+    toggleExpanded,
+  ])
 
   if (rows.length === 0) {
     return (
@@ -452,17 +461,29 @@ export function OccurrencesTab({
 
   return (
     <>
-      {!compact && (
-        <p className="text-sm text-muted-foreground mb-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
           {probandOnly
             ? `${visibleCount} proband occurrence${visibleCount === 1 ? '' : 's'} of ${rows.length}`
             : `${rows.length} total occurrences`}
         </p>
-      )}
+        <Button size="sm" onClick={() => onReviewOpen(true)} className="gap-2">
+          <ListChecks className="h-4 w-4" />
+          Review occurrences ({rows.filter((r) => r.occurrence.reviewed_at).length}/{rows.length})
+        </Button>
+      </div>
+      <OccurrenceReviewDialog
+        paperId={paperId}
+        rows={rows}
+        flags={flags}
+        open={reviewOpen}
+        onOpenChange={onReviewOpen}
+        at={reviewAt}
+        onStep={onReviewStep}
+      />
       <DataTable
         columns={columns}
         data={visibleRows}
-        compact={compact}
         filterPlaceholder="Filter occurrences..."
         toolbar={
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
@@ -489,8 +510,6 @@ export function OccurrencesTab({
             row.lines.find((l) => l.occurrence.id === expandedCell?.occurrenceId) ?? row.lines[0]
           return expandedCell?.view === 'patient' ? (
             <PatientDetailPanel paperId={paperId} patient={line.patient} />
-          ) : expandedCell?.view === 'occurrence' ? (
-            <OccurrenceDetailPanel paperId={paperId} occurrence={line.occurrence} />
           ) : (
             <VariantDetailPanel paperId={paperId} variant={line.variant} />
           )

@@ -22,7 +22,6 @@ import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 import { LoginPage } from './routes/login'
 import { ExtractionPage } from './routes/papers.$paperId.extraction'
-import { ReviewPage } from './routes/papers.$paperId.review'
 import { parseExtractionTab, type ExtractionTab } from './lib/extractionTabs'
 import { SettingsPage } from './routes/settings'
 
@@ -115,6 +114,14 @@ export interface ExtractionSearch {
   /** The open tab. Absent means 'occurrences', the default, which is left
    * out of the URL the same way the index route leaves out its defaults. */
   tab?: ExtractionTab
+  /** The occurrence open on the Occurrences tab: its row's panel in the
+   * table or, with `review`, its step in the occurrence review. In the URL so
+   * a link or a refresh lands on it. */
+  occurrence?: number
+  /** Which of that row's panels is open. Absent means the Individual one. */
+  panel?: 'variant'
+  /** The occurrence review is open. */
+  review?: 'occurrences'
 }
 
 const papersExtractionRoute = new Route({
@@ -125,23 +132,12 @@ const papersExtractionRoute = new Route({
     const parsed: ExtractionSearch = {}
     const tab = parseExtractionTab(search.tab)
     if (tab !== undefined && tab !== 'occurrences') parsed.tab = tab
-    return parsed
-  },
-})
-
-export interface ReviewSearch {
-  /** The open case's key (see ReviewCaseResp.key). Absent means the first
-   * unconfirmed case, which is where a fresh visit should land. */
-  case?: string
-}
-
-const papersReviewRoute = new Route({
-  getParentRoute: () => rootRoute,
-  path: '/papers/$paperId/review',
-  component: ReviewPage,
-  validateSearch: (search: Record<string, unknown>): ReviewSearch => {
-    const parsed: ReviewSearch = {}
-    if (typeof search.case === 'string' && search.case !== '') parsed.case = search.case
+    // The rest belongs to the Occurrences tab and means nothing on another.
+    if (parsed.tab !== undefined) return parsed
+    const occurrence = Number(search.occurrence)
+    if (Number.isInteger(occurrence) && occurrence > 0) parsed.occurrence = occurrence
+    if (parsed.occurrence !== undefined && search.panel === 'variant') parsed.panel = 'variant'
+    if (search.review === 'occurrences') parsed.review = 'occurrences'
     return parsed
   },
 })
@@ -151,7 +147,6 @@ export const routeTree = rootRoute.addChildren([
   loginRoute,
   settingsRoute,
   papersExtractionRoute,
-  papersReviewRoute,
 ])
 
-export { papersExtractionRoute, papersReviewRoute }
+export { papersExtractionRoute }

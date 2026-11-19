@@ -120,7 +120,7 @@ prefix and lands on the root redirect:
 
 ### Known deployment caveats
 
-- **The pdf.js worker is loaded from a CDN.** `PaperMetadataTab.tsx` sets
+- **The pdf.js worker is loaded from a CDN.** `PdfViewer.tsx` sets
   `pdfjs.GlobalWorkerOptions.workerSrc` to `//cdnjs.cloudflare.com/ajax/libs/pdf.js/<version>/...`,
   so PDF rendering depends on cdnjs being reachable from the browser. Serving the worker
   from our own bundle would remove that third-party runtime dependency.
@@ -146,7 +146,7 @@ prefix and lands on the root redirect:
   `::highlight()` rules from the production build, and react-pdf's `TextLayer` tears
   itself down on every render unless its callbacks are memoized).
 - **The PDF viewer is one continuous scroll, drawn lazily.** `PdfViewer.tsx` (every PDF
-  view: the paper page panel, Review Mode, the HPO review) works in four layers:
+  view: the paper page panel and the occurrence and HPO reviews) works in four layers:
   1. *Layout.* On load it asks pdf.js for every page's size at scale 1 with the page's
      own `/Rotate` applied (`getViewport({ scale: 1 })`) and lays out one fixed-size
      slot per page (`PageSlot`), so the scroll height is right before anything is drawn.
@@ -205,7 +205,7 @@ declared but not imported anywhere in `src/` yet.
 | `cmdk` | Command-menu / filterable list primitive | Backs `ui/command.tsx`, which `ui/combobox.tsx` builds on (e.g. HPO term pickers). |
 | `embla-carousel-react` | Carousel engine | Backs `ui/carousel.tsx`, pulled in with the shadcn carousel component. |
 | `react-resizable-panels` | Draggable split panes | Backs `ui/resizable.tsx`, used for the paper detail split view. |
-| `react-pdf` | React wrapper around PDF.js | The only PDF renderer: `PaperMetadataTab.tsx` and `PdfViewer.tsx` (the evidence "View in PDF" sheet). It brings its own `pdfjs-dist`; nothing else may depend on that package — see the caveat below. |
+| `react-pdf` | React wrapper around PDF.js | The only PDF renderer, through `PdfViewer.tsx`, the one PDF view (the evidence sheet, the reviews, Paper Metadata). It brings its own `pdfjs-dist`; nothing else may depend on that package — see the caveat below. |
 | `zustand` | Minimal global state store | `stores/ui.ts`, for UI state that shouldn't live in the URL or the query cache. |
 | `react-markdown` | Renders a markdown string as React elements | `PedigreeTab.tsx`, for the vision model's freeform pedigree description (headings, lists, bold); `DocumentEvidenceViewer.tsx`, the evidence sheet's "Markdown" tab. The document viewer's custom `p`/`tr`/`table` components read each block's `[anchor-id]` tag off the hast `node` react-markdown hands them, so no remark/rehype plugin (and no `unist-util-visit` dependency) is needed. |
 | `remark-gfm` | GitHub-flavored markdown extensions for `react-markdown` | Tables/strikethrough/task-lists in the same pedigree description and markdown evidence tabs (the anchored document's tables are GFM pipe tables). |

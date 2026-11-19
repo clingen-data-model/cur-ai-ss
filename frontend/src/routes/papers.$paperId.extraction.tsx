@@ -6,14 +6,14 @@
  * linking never connected, and the described figures (pedigree and
  * genotyping images).
  */
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate, useParams, useSearch, Link } from '@tanstack/react-router'
-import { ClipboardCheck, FileText } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
 import { usePaperFlags } from '@/hooks/usePaperFlags'
 import { FlagsTab } from '@/components/FlagsTab'
 import { OccurrencesTab } from '@/components/OccurrencesTab'
-import type { FlagTarget } from '@/lib/flagTarget'
+import type { FlagTarget, OccurrenceView } from '@/lib/flagTarget'
 import { DEFAULT_EXTRACTION_TAB, isExtractionTab, type ExtractionTab } from '@/lib/extractionTabs'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -66,7 +66,31 @@ export function ExtractionPage() {
     if (!isExtractionTab(next)) return
     void navigate({ search: next === DEFAULT_EXTRACTION_TAB ? {} : { tab: next }, replace: true })
   }
-  const [focus, setFocus] = useState<FlagTarget | null>(null)
+  // The open occurrence and the open review are in the URL too, so a link
+  // or a refresh lands on them (ExtractionSearch in routeTree.ts).
+  const openOccurrence = useCallback(
+    (occurrenceId: number | null, view: OccurrenceView = 'patient') =>
+      void navigate({
+        search:
+          occurrenceId === null
+            ? {}
+            : { occurrence: occurrenceId, ...(view === 'variant' ? { panel: 'variant' as const } : {}) },
+        replace: true,
+      }),
+    [navigate],
+  )
+  const setReview = (open: boolean) =>
+    void navigate({ search: open ? { review: 'occurrences' } : {}, replace: true })
+  const showReviewStep = (occurrenceId: number) =>
+    void navigate({ search: { review: 'occurrences', occurrence: occurrenceId }, replace: true })
+  // A row to reveal: turned to, scrolled to and shown even when the proband
+  // filter hides it. A chip asks for one, and so does a link arriving with an
+  // occurrence in it; a row the reader opens by hand is already in view.
+  const [focus, setFocus] = useState<FlagTarget | null>(() =>
+    search.occurrence !== undefined && search.review === undefined
+      ? { kind: 'occurrence', id: search.occurrence, view: search.panel === 'variant' ? 'variant' : 'patient' }
+      : null,
+  )
   /** A flag's About chip: switch to the tab that shows the row, turn to its
    * page and open it. A patient or variant opens inside its first occurrence
    * (on its own panel) or, when it has none, in its Unassociated tab. A
@@ -76,15 +100,19 @@ export function ExtractionPage() {
       setFocus(to)
       setTab(next)
     }
+    const goToOccurrence = (occurrenceId: number, view: OccurrenceView) => {
+      setFocus({ kind: 'occurrence', id: occurrenceId, view })
+      openOccurrence(occurrenceId, view)
+    }
     if (target.kind === 'occurrence') {
-      go('occurrences', target)
+      goToOccurrence(target.id, target.view ?? 'patient')
     } else if (target.kind === 'patient') {
       const row = rows.find((r) => r.patient.id === target.id)
-      if (row) go('occurrences', { kind: 'occurrence', id: row.occurrence.id, view: 'patient' })
+      if (row) goToOccurrence(row.occurrence.id, 'patient')
       else go('unassociated-patients', target)
     } else if (target.kind === 'variant') {
       const row = rows.find((r) => r.variant.id === target.id)
-      if (row) go('occurrences', { kind: 'occurrence', id: row.occurrence.id, view: 'variant' })
+      if (row) goToOccurrence(row.occurrence.id, 'variant')
       else go('unassociated-variants', target)
     } else {
       go('families', target)
@@ -170,21 +198,6 @@ export function ExtractionPage() {
               </div>
             )}
             {paper && <RestoreSnapshotButton paper={paper} />}
-            <Hint label="Walk the paper's families beside the PDF, confirming each family's individual-variant occurrences">
-              <Button
-                variant="outline"
-                size="sm"
-                render={<Link to="/papers/$paperId/review" params={{ paperId: String(paperId) }} />}
-              >
-                <ClipboardCheck className="h-4 w-4 mr-2" />
-                Review Mode
-                {paper?.signoff && (paper.signoff.total ?? 0) > 0 && (
-                  <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
-                    {paper.signoff.confirmed ?? 0}/{paper.signoff.total ?? 0}
-                  </span>
-                )}
-              </Button>
-            </Hint>
             <Hint label="Export curation summary as PPTX">
               <Button variant="outline" size="sm" onClick={handleExportPptx} disabled={!paper || isExporting}>
                 <FileText className="h-4 w-4 mr-2" />
@@ -243,6 +256,16 @@ export function ExtractionPage() {
                 rows={rows}
                 flags={flags}
                 focus={focus?.kind === 'occurrence' ? focus : null}
+                opened={
+                  search.occurrence !== undefined && search.review === undefined
+                    ? { occurrenceId: search.occurrence, view: search.panel === 'variant' ? 'variant' : 'patient' }
+                    : null
+                }
+                onOpen={openOccurrence}
+                reviewOpen={search.review === 'occurrences'}
+                reviewAt={search.review === 'occurrences' ? search.occurrence : undefined}
+                onReviewOpen={setReview}
+                onReviewStep={showReviewStep}
               />
             </PipelineGate>
           </TabsContent>

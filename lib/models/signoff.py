@@ -3,8 +3,9 @@
 A row is either agent-extracted, human-edited (an edits-table row), or
 neither; none of those says "a curator looked at this and it is right". The
 stamp here does: ``reviewed_at`` and ``reviewed_by_user_id`` on
-patient-variant occurrences, written by the review walk one family at a
-time (lib/misc/review_cases.py). The occurrence is the unit because it is
+patient-variant occurrences, written by the occurrence review one
+occurrence (or compound-het pair) at a time (OccurrenceReviewDialog.tsx),
+and on phenotypes by the HPO review. The occurrence is the unit because it is
 what curation is checking -- who carries which variant, how -- and its row
 is the patient's and the variant's meeting point; stamping those two as
 well (the first design) asked for three confirmations of one fact. The
@@ -13,8 +14,7 @@ paper's review status follows it (``sync_review_status``): the first stamp
 puts an unassigned paper in progress under the curator who stamped, the
 last completes it, and taking a stamp back from a completed paper puts it
 in progress again. Open flags do not hold completion back: they are advice
-for the curator, who can leave them; the walk's trailing steps for flags
-and unlinked variants are optional for the same reason.
+for the curator, who can leave them.
 
 A stamp is cleared only by an agent writing the occurrence again in place
 (``clear_signoff``, called from compound-het pairing and MONDO linking on an
