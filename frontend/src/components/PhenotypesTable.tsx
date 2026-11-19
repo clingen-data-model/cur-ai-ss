@@ -2,7 +2,7 @@
  * the accordion this replaced, so every concept, its HPO match, and the
  * match's id are all visible/scannable at once instead of one at a time
  * behind a click. */
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { toast } from 'sonner'
@@ -22,7 +22,8 @@ import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/Hint'
-import { Copy, Download } from 'lucide-react'
+import { Check, Copy, Download, ListChecks } from 'lucide-react'
+import { HpoReviewDialog } from '@/components/HpoReviewDialog'
 import { apiErrorMessage } from '@/lib/apiError'
 
 const STALE_TIME = 5 * 60 * 1000
@@ -67,6 +68,7 @@ export function PhenotypesTable({
 }) {
   const queryClient = useQueryClient()
   const flags = usePaperFlags(paperId)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const phenotypesQuery = useQuery({
     queryKey: ['phenotypes', paperId, patientId],
     queryFn: () =>
@@ -141,6 +143,13 @@ export function PhenotypesTable({
           const phenotype = row.original
           return (
             <div className="flex items-center gap-1.5 flex-wrap">
+              {phenotype.reviewed_at && (
+                <Hint
+                  label={`Accepted${phenotype.reviewed_by ? ` by ${phenotype.reviewed_by.first_name} ${phenotype.reviewed_by.last_name}` : ''}`}
+                >
+                  <Check className="size-3.5 shrink-0 text-emerald-600" />
+                </Hint>
+              )}
               <span>{phenotype.concept}</span>
               {phenotype.negated && (
                 <Badge variant="outline" className="text-[10px]">
@@ -291,6 +300,11 @@ export function PhenotypesTable({
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Phenotypes</h4>
         <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setReviewOpen(true)} className="gap-2">
+            <ListChecks className="h-4 w-4" />
+            Review HPO terms ({phenotypesQuery.data.filter((p) => p.reviewed_at).length}/
+            {phenotypesQuery.data.length})
+          </Button>
           <ScopedRerunButton
             paperId={paperId}
             taskType="Phenotype Extraction"
@@ -310,6 +324,13 @@ export function PhenotypesTable({
         data={phenotypesQuery.data}
         filterPlaceholder="Filter phenotypes..."
         getRowId={(row) => String(row.id)}
+      />
+      <HpoReviewDialog
+        paperId={paperId}
+        patientId={patientId}
+        phenotypes={phenotypesQuery.data}
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
       />
     </div>
   )

@@ -3269,6 +3269,100 @@ def test_relink_phenotype_hpo(client, db_session, seeded_paper):
     assert resp.status_code == 404
 
 
+def _stampable_phenotype(db_session, seeded_paper, patient, concept='Seizures'):
+    phenotype = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient.id,
+        concept=concept,
+        concept_evidence=dict(value=concept, reasoning='test', quote='test'),
+    )
+    db_session.add(phenotype)
+    db_session.commit()
+    return phenotype
+
+
+def test_phenotype_signoff_stamps_and_takes_back(client, db_session, seeded_paper):
+    patient = _seed_patient(db_session, seeded_paper, 'Signoff Patient')
+    first = _stampable_phenotype(db_session, seeded_paper, patient, 'Seizures')
+    second = _stampable_phenotype(db_session, seeded_paper, patient, 'Ataxia')
+    url = f'/papers/{seeded_paper.id}/phenotypes/signoff'
+
+    resp = client.post(url, json={'phenotype_ids': [first.id]})
+    assert resp.status_code == 200
+    [body] = resp.json()
+    assert body['id'] == first.id
+    assert body['reviewed_at'] is not None
+    assert body['reviewed_by']['email'] == 'tester@example.com'
+
+    listed = client.get(
+        f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes'
+    ).json()
+    assert {p['id']: p['reviewed_at'] is not None for p in listed} == {
+        first.id: True,
+        second.id: False,
+    }
+
+    resp = client.post(url, json={'phenotype_ids': [first.id], 'reviewed': False})
+    assert resp.status_code == 200
+    assert resp.json()[0]['reviewed_at'] is None
+    assert resp.json()[0]['reviewed_by'] is None
+
+
+def test_phenotype_signoff_refuses_unknown_ids_and_stamps_nothing(
+    client, db_session, seeded_paper
+):
+    patient = _seed_patient(db_session, seeded_paper, 'Signoff Refusal Patient')
+    phenotype = _stampable_phenotype(db_session, seeded_paper, patient)
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/phenotypes/signoff',
+        json={'phenotype_ids': [phenotype.id, 999999]},
+    )
+    assert resp.status_code == 404
+    db_session.refresh(phenotype)
+    assert phenotype.reviewed_at is None
+
+
+def test_relinking_clears_the_phenotype_stamp(client, db_session, seeded_paper):
+    """The stamp accepted the old term; the new one has not been reviewed."""
+    patient = _seed_patient(db_session, seeded_paper, 'Relink Stamp Patient')
+    phenotype = _stampable_phenotype(db_session, seeded_paper, patient)
+    client.post(
+        f'/papers/{seeded_paper.id}/phenotypes/signoff',
+        json={'phenotype_ids': [phenotype.id]},
+    )
+    ontology = _fake_ontology({'HP:0001250': 'Seizure'})
+
+    with patch('lib.api.phenotype_edits.get_ontology', return_value=ontology):
+        resp = client.patch(
+            f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
+            json={'hpo_id': 'HP:0001250'},
+        )
+    assert resp.status_code == 200
+    assert resp.json()['reviewed_at'] is None
+
+
+def test_opening_the_hpo_review_snapshots_the_paper(client, db_session, seeded_paper):
+    """A rejection in the review deletes the phenotype; this snapshot is the
+    undo."""
+    patient = _seed_patient(db_session, seeded_paper, 'II-1')
+
+    with patch('lib.api.app.write_snapshot_safe') as snapshot:
+        resp = client.post(
+            f'/papers/{seeded_paper.id}/individuals/{patient.id}/phenotypes/review'
+        )
+        assert resp.status_code == 204
+        missing = client.post(
+            f'/papers/{seeded_paper.id}/individuals/999999/phenotypes/review'
+        )
+        assert missing.status_code == 404
+
+    snapshot.assert_called_once()
+    description = snapshot.call_args.kwargs['description']
+    assert description.startswith('Before HPO review: ')
+    assert description.endswith('II-1')
+
+
 def test_create_phenotype_records_edit_history(client, db_session, seeded_paper):
     patient = _seed_patient(db_session, seeded_paper, 'Edit History Patient')
 

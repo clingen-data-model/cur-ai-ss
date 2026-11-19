@@ -91,6 +91,7 @@ from lib.models.phenotype import (
     PhenotypeDB,
     PhenotypeExtractionOutput,
     PhenotypeResp,
+    PhenotypeSignoffRequest,
 )
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,

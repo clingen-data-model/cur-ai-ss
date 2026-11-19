@@ -17,7 +17,7 @@
  * row's label is a click target too (EditableField's FieldRow reads
  * `inline` off the context), so one click narrows the highlight to a field.
  */
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 import {
@@ -65,6 +65,14 @@ interface PdfHighlightContextValue {
   /** The PDF page an anchor is on, for the evidence chips (undefined for a
    * supplement anchor, an unparsed paper, or while the map is loading). */
   anchorPage: (anchor: string) => number | undefined
+  /** Where an anchor sits in the paper's reading order (a row at its
+   * table's place), for listing things in paper order; undefined for a
+   * supplement anchor or an unparsed paper. */
+  anchorPosition: (anchor: string) => number | undefined
+  /** The paper's PDF, for a view that renders EvidencePanes itself (the
+   * HPO review modal). */
+  pdfUrl: string | undefined
+  filename?: string | null
 }
 
 const PdfHighlightContext = createContext<PdfHighlightContextValue | null>(null)
@@ -211,6 +219,15 @@ export function PdfHighlightProvider({
   })
   // A row is on its table's page (the map lists items, not rows).
   const anchorPage = (anchor: string) => pagesQuery.data?.[tableOfRow(anchor)]
+  // The map's keys come in anchors.json's order, which is the parser's walk
+  // of the document: reading order, tables and figures where they sit among
+  // the paragraphs. (JSON objects keep key order, and no anchor id looks
+  // like an integer, the one case JavaScript reorders.)
+  const positions = useMemo(
+    () => new Map(Object.keys(pagesQuery.data ?? {}).map((anchor, i) => [anchor, i])),
+    [pagesQuery.data],
+  )
+  const anchorPosition = (anchor: string) => positions.get(tableOfRow(anchor))
 
   const openHighlight = (next: HighlightTarget) => {
     if (inline) inline(next)
@@ -222,7 +239,9 @@ export function PdfHighlightProvider({
   }
 
   return (
-    <PdfHighlightContext.Provider value={{ openHighlight, anchorPage, inline: inline !== undefined }}>
+    <PdfHighlightContext.Provider
+      value={{ openHighlight, anchorPage, anchorPosition, inline: inline !== undefined, pdfUrl, filename }}
+    >
       {children}
       {!inline && (
         <Sheet open={target !== null} onOpenChange={(open) => !open && close()}>

@@ -161,6 +161,7 @@ from lib.models import (
     PhenotypeCreateRequest,
     PhenotypeDB,
     PhenotypeResp,
+    PhenotypeSignoffRequest,
     SegregationAnalysisComputedDB,
     SegregationAnalysisResp,
     SegregationEvidenceDB,
@@ -2329,6 +2330,7 @@ def _phenotype_to_resp(session: Session, row: PhenotypeDB) -> PhenotypeResp:
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
         hpo=hpo,
+        **signoff_fields(row),
     )
     _attach_edit_history(resp, edits, row)
     return resp
@@ -3217,6 +3219,77 @@ def delete_phenotype(
         )
     _touch_paper(session, paper_id, current_user)
     session.commit()
+
+
+@app.post('/papers/{paper_id}/phenotypes/signoff', response_model=list[PhenotypeResp])
+def signoff_phenotypes(
+    paper_id: int,
+    request: PhenotypeSignoffRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Stamp (or, with ``reviewed`` false, unstamp) the listed phenotypes as
+    reviewed by the current user: the HPO review's accept. Unlike the
+    occurrence sign-off it leaves the paper's review status alone. An id that
+    is not a phenotype of this paper is a 404 for the whole request: nothing
+    is stamped. Returns the phenotypes as they now are."""
+    if session.get(PaperDB, paper_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    ids = set(request.phenotype_ids)
+    rows = (
+        session.query(PhenotypeDB)
+        .filter(PhenotypeDB.paper_id == paper_id, PhenotypeDB.id.in_(ids))
+        .all()
+        if ids
+        else []
+    )
+    missing = ids - {row.id for row in rows}
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Phenotypes not found on this paper: {sorted(missing)}',
+        )
+    for row in rows:
+        if request.reviewed:
+            stamp(row, current_user)
+        else:
+            unstamp(row)
+    _touch_paper(session, paper_id, current_user)
+    session.flush()
+    return [_phenotype_to_resp(session, row) for row in rows]
+
+
+@app.post(
+    '/papers/{paper_id}/individuals/{patient_id}/phenotypes/review',
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def start_hpo_review(
+    paper_id: int,
+    patient_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> None:
+    """Snapshot the paper as the HPO review of one individual opens. A
+    rejection in the review deletes the phenotype, and this snapshot is how
+    it is undone (restoring it puts the individual's phenotypes back as they
+    were). Snapshots dedupe on the paper's state, so reopening the review on
+    an unchanged paper writes nothing new."""
+    patient = (
+        session.query(PatientDB)
+        .options(selectinload(PatientDB.family))
+        .filter(PatientDB.id == patient_id, PatientDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if patient is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Individual not found'
+        )
+    label = patient.identifier
+    if patient.family is not None:
+        label = f'{patient.family.identifier} {label}'
+    write_snapshot_safe(session, paper_id, description=f'Before HPO review: {label}')
 
 
 @app.patch(

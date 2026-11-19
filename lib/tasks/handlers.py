@@ -187,7 +187,7 @@ from lib.models.patient import (
 )
 from lib.models.patient_variant_occurrences import IndividualVariantOccurrenceOutput
 from lib.models.phenotype import HPOTerm
-from lib.models.signoff import clear_signoff
+from lib.models.signoff import clear_signoff, unstamp
 from lib.models.variant import (
     HarmonizedVariant,
     Variant,
@@ -2187,6 +2187,10 @@ async def handle_hpo_linking(task_id: int) -> None:
         # no edit history of its own, correctly reporting as agent-derived.
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
         session.add(hpo_to_db(phenotype_id, hpo_result))
+        # A curator's accept was of the old link (lib/models/phenotype.py).
+        phenotype_row = session.get(PhenotypeDB, phenotype_id)
+        if phenotype_row is not None:
+            unstamp(phenotype_row)
         replace_flags(
             session,
             paper_id=task.paper_id,
