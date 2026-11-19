@@ -1,6 +1,7 @@
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, joinedload
 
+from lib.agents.variant_harmonization_agent import same_protein_change
 from lib.misc.curation.models import CurationSummaryRow, SectionContent
 from lib.misc.pdf.paths import document_image_path
 from lib.models.family import FamilyDB
@@ -23,6 +24,67 @@ from lib.models.variant import (
 # Eight decimal places, the count the UI shows (formatAf in
 # frontend/src/lib/alleleFrequency.ts).
 AF_DECIMAL_PLACES = 8
+
+
+def _change(hgvs: str) -> str:
+    """An HGVS description without its reference sequence: "NM_004341.5:c.98T>G"
+    is "c.98T>G"."""
+    return hgvs.split(':', 1)[-1].strip()
+
+
+def _same_protein(paper: str, harmonized: str) -> bool:
+    """One protein change written either way ("L33R" is "p.(Leu33Arg)"); a form
+    the residue parser does not read, such as "p.?", only when written alike."""
+
+    def bare(p: str) -> str:
+        return _change(p).removeprefix('p.').strip('()')
+
+    if bare(paper) == bare(harmonized):
+        return True
+    return same_protein_change(paper, harmonized)
+
+
+def variant_heading(variant: VariantDB) -> tuple[str, str | None]:
+    """The Variant Info title, and the paper's own nomenclature where it says
+    something the title does not.
+
+    The title is the harmonized coding change with the protein change after it,
+    "NM_004341.5:c.98T>G (p.Leu33Arg)". The paper's c. and p. are given beside
+    it only when they differ, so a variant is named once on the slide unless
+    the paper wrote it otherwise (a typo, a legacy numbering, a change
+    harmonization moved), which is when a curator needs to see both. A
+    variant harmonization found nothing for is titled with the paper's own.
+    """
+    hv = variant.harmonized_variant
+    harmonized = hv and (
+        hv.hgvs_c or hv.hgvs_g or hv.gnomad_style_coordinates or hv.rsid
+    )
+    if not harmonized:
+        if not variant.hgvs_c:
+            # The paper's wording of the variant, protein change and all.
+            return get_variant_description(
+                variant.id, None, variant.variant_evidence
+            ), None
+        title = variant.hgvs_c
+        if variant.hgvs_p:
+            title = f'{title} ({_change(variant.hgvs_p)})'
+        return title, None
+
+    assert hv is not None
+    title = harmonized
+    reported: list[str] = []
+    if variant.hgvs_c and _change(variant.hgvs_c) != _change(hv.hgvs_c or ''):
+        reported.append(variant.hgvs_c)
+    title_p = hv.hgvs_p
+    if variant.hgvs_p:
+        if title_p is None:
+            # Nothing harmonized to compare with: the paper's is the title's.
+            title_p = variant.hgvs_p
+        elif not _same_protein(variant.hgvs_p, title_p):
+            reported.append(variant.hgvs_p)
+    if title_p:
+        title = f'{title} ({_change(title_p)})'
+    return title, ' '.join(reported) or None
 
 
 def format_af(af: float) -> str:
@@ -316,14 +378,10 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                 if link.inheritance and link.inheritance != 'Unknown':
                     variant_parts.append(f'Inheritance: {link.inheritance}')
 
-                # 2. HGVS nomenclature
-                hgvs_parts = []
-                if variant.hgvs_c:
-                    hgvs_parts.append(variant.hgvs_c)
-                if variant.hgvs_p:
-                    hgvs_parts.append(variant.hgvs_p)
-                if hgvs_parts:
-                    variant_parts.append(' '.join(hgvs_parts))
+                # 2. The paper's nomenclature, only where it is not the title's
+                variant_title, reported = variant_heading(variant)
+                if reported:
+                    variant_parts.append(f'Reported in paper: {reported}')
 
                 # 3. Exon
                 if variant.annotated_variant and variant.annotated_variant.exon:
@@ -376,12 +434,6 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                         if max_score > 0:
                             variant_parts.append(f'SpliceAI: {max_score:.3f}')
 
-                # Build variant title using human-readable description
-                variant_title = get_variant_description(
-                    variant.id,
-                    variant.harmonized_variant,
-                    variant.variant_evidence,
-                )
                 variant_section = [
                     SectionContent(
                         title=variant_title,
