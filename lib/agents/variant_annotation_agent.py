@@ -22,6 +22,20 @@ logger = logging.getLogger(__name__)
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
 VEP_BASE = 'https://rest.ensembl.org'
+# The SpliceAI Lookup's public GRCh38 SpliceAI API, as documented in the
+# README of github.com/broadinstitute/SpliceAI-lookup (it replaced
+# spliceailookup-api.broadinstitute.org, which no longer accepts connections).
+# It runs the model when no cached score exists, so it has scores for variants
+# Ensembl's precomputed set lacks: IFT74 c.789+2T>G (paper 90) got none from
+# VEP and DS_DL 0.998 from here on 2026-11-16. The API allows only several
+# requests per user per minute; past that it answers with a rate-limit error,
+# which leaves spliceai empty. For volume, the README's docker image
+# (weisburd/spliceai-38) serves the same API without a limit.
+SPLICEAI_LOOKUP_BASE = 'https://spliceai-38-xwkwwwxdwq-uc.a.run.app'
+# 50 bp either side is the window of the precomputed scores VEP returns;
+# with it the Lookup gave the same scores and positions as VEP for
+# BRCA2 c.68-2A>G, so a score from either source means the same thing.
+SPLICEAI_LOOKUP_DISTANCE = 50
 
 
 def _get_session_with_retries() -> requests.Session:
@@ -177,8 +191,30 @@ def vep_lookup(
     hgvs_g: str | None,
     hgvs_c: str | None,
     gene_symbol: str,
+    gnomad_style_coordinates: str | None = None,
 ) -> AnnotatedVariant:
-    """Query Ensembl VEP for a given variant identifier and extract key annotations from the most relevant transcript."""
+    """Query Ensembl VEP for a given variant identifier and extract key
+    annotations from the most relevant transcript.
+
+    When VEP answers but carries no SpliceAI score, the score is asked of the
+    SpliceAI Lookup (given coordinates). Only then: a VEP failure leaves the
+    variant without SpliceAI rather than sending it to the Lookup, whose
+    public API is rate-limited."""
+    result_variant = _vep_annotations(rsid, hgvs_g, hgvs_c, gene_symbol)
+    if result_variant is None:
+        return AnnotatedVariant(rsid=rsid)
+    if result_variant.spliceai is None and gnomad_style_coordinates:
+        result_variant.spliceai = spliceai_lookup(gnomad_style_coordinates, gene_symbol)
+    return result_variant
+
+
+def _vep_annotations(
+    rsid: str | None,
+    hgvs_g: str | None,
+    hgvs_c: str | None,
+    gene_symbol: str,
+) -> AnnotatedVariant | None:
+    """VEP's annotations of the variant, or None when VEP did not answer."""
     if hgvs_g is not None:
         ext = f'/vep/human/hgvs/{hgvs_g}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
         variant_id = hgvs_g
@@ -203,10 +239,10 @@ def vep_lookup(
         data = r.json()
     except requests.exceptions.RequestException as e:
         logger.error(f'VEP lookup failed for {variant_id}: {e}')
-        return AnnotatedVariant(rsid=rsid)
+        return None
     except ValueError as e:
         logger.error(f'VEP JSON parse failed for {variant_id}: {e}')
-        return AnnotatedVariant(rsid=rsid)
+        return None
 
     result_variant = AnnotatedVariant(rsid=rsid)
 
@@ -253,6 +289,50 @@ def vep_lookup(
         result_variant.spliceai = SpliceAI.from_raw(tx['spliceai'])
 
     return result_variant
+
+
+def spliceai_lookup(gnomad_style_coordinates: str, gene_symbol: str) -> SpliceAI | None:
+    """SpliceAI scores from the SpliceAI Lookup, for a variant VEP returned
+    none for. Prefers the curated gene's MANE Select transcript, as
+    vep_lookup does; None when the service fails or has no scores."""
+    params: dict[str, str | int] = {
+        'hg': 38,
+        'variant': f'chr{gnomad_style_coordinates.removeprefix("chr")}',
+        'distance': SPLICEAI_LOOKUP_DISTANCE,
+        'mask': 1,
+        'bc': 'basic',
+    }
+    session = _get_session_with_retries()
+    try:
+        logger.info(f'SpliceAI Lookup request: {gnomad_style_coordinates}')
+        r = session.get(f'{SPLICEAI_LOOKUP_BASE}/spliceai/', params=params, timeout=60)
+        r.raise_for_status()
+        data = r.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f'SpliceAI Lookup failed for {gnomad_style_coordinates}: {e}')
+        return None
+    except ValueError as e:
+        logger.error(
+            f'SpliceAI Lookup JSON parse failed for {gnomad_style_coordinates}: {e}'
+        )
+        return None
+
+    if data.get('error'):
+        logger.error(
+            f'SpliceAI Lookup error for {gnomad_style_coordinates}: {data["error"]}'
+        )
+        return None
+
+    scores = data.get('scores') or []
+    scores = [s for s in scores if s.get('g_name') == gene_symbol] or scores
+    if not scores:
+        return None
+    # t_priority 'MS' is MANE Select; otherwise take the highest-scoring
+    # transcript, since every transcript is scored at the same position.
+    mane = [s for s in scores if s.get('t_priority') == 'MS']
+    return max(
+        (SpliceAI.from_raw(s) for s in mane or scores), key=lambda sa: sa.max_score
+    )
 
 
 def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
@@ -394,7 +474,14 @@ def enrich_variant(hv: HarmonizedVariant, gene_symbol: str) -> AnnotatedVariant:
 
         if hv.rsid or hv.hgvs_g or hv.hgvs_c:
             futures.append(
-                executor.submit(vep_lookup, hv.rsid, hv.hgvs_g, hv.hgvs_c, gene_symbol)
+                executor.submit(
+                    vep_lookup,
+                    hv.rsid,
+                    hv.hgvs_g,
+                    hv.hgvs_c,
+                    gene_symbol,
+                    hv.gnomad_style_coordinates,
+                )
             )
 
         # Collect results as they complete
