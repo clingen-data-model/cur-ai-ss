@@ -1,5 +1,6 @@
-"""clinvar_lookup keeps the variation ID of the record it read the
-classification from, so the UI can link to that record."""
+"""The annotation lookups: clinvar_lookup keeps the variation ID of the record
+it read the classification from, so the UI can link to that record, and
+SpliceAI comes from the SpliceAI Lookup when VEP has none."""
 
 from typing import Any
 
