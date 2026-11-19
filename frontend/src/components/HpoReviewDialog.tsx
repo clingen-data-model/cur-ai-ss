@@ -24,7 +24,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Check, Circle, FileSearch } from 'lucide-react'
+import { ArrowDown, Check, Circle, FileSearch } from 'lucide-react'
 import {
   deletePhenotypePapersPaperIdPhenotypesPhenotypeIdDelete,
   signoffPhenotypesPapersPaperIdPhenotypesSignoffPost,
@@ -85,6 +85,26 @@ function Quotes({ citations }: { citations: Citation[] }) {
   )
 }
 
+function StepLabel({ step, children }: { step: number; children: React.ReactNode }) {
+  return (
+    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <span className="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] text-foreground">
+        {step}
+      </span>
+      {children}
+    </p>
+  )
+}
+
+function Why({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="break-words">{children}</p>
+    </div>
+  )
+}
+
 function TermDetail({
   paperId,
   phenotype,
@@ -109,28 +129,21 @@ function TermDetail({
   const citations = phenotype.concept_evidence.citations ?? []
 
   return (
-    <div className="space-y-4 text-sm">
-      <section className="space-y-2">
+    <div className="space-y-2 text-sm">
+      <section className="space-y-2 rounded-lg border bg-card p-3">
+        <StepLabel step={1}>Phenotype in the paper</StepLabel>
         <div className="flex flex-wrap items-center gap-1.5">
           <h3 className="text-base font-semibold">{phenotype.concept}</h3>
           {phenotype.negated && <Badge variant="outline">Negated</Badge>}
           {phenotype.uncertain && <Badge variant="outline">Uncertain</Badge>}
           {phenotype.family_history && <Badge variant="outline">Family history</Badge>}
-          {phenotype.reviewed_at && (
-            <Badge className="bg-emerald-600 text-white">
-              Accepted{phenotype.reviewed_by ? ` by ${phenotype.reviewed_by.first_name}` : ''}
-            </Badge>
-          )}
         </div>
         {details.length > 0 && (
           <p className="text-xs text-muted-foreground">{details.join(' · ')}</p>
         )}
         <Quotes citations={citations} />
         {phenotype.concept_evidence.reasoning && (
-          <p className="break-words">
-            <span className="font-medium">Reasoning: </span>
-            {phenotype.concept_evidence.reasoning}
-          </p>
+          <Why label="Why this phenotype">{phenotype.concept_evidence.reasoning}</Why>
         )}
         {citations.length > 1 && (
           <Button variant="ghost" size="sm" className="gap-1.5 px-2" onClick={() => openHighlight({ citations })}>
@@ -140,24 +153,14 @@ function TermDetail({
         )}
       </section>
 
-      <section className="space-y-2 border-t pt-3">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">HPO</span>
-          {hpo ? (
-            <>
-              <span>{hpo.name}</span>
-              <a
-                href={`https://hpo.jax.org/app/browse/term/${hpo.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-link hover:underline"
-              >
-                <code className="text-xs">{hpo.id}</code>
-              </a>
-            </>
-          ) : (
-            <span className="text-muted-foreground">No match</span>
-          )}
+      <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+        <ArrowDown className="size-3.5" />
+        linked to
+      </div>
+
+      <section className="space-y-2 rounded-lg border bg-card p-3">
+        <div className="flex items-center justify-between gap-2">
+          <StepLabel step={2}>HPO match</StepLabel>
           <RelinkHpoDialog
             paperId={paperId}
             phenotypeId={phenotype.id}
@@ -168,19 +171,36 @@ function TermDetail({
             onOpenChange={onRelinkOpenChange}
           />
         </div>
-        {phenotype.hpo.reasoning && (
-          <p className="break-words">
-            <span className="font-medium">Link reasoning: </span>
-            {phenotype.hpo.reasoning}
-          </p>
+        {hpo ? (
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h3 className="text-base font-semibold">{hpo.name}</h3>
+            <a
+              href={`https://hpo.jax.org/app/browse/term/${hpo.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-link hover:underline"
+            >
+              <code className="text-xs">{hpo.id}</code>
+            </a>
+          </div>
+        ) : (
+          <p className="text-muted-foreground">No HPO term linked</p>
         )}
+        {phenotype.hpo.reasoning && <Why label="Why this term">{phenotype.hpo.reasoning}</Why>}
         {phenotype.hpo.edited_by_name && (
           <p className="text-xs text-muted-foreground">Linked by {phenotype.hpo.edited_by_name}</p>
         )}
       </section>
 
+      {phenotype.reviewed_at && (
+        <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+          <Check className="size-3.5" />
+          Accepted{phenotype.reviewed_by ? ` by ${phenotype.reviewed_by.first_name}` : ''}
+        </p>
+      )}
+
       {termFlags.length > 0 && (
-        <section className="space-y-2 border-t pt-3">
+        <section className="space-y-2 pt-2">
           {termFlags.map((flag) => (
             <FlagCard key={flag.id} flag={flag} />
           ))}
