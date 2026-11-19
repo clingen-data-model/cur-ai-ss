@@ -4,8 +4,10 @@ classification from, so the UI can link to that record."""
 from typing import Any
 
 import pytest
+import requests
 
 from lib.agents import variant_annotation_agent as agent
+from lib.models.variant import AnnotatedVariant, HarmonizedVariant
 
 
 class _Response:
@@ -101,3 +103,109 @@ def test_only_malformed_ids_means_no_search(monkeypatch):
     result = agent.clinvar_lookup('rs', '_:CA', None, None)
 
     assert result.pathogenicity is None
+
+
+# gnomAD: "Variant not found" is the only answer that leaves the frequency
+# empty; anything else means gnomAD did not answer, and that fails the task.
+
+
+class _GnomadResponse:
+    def __init__(self, payload: Any = None, status: int = 200) -> None:
+        self._payload = payload
+        self.status = status
+
+    def raise_for_status(self) -> None:
+        if self.status >= 400:
+            raise requests.HTTPError(f'{self.status} Client Error')
+
+    def json(self) -> Any:
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
+
+
+def _gnomad_answers(monkeypatch, response: _GnomadResponse) -> None:
+    class _PostSession:
+        def post(self, url: str, **_: Any) -> _GnomadResponse:
+            return response
+
+    monkeypatch.setattr(agent, '_get_session_with_retries', lambda: _PostSession())
+
+
+def test_gnomad_not_found_is_an_empty_frequency(monkeypatch):
+    _gnomad_answers(
+        monkeypatch,
+        _GnomadResponse(
+            {'errors': [{'message': 'Variant not found'}], 'data': {'variant': None}}
+        ),
+    )
+    result = agent.gnomad_lookup('9-27011970-T-G')
+    assert result.gnomad_top_level_af is None
+    assert result.gnomad_an is None
+
+
+def test_gnomad_answer_is_read(monkeypatch):
+    _gnomad_answers(
+        monkeypatch,
+        _GnomadResponse(
+            {
+                'data': {
+                    'variant': {'joint': {'ac': 10, 'an': 1579274, 'populations': []}}
+                }
+            }
+        ),
+    )
+    result = agent.gnomad_lookup('9-27011970-T-G')
+    assert result.gnomad_ac == 10
+    assert result.gnomad_top_level_af == pytest.approx(10 / 1579274)
+
+
+@pytest.mark.parametrize(
+    'response',
+    [
+        # Under load gnomAD has answered ordinary variants with a 400.
+        _GnomadResponse(status=400),
+        _GnomadResponse(status=503),
+        _GnomadResponse({'errors': [{'message': 'Rate limit exceeded'}]}),
+        _GnomadResponse(ValueError('Expecting value')),
+    ],
+    ids=['http-400', 'http-503', 'other-graphql-error', 'unreadable-json'],
+)
+def test_gnomad_failure_raises(monkeypatch, response):
+    _gnomad_answers(monkeypatch, response)
+    with pytest.raises(agent.GnomadLookupError):
+        agent.gnomad_lookup('9-27011970-T-G')
+
+
+def test_gnomad_failure_fails_the_batch(monkeypatch):
+    def fail(_coordinates: str) -> AnnotatedVariant:
+        raise agent.GnomadLookupError('gnomAD lookup failed')
+
+    monkeypatch.setattr(agent, 'gnomad_lookup', fail)
+    monkeypatch.setattr(agent, 'clinvar_lookup', lambda *_: AnnotatedVariant())
+    monkeypatch.setattr(agent, 'vep_lookup', lambda *_: AnnotatedVariant())
+    hv = HarmonizedVariant(
+        gnomad_style_coordinates='9-27011970-T-G', hgvs_c='NM_025103.4:c.789+2T>G'
+    )
+    with pytest.raises(agent.GnomadLookupError):
+        agent.enrich_variants_batch([hv], 'IFT74')
+
+
+def test_other_source_failure_still_soft(monkeypatch):
+    def fail(*_: Any) -> AnnotatedVariant:
+        raise RuntimeError('VEP down')
+
+    monkeypatch.setattr(
+        agent,
+        'gnomad_lookup',
+        lambda c: AnnotatedVariant(
+            gnomad_style_coordinates=c, gnomad_an=2, gnomad_ac=1
+        ),
+    )
+    monkeypatch.setattr(agent, 'clinvar_lookup', lambda *_: AnnotatedVariant())
+    monkeypatch.setattr(agent, 'vep_lookup', fail)
+    hv = HarmonizedVariant(
+        gnomad_style_coordinates='9-27011970-T-G', hgvs_c='NM_025103.4:c.789+2T>G'
+    )
+    [result] = agent.enrich_variants_batch([hv], 'IFT74')
+    assert result.gnomad_an == 2
