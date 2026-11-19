@@ -11,17 +11,22 @@
  * layer (tried first, via the public `customTextRenderer` prop, and dropped:
  * nothing rendered, and text-layer CSS turned out to have a `.textLayer
  * :is(span, br)` rule that yanks any nested span out of the inline flow
- * regardless of depth). It only highlights matches on the page currently on
- * screen (react-pdf renders one page's text layer at a time -- and this
- * component doesn't even use the text layer), so search is two parts: a
- * lightweight per-page text index (built once, on load, from
- * `getTextContent()`) to know which pages contain the query and jump
- * between them, and per-page match rects computed from each matching text
- * item's own position (via `viewport.convertToViewportPoint`, the same
- * scale-1/top-left-origin space `originalWidth`/`originalHeight` are in) to
- * paint once that page is showing.
+ * regardless of depth). Search is two parts: a lightweight per-page text
+ * index (built once, on load, from `getTextContent()`) to know which pages
+ * contain the query and jump between them, and per-page match rects computed
+ * from each matching text item's own position (via
+ * `viewport.convertToViewportPoint`, the same scale-1/top-left-origin space
+ * the page sizes below are in).
+ *
+ * The pages are one continuous scroll (since 2026-11-19; it showed one page
+ * at a time before). Every page's size and own rotation are read when the
+ * document loads, so each page's slot, and the highlights on it, are laid out
+ * at once, but a page's canvas is drawn only while it is near the viewport
+ * (`PageSlot`), which keeps a long supplement at 200% from holding a canvas
+ * per page. The page counter is the page at the top of the view, and the
+ * arrows, ← → and find-in-document scroll to a page rather than swap it.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import {
   ChevronLeft,
@@ -76,6 +81,8 @@ interface PdfTextSource {
     rotate: number
     getTextContent(): Promise<{ items: unknown[] }>
     getViewport(params: { scale: number }): {
+      width: number
+      height: number
       convertToViewportPoint(x: number, y: number): number[]
     }
   }>
@@ -91,18 +98,6 @@ function parseTextItem(item: unknown): { str: string; transform: number[]; width
   if (!Array.isArray(transform) || transform.length !== 6) return null
   if (typeof width !== 'number' || typeof height !== 'number') return null
   return { str, transform, width, height }
-}
-
-function countOccurrences(haystack: string, needle: string): number {
-  if (!needle) return 0
-  let count = 0
-  let position = 0
-  for (;;) {
-    const index = haystack.indexOf(needle, position)
-    if (index === -1) return count
-    count += 1
-    position = index + needle.length
-  }
 }
 
 /** A text item from `getTextContent()` is often a whole line (PDF producers
@@ -181,6 +176,80 @@ function writeTurns(url: string, turns: Record<number, number>): void {
   }
 }
 
+/** A page's size at scale 1 with its own /Rotate applied (the frame the
+ * backend's boxes and the text index are in), and that rotation, which
+ * react-pdf's `rotate` must be given whole. */
+interface PageMeta {
+  width: number
+  height: number
+  rotate: number
+}
+
+/** How far outside the view a page's canvas is still drawn, so scrolling
+ * meets pages already painted. */
+const RENDER_MARGIN = '150% 0px'
+const PAGE_GAP_PX = 16
+
+/** One page's place in the scroll: a box of the page's turned size, holding
+ * the canvas while it is near the view and the highlights always (they are
+ * positioned in percentages, so they need no canvas to scroll to). */
+function PageSlot({
+  pageNumber,
+  meta,
+  turn,
+  scale,
+  root,
+  slotRef,
+  children,
+}: {
+  pageNumber: number
+  meta: PageMeta
+  turn: number
+  scale: number
+  root: HTMLElement | null
+  slotRef: (element: HTMLDivElement | null) => void
+  children: React.ReactNode
+}) {
+  const [near, setNear] = useState(false)
+  const elementRef = useRef<HTMLDivElement | null>(null)
+  const frame = turn % 180 ? { width: meta.height, height: meta.width } : meta
+
+  useEffect(() => {
+    const element = elementRef.current
+    if (!element || !root) return
+    const observer = new IntersectionObserver(([entry]) => setNear(entry.isIntersecting), {
+      root,
+      rootMargin: RENDER_MARGIN,
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [root])
+
+  return (
+    <div
+      ref={(element) => {
+        elementRef.current = element
+        slotRef(element)
+      }}
+      data-page={pageNumber}
+      className="relative bg-white shadow-sm"
+      style={{ width: frame.width * scale, height: frame.height * scale }}
+    >
+      {near && (
+        <Page
+          pageNumber={pageNumber}
+          scale={scale}
+          rotate={(meta.rotate + turn) % 360}
+          renderTextLayer={false}
+          renderAnnotationLayer={false}
+          loading={null}
+        />
+      )}
+      {children}
+    </div>
+  )
+}
+
 interface PdfViewerProps {
   url: string
   filename?: string | null
@@ -191,51 +260,76 @@ interface PdfViewerProps {
 export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProps) {
   const firstHighlightRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null)
+  const slots = useRef(new Map<number, HTMLDivElement>())
 
   const [numPages, setNumPages] = useState<number | null>(null)
+  // The page at the top of the view, read from the scroll position.
   const [pageNumber, setPageNumber] = useState(1)
   const [zoom, setZoom] = useState(100)
   const [loadError, setLoadError] = useState<string | null>(null)
-  // originalWidth/originalHeight are the unscaled (scale=1) page dimensions
-  // -- the same coordinate space GROBID reports annotations in -- so overlay
-  // percentages stay correct at any zoom.
-  const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null)
+  const [pageMeta, setPageMeta] = useState<PageMeta[] | null>(null)
   // One entry per page, 0-indexed by page number - 1. Built once when the
   // document loads; used to find which pages match a query and to position
-  // the highlight rects on whichever page is showing.
+  // the highlight rects on them.
   const [pageItems, setPageItems] = useState<PageTextItem[][] | null>(null)
   const [query, setQuery] = useState('')
   // The curator's quarter turns per page, on top of the page's own /Rotate.
   // A landscape table drawn sideways on a portrait page with no /Rotate (60
   // of dev-caa's 1396 pages on 2026-11-04) reads sideways until turned, and
-  // no viewer can tell from the file. The page's own rotation is read up
-  // front, since react-pdf's `rotate` is the whole rotation, not an extra.
+  // no viewer can tell from the file.
   const [turns, setTurns] = useState<Record<number, number>>(() => readTurns(url))
-  const [baseRotation, setBaseRotation] = useState<number[] | null>(null)
   useEffect(() => writeTurns(url, turns), [url, turns])
 
-  // GROBID numbers the pages it found the evidence on; open on the first.
-  const targetPage = useMemo(
-    () => (annotations.length > 0 ? Math.min(...annotations.map((a) => a.page)) : null),
-    [annotations],
+  const scale = zoom / 100
+
+  /** Scroll the view so `element` sits at the top (a page) or the middle (a
+   * highlight). Done on the scroller itself, not with scrollIntoView, which
+   * would also scroll the page or dialog around the viewer. */
+  const scrollTo = useCallback(
+    (element: HTMLElement, block: 'start' | 'center') => {
+      if (!scroller) return
+      const view = scroller.getBoundingClientRect()
+      const box = element.getBoundingClientRect()
+      const top = box.top - view.top + scroller.scrollTop
+      const left = box.left - view.left + scroller.scrollLeft
+      scroller.scrollTo({
+        top: block === 'start' ? top - PAGE_GAP_PX : top - (view.height - box.height) / 2,
+        left: block === 'start' ? scroller.scrollLeft : left - (view.width - box.width) / 2,
+      })
+    },
+    [scroller],
   )
 
-  // Also re-jumps if the curator picks a different quote while the sheet
-  // stays open (annotations change, but the sheet/document doesn't remount).
-  useEffect(() => {
-    if (targetPage !== null) setPageNumber(targetPage)
-  }, [targetPage])
+  const goToPage = (page: number) => {
+    if (page < 1 || (numPages && page > numPages)) return
+    const slot = slots.current.get(page)
+    if (slot) scrollTo(slot, 'start')
+  }
+
+  const onScroll = () => {
+    if (!scroller) return
+    // The last page whose top has passed a third of the way down the view.
+    const line = scroller.getBoundingClientRect().top + scroller.clientHeight / 3
+    let current = 1
+    for (const [page, slot] of slots.current) {
+      if (slot.getBoundingClientRect().top <= line && page > current) current = page
+    }
+    setPageNumber(current)
+  }
 
   const onDocumentLoadSuccess = useCallback((document: PdfTextSource) => {
     setNumPages(document.numPages)
-    // Runs in the background; page rendering doesn't wait on it, and search
-    // is simply unavailable (matchCount stays 0) until it resolves.
+    // Sizes first, so the scroll can be laid out; then the text index in the
+    // background, search being unavailable (matchCount stays 0) until it is.
     void (async () => {
-      const rotations: number[] = []
+      const meta: PageMeta[] = []
       for (let i = 1; i <= document.numPages; i++) {
-        rotations.push((await document.getPage(i)).rotate)
+        const page = await document.getPage(i)
+        const viewport = page.getViewport({ scale: 1 })
+        meta.push({ width: viewport.width, height: viewport.height, rotate: page.rotate })
       }
-      setBaseRotation(rotations)
+      setPageMeta(meta)
       const pages: PageTextItem[][] = []
       for (let i = 1; i <= document.numPages; i++) {
         const page = await document.getPage(i)
@@ -271,27 +365,16 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
     setLoadError(error.message)
   }, [])
 
-  // react-pdf augments the raw pdfjs PDFPageProxy with originalWidth/
-  // originalHeight (unscaled); that augmented type isn't part of react-pdf's
-  // public export surface, so this is typed structurally instead.
-  const onPageLoadSuccess = useCallback((page: { originalWidth: number; originalHeight: number }) => {
-    setPageSize({ width: page.originalWidth, height: page.originalHeight })
-  }, [])
-
-  const goToPage = (page: number) => {
-    if (page < 1 || (numPages && page > numPages)) return
-    setPageNumber(page)
-  }
-
-  // Bring the evidence on screen once its rects exist, so it's visible even
-  // when it sits far down a long page.
   const turn = turns[pageNumber] ?? 0
   const turnPage = () => setTurns((prev) => ({ ...prev, [pageNumber]: (turn + 90) % 360 }))
-  // The frame the turned page is shown in, and where each box lands in it.
-  const frame = pageSize && (turn % 180 ? { width: pageSize.height, height: pageSize.width } : pageSize)
-  const place = (rect: Rect) => {
-    if (!pageSize || !frame) return undefined
-    const turned = turnRect(rect, turn, pageSize)
+
+  // Where a box in page `page`'s default frame lands on the turned page.
+  const place = (page: number, rect: Rect): CSSProperties | undefined => {
+    const meta = pageMeta?.[page - 1]
+    if (!meta) return undefined
+    const pageTurn = turns[page] ?? 0
+    const frame = pageTurn % 180 ? { width: meta.height, height: meta.width } : meta
+    const turned = turnRect(rect, pageTurn, meta)
     return {
       left: `${(turned.x / frame.width) * 100}%`,
       top: `${(turned.y / frame.height) * 100}%`,
@@ -300,9 +383,26 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
     }
   }
 
+  // GROBID numbers the pages it found the evidence on; the first box on the
+  // first of them is brought to the middle of the view whenever the evidence
+  // changes (the sheet stays open while the curator picks another quote) or
+  // the layout under it does.
+  const firstAnnotation = useMemo(() => {
+    if (annotations.length === 0) return null
+    const page = Math.min(...annotations.map((a) => a.page))
+    return annotations.find((a) => a.page === page) ?? null
+  }, [annotations])
+
   useEffect(() => {
-    firstHighlightRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [pageNumber, pageSize, annotations, turn])
+    const highlight = firstHighlightRef.current
+    if (highlight) scrollTo(highlight, 'center')
+    else if (pageMeta) {
+      const slot = slots.current.get(pageNumber)
+      if (slot) scrollTo(slot, 'start')
+    }
+    // pageNumber is read, not watched: scrolling must not re-anchor the view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstAnnotation, pageMeta, zoom, turns, scrollTo])
 
   const normalizedQuery = query.trim().toLowerCase()
 
@@ -310,30 +410,28 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
   // query spanning two runs (e.g. across a font change or line wrap) won't
   // be found -- an accepted simplification, not a bug to chase.
   const matches = useMemo(() => {
-    if (!pageItems || !normalizedQuery) return { pages: [] as number[], total: 0 }
+    if (!pageItems || !normalizedQuery) return { pages: [] as number[], total: 0, rects: new Map<number, PageTextItem[]>() }
     const pages: number[] = []
+    const rects = new Map<number, PageTextItem[]>()
     let total = 0
     pageItems.forEach((items, index) => {
-      const count = items.reduce(
-        (sum, item) => sum + countOccurrences(item.str.toLowerCase(), normalizedQuery),
-        0,
-      )
-      if (count > 0) {
+      const found = items.flatMap((item) => matchRectsInItem(item, normalizedQuery))
+      if (found.length > 0) {
         pages.push(index + 1)
-        total += count
+        rects.set(index + 1, found)
+        total += found.length
       }
     })
-    return { pages, total }
+    return { pages, total, rects }
   }, [pageItems, normalizedQuery])
 
   const goToMatchPage = (direction: 1 | -1) => {
     if (matches.pages.length === 0) return
-    const currentIndex = matches.pages.indexOf(pageNumber)
-    const nextIndex =
-      currentIndex === -1
-        ? 0
-        : (currentIndex + direction + matches.pages.length) % matches.pages.length
-    setPageNumber(matches.pages[nextIndex])
+    const next =
+      direction === 1
+        ? (matches.pages.find((page) => page > pageNumber) ?? matches.pages[0])
+        : ([...matches.pages].reverse().find((page) => page < pageNumber) ?? matches.pages[matches.pages.length - 1])
+    goToPage(next)
   }
 
   useEffect(() => {
@@ -356,11 +454,6 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
     link.click()
     document.body.removeChild(link)
   }
-
-  const pageAnnotations = annotations.filter((a) => a.page === pageNumber)
-  const currentPageMatches = normalizedQuery
-    ? (pageItems?.[pageNumber - 1] ?? []).flatMap((item) => matchRectsInItem(item, normalizedQuery))
-    : []
 
   return (
     <div className="h-full flex flex-col bg-muted/30">
@@ -455,7 +548,7 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
           >
             <ZoomIn className="h-4 w-4" />
           </Button>
-          <Hint label="Rotate page">
+          <Hint label="Rotate this page">
             <Button variant="ghost" size="sm" onClick={turnPage}>
               <RotateCw className="h-4 w-4" />
             </Button>
@@ -477,11 +570,13 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
       </div>
 
       {/* Focusable, so a click into the PDF takes the arrow keys: ← and →
-          turn the page, ↑ and ↓ keep scrolling it. The two page keys stop
-          here, so a walk on the page outside (Review Mode steps families
+          go to the previous and next page, ↑ and ↓ scroll. The two page keys
+          stop here, so a walk on the page outside (Review Mode steps families
           with the same keys) does not move as well. */}
       <div
+        ref={setScroller}
         tabIndex={0}
+        onScroll={onScroll}
         onKeyDown={(event) => {
           if (event.metaKey || event.ctrlKey || event.altKey) return
           if (event.key === 'ArrowRight') goToPage(pageNumber + 1)
@@ -490,7 +585,7 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
           event.preventDefault()
           event.stopPropagation()
         }}
-        className="flex-1 overflow-auto bg-muted/50 flex items-start justify-center p-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
+        className="min-h-0 flex-1 overflow-auto bg-muted/50 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
       >
         <Document
           file={url}
@@ -503,35 +598,51 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
           }
           error={<p className="text-xs text-red-500 p-8">{loadError ?? 'Failed to load PDF'}</p>}
         >
-          <div className="relative inline-block">
-            <Page
-              pageNumber={pageNumber}
-              scale={zoom / 100}
-              rotate={baseRotation ? ((baseRotation[pageNumber - 1] ?? 0) + turn) % 360 : undefined}
-              onLoadSuccess={onPageLoadSuccess}
-              renderTextLayer={false}
-              renderAnnotationLayer={false}
-            />
-            {frame &&
-              pageAnnotations.map((annotation, index) => (
-                <div
-                  key={`evidence-${annotation.page}-${annotation.x}-${annotation.y}-${index}`}
-                  ref={index === 0 ? firstHighlightRef : undefined}
-                  aria-hidden
-                  className="absolute pointer-events-none mix-blend-multiply"
-                  style={{ backgroundColor: HIGHLIGHT_COLOR, ...place(annotation) }}
-                />
-              ))}
-            {frame &&
-              currentPageMatches.map((item, index) => (
-                <div
-                  key={`search-${pageNumber}-${item.x}-${item.y}-${index}`}
-                  aria-hidden
-                  className="absolute pointer-events-none mix-blend-multiply"
-                  style={{ backgroundColor: SEARCH_MATCH_COLOR, ...place(item) }}
-                />
-              ))}
-          </div>
+          {pageMeta ? (
+            <div className="mx-auto flex w-fit flex-col p-4" style={{ gap: PAGE_GAP_PX }}>
+              {pageMeta.map((meta, index) => {
+                const page = index + 1
+                return (
+                  <PageSlot
+                    key={page}
+                    pageNumber={page}
+                    meta={meta}
+                    turn={turns[page] ?? 0}
+                    scale={scale}
+                    root={scroller}
+                    slotRef={(element) => {
+                      if (element) slots.current.set(page, element)
+                      else slots.current.delete(page)
+                    }}
+                  >
+                    {annotations
+                      .filter((annotation) => annotation.page === page)
+                      .map((annotation, i) => (
+                        <div
+                          key={`evidence-${annotation.x}-${annotation.y}-${i}`}
+                          ref={annotation === firstAnnotation ? firstHighlightRef : undefined}
+                          aria-hidden
+                          className="absolute pointer-events-none mix-blend-multiply"
+                          style={{ backgroundColor: HIGHLIGHT_COLOR, ...place(page, annotation) }}
+                        />
+                      ))}
+                    {(matches.rects.get(page) ?? []).map((item, i) => (
+                      <div
+                        key={`search-${item.x}-${item.y}-${i}`}
+                        aria-hidden
+                        className="absolute pointer-events-none mix-blend-multiply"
+                        style={{ backgroundColor: SEARCH_MATCH_COLOR, ...place(page, item) }}
+                      />
+                    ))}
+                  </PageSlot>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center p-8">
+              <Spinner />
+            </div>
+          )}
         </Document>
       </div>
     </div>
