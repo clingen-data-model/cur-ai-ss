@@ -1,5 +1,5 @@
-"""Curator sign-off (lib/models/signoff.py) and the review walk's cases
-(lib/misc/review_cases.py)."""
+"""Curator sign-off (lib/models/signoff.py) and the occurrence review's
+snapshot."""
 
 import pytest
 
@@ -366,77 +366,15 @@ def test_an_agent_rewrite_unstamps_the_occurrence_and_reopens_a_completed_review
     assert paper.review_assignees == [test_user]
 
 
-def test_review_cases_are_the_families_in_order_with_their_flags(
-    client, db_session, paper, case, test_user
+def test_opening_the_occurrence_review_snapshots_the_paper(
+    client, db_session, paper, case
 ):
-    family2 = _family(db_session, paper, 'Family 2')
-    lone = _patient(db_session, paper, family2, 'P1', affected_status='Affected')
-    variant2 = _variant(db_session, paper, 'c.2A>G')
-    linked = _occurrence(db_session, paper, lone, variant2)
-    # A phenotype flag reaches its patient's family.
-    phenotype = PhenotypeDB(
-        paper_id=paper.id,
-        patient_id=lone.id,
-        concept='seizures',
-        concept_evidence=_ev('seizures'),
-    )
-    db_session.add(phenotype)
-    db_session.flush()
-    # A family nothing links to is not a step, nor are a variant linked to
-    # nobody and a flag about nothing extracted.
-    family3 = _family(db_session, paper, 'Family 3')
-    _patient(db_session, paper, family3, 'P2')
-    unlinked = _variant(db_session, paper, 'c.3A>G')
-    about_relative = _flag(
-        db_session, paper, 'about I-1', patient_id=case['relative'].id
-    )
-    about_phenotype = _flag(
-        db_session, paper, 'about seizures', phenotype_id=phenotype.id
-    )
-    about_family2 = _flag(db_session, paper, 'about F2', family_id=family2.id)
-    _flag(db_session, paper, 'about nobody')
-    _flag(db_session, paper, 'about c.3A>G', variant_id=unlinked.id)
-    resolved = _flag(db_session, paper, 'settled', patient_id=case['proband'].id)
-    db_session.commit()
-    resp = client.post(f'/papers/{paper.id}/flags/{resolved.id}/resolve', json={})
-    assert resp.status_code == 200
+    from lib.models.snapshot import SnapshotDB
 
-    resp = client.get(f'/papers/{paper.id}/review-cases')
-    assert resp.status_code == 200
-    cases = resp.json()
-    assert [c['key'] for c in cases] == [
-        f'family-{case["family"].id}',
-        f'family-{family2.id}',
+    resp = client.post(f'/papers/{paper.id}/occurrences/review')
+    assert resp.status_code == 204
+    descriptions = [
+        s.description for s in db_session.query(SnapshotDB).filter_by(paper_id=paper.id)
     ]
-    first, second = cases
-
-    assert first['label'] == 'Family 1'
-    assert first['family_id'] == case['family'].id
-    assert first['patient_ids'] == [case['proband'].id, case['relative'].id]
-    assert first['occurrence_ids'] == [case['occurrence'].id]
-    assert first['variant_ids'] == [case['variant'].id]
-    assert first['family_ids'] == [case['family'].id]
-    # The resolved flag is not listed.
-    assert first['flag_ids'] == [about_relative.id]
-    assert first['confirmed'] is False
-
-    assert second['label'] == 'Family 2'
-    assert second['patient_ids'] == [lone.id]
-    assert second['occurrence_ids'] == [linked.id]
-    assert second['variant_ids'] == [variant2.id]
-    assert second['flag_ids'] == [about_phenotype.id, about_family2.id]
-
-
-def test_review_case_is_confirmed_once_every_occurrence_is_stamped(
-    client, db_session, paper, case, test_user
-):
-    other = _occurrence(db_session, paper, case['relative'], case['variant'])
-    stamp(case['occurrence'], test_user)
-    db_session.commit()
-    (only,) = client.get(f'/papers/{paper.id}/review-cases').json()
-    assert only['confirmed'] is False
-
-    stamp(other, test_user)
-    db_session.commit()
-    (only,) = client.get(f'/papers/{paper.id}/review-cases').json()
-    assert only['confirmed'] is True
+    assert 'Before occurrence review' in descriptions
+    assert client.post('/papers/999999/occurrences/review').status_code == 404

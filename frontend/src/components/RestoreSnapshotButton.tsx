@@ -117,7 +117,9 @@ function RestoreSnapshotDialog({
       }}
     >
       <DialogContent onClick={(e) => e.stopPropagation()}>
-        <div className="space-y-4">
+        {/* min-w-0: the content is a grid item, and a long snapshot label
+            in the trigger otherwise widens it past the dialog's edge. */}
+        <div className="min-w-0 space-y-4">
           <div>
             <h2 className="text-base font-semibold">Restore Snapshot</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
@@ -125,9 +127,9 @@ function RestoreSnapshotDialog({
             </p>
           </div>
           <p className="text-sm text-muted-foreground">
-            Each time the extraction pipeline finishes, and right before any agent
-            rerun, the extracted data (patients, variants, phenotypes, links, ...) is
-            saved as a snapshot. Restoring replaces the paper's data exactly as the
+            Each time the extraction pipeline finishes, right before any agent
+            rerun, and when an occurrence or HPO review opens, the extracted data
+            (patients, variants, phenotypes, links, ...) is saved as a snapshot. Restoring replaces the paper's data exactly as the
             chosen snapshot recorded it, discarding anything from after it.
           </p>
           {snapshotsQuery.isPending ? (
@@ -142,10 +144,10 @@ function RestoreSnapshotDialog({
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Restore snapshot</label>
                 <Select value={chosenName ?? undefined} onValueChange={setSelectedName}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full min-w-0">
                     {/* Base UI shows the raw value (the file name) unless told
                         how to name it. */}
-                    <SelectValue>
+                    <SelectValue className="min-w-0 truncate">
                       {(name: string | null) => {
                         const snapshot = snapshots.find((x) => x.name === name)
                         return snapshot ? formatSnapshotLabel(snapshot) : null

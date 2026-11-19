@@ -297,10 +297,40 @@ export function DocumentEvidenceViewer({
     },
   }
 
+  // Centre the first highlight by scrolling this view alone, as PdfViewer
+  // does: scrollIntoView also scrolls whatever holds the viewer, and in
+  // Chrome a smooth one cancels a smooth scroll still running elsewhere, so a
+  // review's field pane stopped short of the field it was moving to. The
+  // document keeps growing for a moment after it first renders (figures
+  // above the highlight arriving pushed it most of a screen down on a first
+  // open), so for a few seconds each change in its height centres it again,
+  // until the reader scrolls for themselves.
   useEffect(() => {
-    containerRef.current
-      ?.querySelector('mark, [data-evidence-highlight]')
-      ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const container = containerRef.current
+    const highlight = container?.querySelector<HTMLElement>('mark, [data-evidence-highlight]')
+    const content = container?.firstElementChild
+    if (!container || !highlight || !content) return
+    const centre = () => {
+      const view = container.getBoundingClientRect()
+      const box = highlight.getBoundingClientRect()
+      container.scrollTo({
+        top: container.scrollTop + box.top - view.top - (view.height - box.height) / 2,
+        behavior: 'smooth',
+      })
+    }
+    centre()
+    const settling = new ResizeObserver(centre)
+    settling.observe(content)
+    const stop = () => settling.disconnect()
+    const timer = window.setTimeout(stop, 3000)
+    container.addEventListener('wheel', stop, { once: true, passive: true })
+    container.addEventListener('touchstart', stop, { once: true, passive: true })
+    return () => {
+      stop()
+      window.clearTimeout(timer)
+      container.removeEventListener('wheel', stop)
+      container.removeEventListener('touchstart', stop)
+    }
   }, [prepared])
 
   if (query.isPending) {

@@ -57,6 +57,7 @@ export function ViewEvidenceButton({ block }: { block?: EvidenceLike | null }) {
     <Hint label={viewInPdf ? 'View in PDF' : 'View in Markdown'}>
       <button
         type="button"
+        data-view-evidence
         disabled={citations.length === 0}
         className={TRIGGER_CLASSNAME}
         onClick={() => openHighlight({ citations })}
@@ -88,7 +89,7 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
     <Popover>
       {hasContent ? (
         <Tooltip>
-          <TooltipTrigger render={<PopoverTrigger className={TRIGGER_CLASSNAME} />}>
+          <TooltipTrigger render={<PopoverTrigger data-evidence-popover className={TRIGGER_CLASSNAME} />}>
             {isHumanEdited ? (
               <UserRoundPen className="size-3.5 text-orange-500" />
             ) : (

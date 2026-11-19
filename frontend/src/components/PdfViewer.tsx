@@ -1,10 +1,10 @@
-/* Renders a PDF with highlight overlays -- used by the evidence "View in PDF"
- * sheet. Coordinates come from `POST /papers/{id}/highlight`, which is
+/* Renders a PDF with highlight overlays -- the app's one PDF view, behind
+ * EvidencePanes: the evidence "View in PDF" sheet, the occurrence and HPO
+ * reviews and the Paper Metadata tab. Coordinates come from `POST /papers/{id}/highlight`, which is
  * read-only (it resolves a block's citations to precomputed boxes and writes
  * nothing on disk), so this is safe for multiple curators to use concurrently.
  *
- * Same react-pdf setup as PaperMetadataTab.tsx -- see frontend/README.md for
- * why only react-pdf may import pdfjs-dist.
+ * See frontend/README.md for why only react-pdf may import pdfjs-dist.
  *
  * Find-in-document draws its own overlay rects, the same way the evidence
  * highlight above does, rather than injecting markup into react-pdf's text
@@ -52,12 +52,12 @@ const HIGHLIGHT_COLOR = '#FFF59D'
 // what I searched for" apart from "this is the extracted quote".
 const SEARCH_MATCH_COLOR = '#FFB74D'
 
-// PaperMetadataTab sets this too, at module scope, and eager route imports mean
-// it has usually already run. Setting it defensively keeps this component from
-// depending on that ordering.
-if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-  pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
-}
+// The pdf.js worker, from the CDN (frontend/README.md). Set unconditionally:
+// react-pdf gives workerSrc a default of its own ('pdf.worker.mjs', which
+// does not resolve in the build), so a "set it if unset" guard never fired;
+// every PDF view worked only because PaperMetadataTab set it at module scope,
+// until that tab moved onto this viewer.
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
 
 /** One text run from `getTextContent()`, positioned in the same scale-1,
  * top-left-origin space as `originalWidth`/`originalHeight` -- i.e. the same
@@ -571,8 +571,8 @@ export function PdfViewer({ url, filename, annotations, onClose }: PdfViewerProp
 
       {/* Focusable, so a click into the PDF takes the arrow keys: ← and →
           go to the previous and next page, ↑ and ↓ scroll. The two page keys
-          stop here, so a walk on the page outside (Review Mode steps families
-          with the same keys) does not move as well. */}
+          stop here, so nothing on the page outside that listens for the same
+          keys moves as well. */}
       <div
         ref={setScroller}
         tabIndex={0}

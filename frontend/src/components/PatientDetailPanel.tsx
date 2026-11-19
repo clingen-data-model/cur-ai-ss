@@ -24,7 +24,17 @@ import { PhenotypesTable } from '@/components/PhenotypesTable'
 import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { apiErrorMessage } from '@/lib/apiError'
 
-export function PatientDetailPanel({ paperId, patient }: { paperId: number; patient: PatientResp }) {
+export function PatientDetailPanel({
+  paperId,
+  patient,
+  showPhenotypes = true,
+}: {
+  paperId: number
+  patient: PatientResp
+  /** The individual's phenotype table under the fields. The occurrence review
+   * leaves it out: phenotypes have their own review. */
+  showPhenotypes?: boolean
+}) {
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
@@ -229,13 +239,15 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
         />
       </div>
 
-      <div className="mt-4 border-t pt-4">
-        <PhenotypesTable
-          paperId={paperId}
-          patientId={patient.id}
-          affectedStatus={patient.affected_status}
-        />
-      </div>
+      {showPhenotypes && (
+        <div className="mt-4 border-t pt-4">
+          <PhenotypesTable
+            paperId={paperId}
+            patientId={patient.id}
+            affectedStatus={patient.affected_status}
+          />
+        </div>
+      )}
     </div>
   )
 }

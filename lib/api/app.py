@@ -105,7 +105,6 @@ from lib.misc.pdf.paths import (
     document_raw_path,
     document_thumbnail_path,
 )
-from lib.misc.review_cases import ReviewCaseResp, build_review_cases
 from lib.misc.snapshots import (
     InvalidSnapshotNameError,
     SnapshotIncompatibleError,
@@ -2953,18 +2952,24 @@ def resolve_flags(
 # ==============================
 
 
-@app.get('/papers/{paper_id}/review-cases', response_model=list[ReviewCaseResp])
-def get_review_cases(
+@app.post(
+    '/papers/{paper_id}/occurrences/review',
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def start_occurrence_review(
     paper_id: int,
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
-) -> Any:
-    """The review walk's steps, ranked by attention (lib/misc/review_cases.py)."""
+) -> None:
+    """Snapshot the paper as the occurrence review opens. A rejection in the
+    review deletes the occurrence, and this snapshot is how it is undone.
+    Snapshots dedupe on the paper's state, so reopening the review on an
+    unchanged paper writes nothing new."""
     if session.get(PaperDB, paper_id) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    return build_review_cases(session, paper_id)
+    write_snapshot_safe(session, paper_id, description='Before occurrence review')
 
 
 @app.post('/papers/{paper_id}/signoff', response_model=SignoffProgress)
