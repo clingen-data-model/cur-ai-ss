@@ -1141,6 +1141,73 @@ def test_signoff_columns_read_back_unstamped_for_old_rows(monkeypatch, tmp_path)
     assert ('reviewed_by_user_id', 'users') in targets
 
 
+def test_phenotype_signoff_columns_read_back_unstamped(monkeypatch, tmp_path):
+    """f7c2a9e4b1d6 adds the sign-off stamp to phenotypes in place. A
+    phenotype from before it survives with its HPO link (hpos cascades from
+    phenotypes), reads back unstamped through the ORM, and the user
+    reference is a real foreign key."""
+    from sqlalchemy import inspect
+
+    from lib.models.phenotype import PhenotypeDB
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'd5f1b3a7c9e2')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        patient_id = _insert_patient(connection, paper_id, 'II-1')
+        phenotype_id = connection.execute(
+            text(
+                'INSERT INTO phenotypes (paper_id, patient_id, concept, '
+                'concept_evidence, negated, uncertain, family_history) '
+                "VALUES (:paper_id, :patient_id, 'Seizures', :ev, 0, 0, 0) "
+                'RETURNING id'
+            ),
+            {
+                'paper_id': paper_id,
+                'patient_id': patient_id,
+                'ev': json.dumps({'value': 'Seizures', 'reasoning': 'x'}),
+            },
+        ).scalar_one()
+        connection.execute(
+            text(
+                'INSERT INTO hpos (phenotype_id, hpo_id, hpo_name, reasoning) '
+                "VALUES (:pid, 'HP:0001250', 'Seizure', 'x')"
+            ),
+            {'pid': phenotype_id},
+        )
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with Session(engine) as session:
+        phenotype = session.query(PhenotypeDB).one()
+        assert phenotype.reviewed_at is None
+        assert phenotype.reviewed_by_user_id is None
+        assert phenotype.hpo is not None and phenotype.hpo.hpo_id == 'HP:0001250'
+    targets = {
+        (fk['constrained_columns'][0], fk['referred_table'])
+        for fk in inspect(engine).get_foreign_keys('phenotypes')
+    }
+    assert ('reviewed_by_user_id', 'users') in targets
+
+
 def test_single_review_assignee_becomes_the_assignee_set(monkeypatch, tmp_path):
     """f6a2b8d4c1e9 moves each paper's one assignee into
     paper_review_assignees. A paper assigned before it reads back through the

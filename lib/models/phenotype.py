@@ -23,6 +23,7 @@ from lib.models.evidence_block import (
     EvidenceBlock,
 )
 from lib.models.flag import ExtractionFlag
+from lib.models.signoff import SignoffColumns, SignoffFields
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -65,7 +66,14 @@ class HPOTerm(BaseModel):
     name: str | None
 
 
-class PhenotypeDB(Base):
+class PhenotypeDB(SignoffColumns, Base):
+    """A phenotype of one individual, with its HPO link (``hpo``).
+
+    ``reviewed_at``/``reviewed_by_user_id`` (SignoffColumns) say a curator
+    accepted the term and its link in the HPO review. Relinking clears the
+    stamp, since the term judged is gone; re-extraction recreates the rows.
+    Unlike the occurrence stamp it does not move the paper's review status."""
+
     __tablename__ = 'phenotypes'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -102,7 +110,9 @@ class PhenotypeDB(Base):
     )
 
     paper: Mapped['PaperDB'] = relationship('PaperDB', overlaps='phenotypes')
-    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
+    updated_by: Mapped['UserDB | None'] = relationship(
+        'UserDB', foreign_keys='PhenotypeDB.updated_by_user_id'
+    )
     patient: Mapped['PatientDB'] = relationship(
         'PatientDB', back_populates='phenotypes', overlaps='paper'
     )
@@ -151,7 +161,7 @@ class HpoDB(Base):
     )
 
 
-class PhenotypeResp(BaseModel):
+class PhenotypeResp(SignoffFields):
     id: int
     paper_id: int
     patient_id: int
@@ -178,6 +188,14 @@ class PhenotypeCreateRequest(BaseModel):
 
     concept: str
     hpo_id: str | None = None
+
+
+class PhenotypeSignoffRequest(BaseModel):
+    """Body for POST /papers/{paper_id}/phenotypes/signoff: the phenotypes to
+    stamp as reviewed (or, with ``reviewed`` false, to unstamp)."""
+
+    phenotype_ids: list[int] = []
+    reviewed: bool = True
 
 
 class HpoRelinkRequest(BaseModel):

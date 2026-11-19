@@ -23,7 +23,7 @@
  * and TaskTimeline.tsx use for "re-run this agent" -- both open onto a re-run
  * flow (this one via a tab, since a manual pick is also on offer), so the icon
  * means the same thing everywhere it appears. */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Pencil, RefreshCw } from 'lucide-react'
@@ -54,15 +54,26 @@ export function RelinkHpoDialog({
   concept,
   currentHpoId,
   currentHpoName,
+  open: openProp,
+  onOpenChange,
 }: {
   paperId: number
   phenotypeId: number
   concept: string
   currentHpoId: string | null
   currentHpoName: string | null
+  /** Controlled from outside, for the HPO review's `r` key; the icon button
+   * still opens it too. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const queryClient = useQueryClient()
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = openProp ?? internalOpen
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next)
+    onOpenChange?.(next)
+  }
   const [hpoId, setHpoId] = useState<string | null>(currentHpoId)
   const [context, setContext] = useState('')
   const hasExistingLink = currentHpoId != null
@@ -71,6 +82,14 @@ export function RelinkHpoDialog({
     setHpoId(currentHpoId)
     setContext('')
   }
+
+  // Each opening starts from the current link, however it was opened.
+  useEffect(() => {
+    if (open) {
+      setHpoId(currentHpoId)
+      setContext('')
+    }
+  }, [open, currentHpoId])
 
   const relinkMutation = useMutation({
     mutationKey: ['paper-edit', paperId],
@@ -124,7 +143,6 @@ export function RelinkHpoDialog({
           type="button"
           onClick={(e) => {
             e.stopPropagation()
-            reset()
             setOpen(true)
           }}
           className="inline-flex items-center justify-center size-7 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"

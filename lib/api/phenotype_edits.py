@@ -19,6 +19,7 @@ from lib.models import HpoDB, PatientDB, PhenotypeDB
 from lib.models.base import manual_evidence_block
 from lib.models.deletion_log import record_deletion
 from lib.models.edit import record_edit, record_edits
+from lib.models.signoff import unstamp
 from lib.models.user import UserDB
 from lib.reference_data.hpo import get_ontology
 
@@ -125,6 +126,8 @@ def relink_phenotype(
         phenotype.hpo = HpoDB(hpo_id=hpo_id, hpo_name=name, reasoning=reasoning)
         session.flush()  # hpo needs a real id before edits can reference it
     record_edit(session, phenotype.hpo, 'hpo', editor, old_value=old_hpo_id)
+    # The stamp accepted the old term; a new one has not been reviewed.
+    unstamp(phenotype)
     phenotype.updated_by_user_id = editor.id
     phenotype.updated_at = func.now()
     session.flush()
