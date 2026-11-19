@@ -271,6 +271,45 @@ def _registry_query(
     return None
 
 
+def _registry_gnomad_id(genomic_allele: dict[str, Any]) -> str | None:
+    """CHROM-POS-REF-ALT for one of the Allele Registry's genomic alleles.
+
+    The registry's coordinates count the gaps between bases, so ``start`` is
+    the 0-based start and the first changed base is ``start + 1``. ``end`` was
+    used until 2026-11-18, which is right for a single base and names the
+    last base of anything longer: B2M's CC>TT at 44715509-44715510 came out
+    as 15-44715510-CC-TT, whose REF the genome does not have there.
+
+    An insertion or deletion has an empty REF or ALT, and a VCF needs the base
+    before it as an anchor, which the registry does not give; those get None
+    and come from VariantValidator instead.
+    """
+    coords = genomic_allele.get('coordinates', [])
+    if not coords:
+        return None
+    coord = coords[0]
+    chrom = genomic_allele.get('chromosome')
+    start = coord.get('start')
+    ref = coord.get('referenceAllele')
+    alt = coord.get('allele')
+    if not chrom or start is None or not ref or not alt:
+        return None
+    return f'{chrom}-{start + 1}-{ref}-{alt}'
+
+
+def _registry_protein_hgvs(hgvs: str | None) -> str | None:
+    """The registry's protein description, if it is one.
+
+    For a change with no protein consequence it can name, such as a splice
+    site change, the registry puts the nucleotide change on the protein
+    accession (``NP_001735.1:n.387-1G>A`` for CAMK4 c.387-1G>A), which was
+    stored as the variant's hgvs_p on 15 dev variants.
+    """
+    if hgvs and ':p.' in hgvs:
+        return hgvs
+    return None
+
+
 @function_tool
 def allele_registry_resolver(
     rsid: str | None = None,
@@ -333,34 +372,17 @@ def allele_registry_resolver(
 
         genomic_alleles = data.get('genomicAlleles', [])
 
-        def build_gnomad_id(g: dict[str, Any]) -> str | None:
-            coords = g.get('coordinates', [])
-            if not coords:
-                return None
-
-            coord = coords[0]
-
-            chrom = g.get('chromosome')
-            pos = coord.get('end')  # 1-based position
-            ref = coord.get('referenceAllele')
-            alt = coord.get('allele')
-
-            if not all([chrom, pos, ref, alt]):
-                return None
-
-            return f'{chrom}-{pos}-{ref}-{alt}'
-
         # Prefer GRCh38
         for g in genomic_alleles:
             if g.get('referenceGenome') == 'GRCh38':
-                resolved_gnomad = build_gnomad_id(g)
+                resolved_gnomad = _registry_gnomad_id(g)
                 if resolved_gnomad:
                     break
 
         # Fallback to first available genome
         if not resolved_gnomad:
             for g in genomic_alleles:
-                resolved_gnomad = build_gnomad_id(g)
+                resolved_gnomad = _registry_gnomad_id(g)
                 if resolved_gnomad:
                     break
 
@@ -421,8 +443,7 @@ def allele_registry_resolver(
 
                 if refseq_nuc:
                     resolved_hgvsc = refseq_nuc
-                if refseq_pro:
-                    resolved_hgvsp = refseq_pro
+                resolved_hgvsp = _registry_protein_hgvs(refseq_pro)
                 break
 
         # Priority 2: RefSeq transcripts (NM_, NR_) - prefer latest version
@@ -452,7 +473,9 @@ def allele_registry_resolver(
         # Extract protein HGVS if available
         if not resolved_hgvsp:
             for t in transcripts:
-                protein_hgvs = t.get('proteinEffect', {}).get('hgvs')
+                protein_hgvs = _registry_protein_hgvs(
+                    t.get('proteinEffect', {}).get('hgvs')
+                )
                 if protein_hgvs:
                     resolved_hgvsp = protein_hgvs
                     break
@@ -471,14 +494,52 @@ def allele_registry_resolver(
     return results if results else None
 
 
+def _variant_validator_projection(data: dict[str, Any]) -> dict[str, list[str]]:
+    """The GRCh38 gnomAD-style ids in a VariantValidator reply, and its warnings.
+
+    The warnings are the only place VariantValidator says why it produced no
+    id: "Variant reference (T) does not agree with reference sequence (C)",
+    "does not correspond with an exon boundary". Until 2026-11-18 only the
+    ids were passed on, so the agent saw an empty list, could not tell a
+    rejected description from a lookup failure, and stored descriptions
+    VariantValidator had rejected (EDAR c.1056T>C, TSEN2 c.914-5T>A). LOVD's
+    syntax-check lines repeat the same verdict and are left out.
+    """
+    ids: set[str] = set()
+    warnings: list[str] = []
+    for value in data.values():
+        if not isinstance(value, dict):
+            continue
+        for warning in value.get('validation_warnings', []):
+            if not warning.startswith('Lovd') and warning not in warnings:
+                warnings.append(warning)
+        vcf = value.get('primary_assembly_loci', {}).get('grch38', {}).get('vcf')
+        if not vcf:
+            continue
+        chrom, pos, ref, alt = (vcf.get(k) for k in ('chr', 'pos', 'ref', 'alt'))
+        if not all([chrom, pos, ref, alt]):
+            continue
+        chrom = chrom.replace('chr', '')
+        if chrom in {'M', 'MT'}:
+            chrom = 'M'
+        ids.add(f'{chrom}-{pos}-{ref}-{alt}')
+    return {'gnomad_ids': sorted(ids), 'validation_warnings': warnings}
+
+
 @function_tool
-def gnomad_style_ids_from_variant_validator(variant_description: str) -> list[str]:
+def gnomad_style_ids_from_variant_validator(
+    variant_description: str,
+) -> dict[str, list[str]]:
     """
     Given an arbitrary variant_description (hgvsg, hgvsc, hgvsp), use VariantValidator
-    to return ALL GRCh38 mapped gnomad-style variant ids.
+    to return ALL GRCh38 mapped gnomad-style variant ids, with VariantValidator's
+    validation warnings. With no ids, the warnings say why: a reference mismatch
+    or an exon boundary error means the description is not valid on that
+    transcript. A warning can also come with ids, such as a description
+    VariantValidator corrected before mapping it.
 
     Example Output:
-        ["1-55051215-G-GA", "1-55051214-GG-G"]
+        {"gnomad_ids": ["1-55051215-G-GA", "1-55051214-GG-G"], "validation_warnings": []}
     """
     encoded_variant_description = quote(variant_description, safe='')
     endpoint = (
@@ -495,38 +556,8 @@ def gnomad_style_ids_from_variant_validator(variant_description: str) -> list[st
 
     data = r.json()
     if not data:
-        return []
-
-    ids: set[str] = set()
-
-    for value in data.values():
-        if not isinstance(value, dict):
-            continue
-
-        loci = value.get('primary_assembly_loci', {})
-        grch38 = loci.get('grch38')
-        if not grch38:
-            continue
-
-        vcf = grch38.get('vcf')
-        if not vcf:
-            continue
-
-        chrom = vcf.get('chr')
-        pos = vcf.get('pos')
-        ref = vcf.get('ref')
-        alt = vcf.get('alt')
-
-        if not all([chrom, pos, ref, alt]):
-            continue
-
-        chrom = chrom.replace('chr', '')
-        if chrom in {'M', 'MT'}:
-            chrom = 'M'
-
-        ids.add(f'{chrom}-{pos}-{ref}-{alt}')
-
-    return sorted(ids)
+        return {'gnomad_ids': [], 'validation_warnings': []}
+    return _variant_validator_projection(data)
 
 
 @function_tool
@@ -566,29 +597,41 @@ def genomic_accession_for_gene_and_transcript(
         if not genomic_spans:
             continue
 
-        genome_build_map = {}
-        # Filter only NC_ accessions (ignore NG_/LRG_/etc)
-        nc_accessions = [acc for acc in genomic_spans if acc.startswith('NC_')]
-        if not nc_accessions:
-            continue
-
-        # Sort lexicographically
-        nc_accessions_sorted = sorted(nc_accessions)
-        if len(nc_accessions_sorted) >= 2:
-            genome_build_map[GenomeBuild.GRCh37] = nc_accessions_sorted[
-                0
-            ]  # smaller string
-            genome_build_map[GenomeBuild.GRCh38] = nc_accessions_sorted[
-                -1
-            ]  # larger string
-        else:
-            # Only one NC_ accession — assume GRCh38 (or GRCh37 if you prefer)
-            genome_build_map[GenomeBuild.GRCh38] = nc_accessions_sorted[0]
-
+        genome_build_map = _builds_of_chromosome_accessions(list(genomic_spans))
         if genome_build_map:
             return genome_build_map
 
     return None
+
+
+def _builds_of_chromosome_accessions(accessions: list[str]) -> dict[GenomeBuild, str]:
+    """GRCh37 and GRCh38 for a transcript's chromosome accessions.
+
+    GRCh38 is the higher version of the chromosome's NC_ accession. The
+    versions were compared as text until 2026-11-18, where NC_000018.10 sorts
+    before NC_000018.9, so on chromosomes 5, 11, 15, 16, 18, 19 and Y (whose
+    version goes from one digit to two between the builds) the two came back
+    swapped: the agent was told chr18's GRCh38 accession was NC_000018.9 and
+    wrote NC_000018.11, which does not exist, or believed it and wrote
+    APOA1's change on GRCh37's NC_000011.9. NG_, LRG_ and other non-chromosome
+    accessions are ignored; a single NC_ accession is taken as GRCh38.
+    """
+
+    def version(accession: str) -> int:
+        _, _, number = accession.rpartition('.')
+        return int(number) if number.isdigit() else 0
+
+    nc_accessions = sorted(
+        (acc for acc in accessions if acc.startswith('NC_')), key=version
+    )
+    if not nc_accessions:
+        return {}
+    if len(nc_accessions) == 1:
+        return {GenomeBuild.GRCh38: nc_accessions[0]}
+    return {
+        GenomeBuild.GRCh37: nc_accessions[0],
+        GenomeBuild.GRCh38: nc_accessions[-1],
+    }
 
 
 @function_tool
@@ -927,6 +970,10 @@ Action
     3. Call gnomad_style_ids_from_variant_validator (may return multiple gnomAD-style IDs).
         If multiple IDs returned:
             Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
+        With no IDs, its validation_warnings say why. A reference mismatch
+        or an exon boundary error means the paper's position does not fit
+        this transcript: the projection failed, and the description is not
+        returned as hgvs_c on it. Quote the warning in basis.
 
     4. If projection fails:
         Retry once with select_canonical_transcript to handle retired versions.
@@ -1063,7 +1110,7 @@ STATE 5 — GNOMAD COORDINATES (POST-REGISTRY)
 After allele_registry_resolver returns:
 - If gnomad_style_coordinates is NULL but hgvs_g is available:
     Call gnomad_style_ids_from_variant_validator(hgvs_g) to derive gnomad-style coordinates
-    If successful, use the first ID returned.
+    If successful, use the first of its gnomad_ids.
     If call fails or returns empty, continue with null gnomad_style_coordinates.
 
 ============================================================

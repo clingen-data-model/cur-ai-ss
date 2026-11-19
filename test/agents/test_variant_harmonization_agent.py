@@ -8,9 +8,14 @@ import pytest
 
 from lib.agents.variant_harmonization_agent import (
     VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
+    _builds_of_chromosome_accessions,
     _clinvar_records,
+    _registry_gnomad_id,
+    _registry_protein_hgvs,
     _registry_query,
+    _variant_validator_projection,
 )
+from lib.models.variant import GenomeBuild
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'clinvar_esummary_14879.json'
 
@@ -148,3 +153,128 @@ def test_an_identifier_that_does_not_resolve_falls_through_to_state_3():
     state_2 = rules[rules.index('STATE 2') : rules.index('STATE 3')]
     assert 'it is not the end of the run' in state_2
     assert 'Proceed\nto State 3 when the input has a coding change' in state_2
+
+
+def test_the_registry_position_is_the_first_changed_base():
+    """The registry's B2M CC>TT (CA2499222953) as it returns it: positions
+    count the gaps between bases, so the change starts at 44715509. Taking
+    `end` wrote 15-44715510-CC-TT, a REF the genome does not have there."""
+    genomic_allele = {
+        'chromosome': '15',
+        'referenceGenome': 'GRCh38',
+        'coordinates': [
+            {
+                'start': 44715508,
+                'end': 44715510,
+                'referenceAllele': 'CC',
+                'allele': 'TT',
+            }
+        ],
+    }
+    assert _registry_gnomad_id(genomic_allele) == '15-44715509-CC-TT'
+
+
+def test_a_single_base_registry_change_keeps_its_position():
+    genomic_allele = {
+        'chromosome': '3',
+        'coordinates': [
+            {
+                'start': 187236419,
+                'end': 187236420,
+                'referenceAllele': 'C',
+                'allele': 'T',
+            }
+        ],
+    }
+    assert _registry_gnomad_id(genomic_allele) == '3-187236420-C-T'
+
+
+@pytest.mark.parametrize('ref, alt', [('CT', ''), ('', 'A')])
+def test_an_unanchored_registry_indel_gives_no_gnomad_id(ref, alt):
+    genomic_allele = {
+        'chromosome': '7',
+        'coordinates': [
+            {'start': 100, 'end': 102, 'referenceAllele': ref, 'allele': alt}
+        ],
+    }
+    assert _registry_gnomad_id(genomic_allele) is None
+
+
+def test_a_nucleotide_change_on_a_protein_accession_is_not_a_protein_change():
+    """The registry's MANE protein for CAMK4 c.387-1G>A."""
+    assert _registry_protein_hgvs('NP_001735.1:n.387-1G>A') is None
+    assert _registry_protein_hgvs(None) is None
+    assert _registry_protein_hgvs('NP_004039.1:p.Pro52Leu') == 'NP_004039.1:p.Pro52Leu'
+
+
+def test_grch38_is_the_higher_chromosome_accession_version():
+    """VariantValidator's genomic spans for CDH2 NM_001792.5. Compared as text,
+    .10 sorts before .9 and the builds came back swapped."""
+    spans = ['NC_000018.10', 'NC_000018.9', 'NG_011605.1']
+    assert _builds_of_chromosome_accessions(spans) == {
+        GenomeBuild.GRCh37: 'NC_000018.9',
+        GenomeBuild.GRCh38: 'NC_000018.10',
+    }
+    assert _builds_of_chromosome_accessions(['NC_000002.12', 'NC_000002.11']) == {
+        GenomeBuild.GRCh37: 'NC_000002.11',
+        GenomeBuild.GRCh38: 'NC_000002.12',
+    }
+    assert _builds_of_chromosome_accessions(['NC_012920.1']) == {
+        GenomeBuild.GRCh38: 'NC_012920.1'
+    }
+    assert _builds_of_chromosome_accessions(['NG_011605.1']) == {}
+
+
+def test_variant_validator_says_why_it_gave_no_id():
+    """VariantValidator's reply to TSEN2 NM_025265.4:c.914-5T>A, trimmed."""
+    reply = {
+        'flag': 'warning',
+        'validation_warning_1': {
+            'primary_assembly_loci': {},
+            'validation_warnings': [
+                'IntronBaseMismatchWarning: NM_025265.4:c.914-5T>A mapped to '
+                'NC_000003.12:g.12516610T>A: Variant reference (T) does not agree '
+                'with reference sequence (G)',
+                'ExonBoundaryError: Position c.914-5 does not correspond with an '
+                'exon boundary for transcript NM_025265.4',
+                'LovdSyntaxcheckLibraryVersion: 1.1.2',
+            ],
+        },
+        'metadata': {'variantvalidator_version': '3'},
+    }
+    projection = _variant_validator_projection(reply)
+    assert projection['gnomad_ids'] == []
+    assert [w.split(':')[0] for w in projection['validation_warnings']] == [
+        'IntronBaseMismatchWarning',
+        'ExonBoundaryError',
+    ]
+
+
+def test_variant_validator_ids_keep_their_warnings():
+    """CANT1 NM_138793.4:c.-286+1G>A: VariantValidator corrects the description
+    and maps it, and says so."""
+    reply = {
+        'NM_138793.4:c.-285T>A': {
+            'primary_assembly_loci': {
+                'grch38': {
+                    'vcf': {'chr': 'chr17', 'pos': '78997907', 'ref': 'A', 'alt': 'T'}
+                }
+            },
+            'validation_warnings': [
+                'NM_138793.4:c.-286+1G>A automapped to NM_138793.4:c.-285T>A'
+            ],
+        },
+    }
+    assert _variant_validator_projection(reply) == {
+        'gnomad_ids': ['17-78997907-A-T'],
+        'validation_warnings': [
+            'NM_138793.4:c.-286+1G>A automapped to NM_138793.4:c.-285T>A'
+        ],
+    }
+
+
+def test_a_rejected_description_is_a_failed_projection():
+    rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
+    state_3 = rules[rules.index('STATE 3') : rules.index('STATE 4')]
+    assert 'validation_warnings say why' in state_3
+    assert 'not\n        returned as hgvs_c' in state_3
