@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import re
 from enum import Enum
 from functools import wraps
@@ -24,13 +25,15 @@ from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.agents.variant_annotation_agent import _get_session_with_retries
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
-from lib.models.flag import FlaggedReasoningBlock
+from lib.models.flag import FlaggedReasoningBlock, FlagKind, ReasoningFlag
 from lib.models.variant import (
     GenomeBuild,
     HarmonizedVariant,
     VariantExtractionOutput,
     well_formed_caid,
 )
+
+logger = logging.getLogger(__name__)
 
 CLINGEN_ALLELE_REGISTRY_ENDPOINT = 'https://reg.genome.network'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
@@ -494,7 +497,7 @@ def allele_registry_resolver(
     return results if results else None
 
 
-def _variant_validator_projection(data: dict[str, Any]) -> dict[str, list[str]]:
+def variant_validator_projection(data: dict[str, Any]) -> dict[str, list[str]]:
     """The GRCh38 gnomAD-style ids in a VariantValidator reply, and its warnings.
 
     The warnings are the only place VariantValidator says why it produced no
@@ -507,12 +510,16 @@ def _variant_validator_projection(data: dict[str, Any]) -> dict[str, list[str]]:
     """
     ids: set[str] = set()
     warnings: list[str] = []
+    proteins: list[str] = []
     for value in data.values():
         if not isinstance(value, dict):
             continue
         for warning in value.get('validation_warnings', []):
             if not warning.startswith('Lovd') and warning not in warnings:
                 warnings.append(warning)
+        protein = (value.get('hgvs_predicted_protein_consequence') or {}).get('tlr')
+        if protein and protein not in proteins:
+            proteins.append(protein)
         vcf = value.get('primary_assembly_loci', {}).get('grch38', {}).get('vcf')
         if not vcf:
             continue
@@ -523,7 +530,11 @@ def _variant_validator_projection(data: dict[str, Any]) -> dict[str, list[str]]:
         if chrom in {'M', 'MT'}:
             chrom = 'M'
         ids.add(f'{chrom}-{pos}-{ref}-{alt}')
-    return {'gnomad_ids': sorted(ids), 'validation_warnings': warnings}
+    return {
+        'gnomad_ids': sorted(ids),
+        'validation_warnings': warnings,
+        'predicted_proteins': proteins,
+    }
 
 
 @function_tool
@@ -539,8 +550,23 @@ def gnomad_style_ids_from_variant_validator(
     VariantValidator corrected before mapping it.
 
     Example Output:
-        {"gnomad_ids": ["1-55051215-G-GA", "1-55051214-GG-G"], "validation_warnings": []}
+        {"gnomad_ids": ["1-55051215-G-GA", "1-55051214-GG-G"], "validation_warnings": [],
+         "predicted_proteins": ["NP_000000.1:p.(Gly12Asp)"]}
     """
+    return _validate_with_variant_validator(variant_description)
+
+
+def _validate_with_variant_validator(variant_description: str) -> dict[str, list[str]]:
+    """VariantValidator's GRCh38 gnomAD-style ids and warnings for a description."""
+    data = variant_validator_reply(variant_description)
+    if not data:
+        return {'gnomad_ids': [], 'validation_warnings': [], 'predicted_proteins': []}
+    return variant_validator_projection(data)
+
+
+def variant_validator_reply(variant_description: str) -> dict[str, Any]:
+    """VariantValidator's whole GRCh38 reply for a description, on its select
+    transcript; raises requests.RequestException when the request fails."""
     encoded_variant_description = quote(variant_description, safe='')
     endpoint = (
         VV_VARIANT_VALIDATOR_ENSEMBL_ENDPOINT
@@ -553,11 +579,8 @@ def gnomad_style_ids_from_variant_validator(
 
     r = session.get(url, headers=headers, timeout=10)
     r.raise_for_status()
-
     data = r.json()
-    if not data:
-        return {'gnomad_ids': [], 'validation_warnings': []}
-    return _variant_validator_projection(data)
+    return data if isinstance(data, dict) else {}
 
 
 @function_tool
@@ -769,6 +792,375 @@ def resolve_transcript_version(transcript: str) -> Optional[dict[str, str]]:
     return best
 
 
+# The most transcripts transcripts_fitting_description sends to
+# VariantValidator, one request each to its public API.
+MAX_TRANSCRIPTS_TRIED = 20
+
+# VariantValidator warnings that mean the description, as written, is not on
+# the transcript: the bases it states are not there, its intronic offset is
+# not counted from an exon edge, or VariantValidator rewrote it to make it fit.
+_REJECTION_MARKERS = (
+    'ReferenceMismatchError',
+    'IntronBaseMismatchWarning',
+    'ExonBoundaryError',
+    'OutOfBoundsError',
+    'automapped to',
+)
+
+
+def fits_as_written(validation: dict[str, list[str]]) -> bool:
+    """Whether VariantValidator mapped the description without changing it."""
+    return bool(validation['gnomad_ids']) and not any(
+        marker in warning
+        for warning in validation['validation_warnings']
+        for marker in _REJECTION_MARKERS
+    )
+
+
+_EDIT = re.compile(r'^c\.[-*\d+_?()]+(?P<edit>.*)$')
+_STATED = re.compile(
+    r'^(?:(?P<sub>[ACGT]+)>|(?:del|dup|inv)(?P<span>[ACGT]+)(?:ins|$))'
+)
+
+
+def _stated_reference_bases(hgvs_c: str) -> int:
+    """How many reference bases a c. description states: one for T>A, two
+    for delCT, none for del, dup, ins or delinsGG (whose bases are the new
+    sequence, not the reference)."""
+    edit = _EDIT.match(hgvs_c.split(':', 1)[-1].strip())
+    stated = _STATED.match(edit['edit']) if edit else None
+    if not stated:
+        return 0
+    return len(stated['sub'] or stated['span'] or '')
+
+
+_AMINO_ACIDS = {
+    'A': 'Ala', 'R': 'Arg', 'N': 'Asn', 'D': 'Asp', 'C': 'Cys', 'Q': 'Gln',
+    'E': 'Glu', 'G': 'Gly', 'H': 'His', 'I': 'Ile', 'L': 'Leu', 'K': 'Lys',
+    'M': 'Met', 'F': 'Phe', 'P': 'Pro', 'S': 'Ser', 'T': 'Thr', 'W': 'Trp',
+    'Y': 'Tyr', 'V': 'Val', 'U': 'Sec', 'X': 'Ter', '*': 'Ter',
+}  # fmt: skip
+_THREE_LETTER = re.compile(
+    r'(?P<ref>[A-Z][a-z]{2})(?P<pos>\d+)(?P<alt>[A-Z][a-z]{2}|=)?'
+)
+_ONE_LETTER = re.compile(r'(?P<ref>[A-Z*])(?P<pos>\d+)(?P<alt>[A-Z*]|=)?')
+
+
+def _protein_change(text: str) -> tuple[str, int, str | None] | None:
+    """(reference residue, position, new residue) of the first residue a
+    protein change names, in three-letter codes: "p.Leu84Arg", "L84R",
+    "NP_000030.1:p.(Leu84Pro)", "p.Asn98LysfsTer?" (new residue Lys)."""
+    body = text.split(':', 1)[-1].removeprefix('p.').strip('()')
+    three_letter = set(_AMINO_ACIDS.values())
+    found = _THREE_LETTER.match(body)
+    if found and found['ref'] in three_letter:
+        ref, alt = found['ref'], found['alt']
+        if alt is not None and alt != '=' and alt not in three_letter:
+            alt = None
+    else:
+        found = _ONE_LETTER.match(body)
+        if not found:
+            return None
+        ref = _AMINO_ACIDS.get(found['ref'], found['ref'])
+        alt = found['alt'] and _AMINO_ACIDS.get(found['alt'], found['alt'])
+    return (ref, int(found['pos']), ref if alt == '=' else alt)
+
+
+def same_protein_change(paper: str, predicted: str) -> bool:
+    """Whether a predicted protein change is the paper's: the same residue at
+    the same position, changed to the same residue where both name one."""
+    a, b = _protein_change(paper), _protein_change(predicted)
+    if a is None or b is None or a[:2] != b[:2]:
+        return False
+    return a[2] is None or b[2] is None or a[2] == b[2]
+
+
+def _coding_transcripts(gene_transcripts: Any) -> list[str]:
+    """The coding RefSeq transcripts in a gene2transcripts reply, every version,
+    in the order VariantValidator lists them."""
+    if not isinstance(gene_transcripts, dict):
+        return []
+    return [
+        t['reference']
+        for t in gene_transcripts.get('transcripts', [])
+        if t.get('reference', '').startswith('NM_')
+        and t.get('coding_start') is not None
+    ]
+
+
+@function_tool
+def transcripts_fitting_description(
+    gene_symbol: str, hgvs_c: str, paper_protein_change: str | None = None
+) -> dict[str, Any]:
+    """
+    Find a transcript of the gene that a coding change fits, when the one
+    tried rejected it. Lists every coding RefSeq transcript of the gene, every
+    version VariantValidator holds, and tries the change on each in turn.
+
+    A transcript is taken only when the fit is evidence that the paper used
+    it: the change states at least two reference bases (c.547_548delCT), or
+    the protein VariantValidator predicts on it is the paper's protein change.
+    A single stated base matches a wrong transcript one time in four, and a
+    change stating none (c.123del) fits wherever its positions exist; such
+    fits are listed under fits_without_evidence and not taken.
+
+    hgvs_c: the change as the paper numbers it, with or without an accession
+    ("c.914-5T>A").
+    paper_protein_change: the paper's protein change, if it gives one
+    ("p.Leu178His", "L178H").
+
+    Returns:
+    {
+      "fitting": {"transcript", "gnomad_ids", "validation_warnings", "predicted_proteins"} or null,
+      "fits_without_evidence": [<accessions>],
+      "rejected": [{"transcript", "validation_warnings"}],
+      "not_tried": [<accessions past the limit>]
+    }
+    """
+    url = f'{VV_GENE2TRANSCRIPTSV1_ENDPOINT}/{quote(gene_symbol, safe="")}'
+    session = _get_session_with_retries()
+    r = session.get(url, headers={'content-type': 'application/json'}, timeout=10)
+    r.raise_for_status()
+    transcripts = _coding_transcripts(r.json())
+
+    change = hgvs_c.split(':', 1)[-1].strip()
+    bases_are_evidence = _stated_reference_bases(change) >= 2
+    rejected: list[dict[str, Any]] = []
+    without_evidence: list[str] = []
+    for transcript in transcripts[:MAX_TRANSCRIPTS_TRIED]:
+        try:
+            validation = _validate_with_variant_validator(f'{transcript}:{change}')
+        except requests.RequestException as e:
+            validation = {
+                'gnomad_ids': [],
+                'validation_warnings': [f'VariantValidator request failed: {e}'],
+                'predicted_proteins': [],
+            }
+        if not fits_as_written(validation):
+            rejected.append(
+                {
+                    'transcript': transcript,
+                    'validation_warnings': validation['validation_warnings'],
+                }
+            )
+            continue
+        protein_is_evidence = bool(paper_protein_change) and any(
+            same_protein_change(paper_protein_change or '', p)
+            for p in validation['predicted_proteins']
+        )
+        if bases_are_evidence or protein_is_evidence:
+            return {
+                'fitting': {'transcript': transcript, **validation},
+                'fits_without_evidence': without_evidence,
+                'rejected': rejected,
+                'not_tried': [],
+            }
+        without_evidence.append(transcript)
+    return {
+        'fitting': None,
+        'fits_without_evidence': without_evidence,
+        'rejected': rejected,
+        'not_tried': transcripts[MAX_TRANSCRIPTS_TRIED:],
+    }
+
+
+# ---------------------------------------------------------------------------
+# After the agent: its coordinates derived by code from its description
+# ---------------------------------------------------------------------------
+# The coordinates of a harmonized variant, derived by code from its c.
+#
+# The harmonization agent settles on a description and then writes the
+# genomic HGVS, the gnomAD-style coordinates and the protein change itself,
+# copying them out of tool replies. Checked against hgvs-weaver on 2026-11-18,
+# dev had values no tool returned: a c. one base off from the ClinVar record it
+# cited (APOA1 c.251T>C for c.251T>G, its p. and g. still those of T>G),
+# gnomAD coordinates one base off from VariantValidator's answer (EDAR), and a
+# genomic description on an accession and position that do not exist (ZFPM2
+# NC_000008.12:g.106123456A>G).
+#
+# So the agent's c. (its g. when it has no c.) is given to VariantValidator,
+# and what VariantValidator derives from it is stored: the normalised c., the
+# GRCh38 g., the gnomAD-style coordinates and the predicted protein. Each value
+# the agent wrote is compared with the derived one, and one that is not the
+# same change becomes a mismatch flag, so a curator sees that the agent's
+# description and its other fields disagreed. A description VariantValidator
+# rejects keeps the agent's values and gets a flag saying why.
+
+# GRCh38 chromosome accessions, for reading gnomAD-style coordinates.
+GRCH38_CHROMOSOMES = {
+    **{
+        str(n): f'NC_{n:06d}.{v}'
+        for n, v in zip(
+            range(1, 23),
+            [11, 12, 12, 12, 10, 12, 14, 11, 12, 11, 10, 12, 11, 9, 10, 10, 11, 10, 10, 11, 9, 11],
+        )
+    },
+    'X': 'NC_000023.11',
+    'Y': 'NC_000024.10',
+    'M': 'NC_012920.1',
+    'MT': 'NC_012920.1',
+}  # fmt: skip
+
+
+def gnomad_as_hgvs(coordinates: str) -> str | None:
+    """A gnomAD-style CHROM-POS-REF-ALT as a GRCh38 g. description that states
+    its reference bases, so VariantValidator checks them: 15-44715509-CC-TT
+    is NC_000015.10:g.44715509_44715510delCCinsTT."""
+    parts = coordinates.strip().removeprefix('chr').split('-')
+    if len(parts) != 4 or not parts[1].isdigit():
+        return None
+    chrom, pos_text, ref, alt = parts
+    accession = GRCH38_CHROMOSOMES.get(chrom.upper())
+    if not accession or not re.fullmatch('[ACGTN]+', ref + alt):
+        return None
+    pos = int(pos_text)
+    if len(ref) == 1 and len(alt) == 1:
+        return f'{accession}:g.{pos}{ref}>{alt}'
+    end = pos + len(ref) - 1
+    span = f'{pos}_{end}' if end > pos else f'{pos}'
+    return f'{accession}:g.{span}del{ref}ins{alt}'
+
+
+def _derived(reply: dict[str, Any]) -> dict[str, str | None]:
+    """The values VariantValidator derives, from the first transcript record
+    of its reply that maps to GRCh38."""
+    for value in reply.values():
+        if not isinstance(value, dict):
+            continue
+        grch38 = (value.get('primary_assembly_loci') or {}).get('grch38') or {}
+        if not grch38:
+            continue
+        ids = variant_validator_projection({'record': value})['gnomad_ids']
+        return {
+            'hgvs_c': value.get('hgvs_transcript_variant') or None,
+            'hgvs_g': grch38.get('hgvs_genomic_description') or None,
+            'hgvs_p': (value.get('hgvs_predicted_protein_consequence') or {}).get('tlr')
+            or None,
+            'gnomad_style_coordinates': ids[0] if ids else None,
+        }
+    return {}
+
+
+def _genomic_of(description: str) -> str | None:
+    """VariantValidator's normalised GRCh38 g. for a description, or None when
+    it rejects it."""
+    reply = variant_validator_reply(description)
+    if not fits_as_written(variant_validator_projection(reply)):
+        return None
+    return _derived(reply).get('hgvs_g')
+
+
+def _mismatch(subject: str, reasoning: str, about: str | None) -> ReasoningFlag:
+    return ReasoningFlag(
+        kind=FlagKind.MISMATCH,
+        about=about,
+        flag=ReasoningBlock[str](value=subject, reasoning=reasoning),
+    )
+
+
+def check_harmonized_variant(
+    variant: HarmonizedVariant,
+) -> tuple[HarmonizedVariant, list[ReasoningFlag]]:
+    """The variant with the coordinates VariantValidator derives from its
+    description, and a flag for each value the agent wrote that is not the
+    same change. Unchanged, with no flags, when there is nothing to derive
+    from or VariantValidator cannot be reached."""
+    source_field = 'hgvs_c' if variant.hgvs_c else 'hgvs_g' if variant.hgvs_g else None
+    if source_field is None:
+        return variant, []
+    source: str = getattr(variant, source_field)
+    try:
+        reply = variant_validator_reply(source)
+    except requests.RequestException as e:
+        logger.warning(
+            f'Harmonization check: VariantValidator unreachable for {source}: {e}'
+        )
+        return variant, []
+
+    projection = variant_validator_projection(reply)
+    if not fits_as_written(projection):
+        warnings = '; '.join(projection['validation_warnings']) or 'no mapping'
+        return variant, [
+            _mismatch(
+                f'VariantValidator rejects {source}',
+                f'The harmonized {source_field} {source} was given to VariantValidator, '
+                f'which did not map it as written: {warnings}. The other harmonized '
+                f'fields were not derived from it and are unchecked.',
+                source,
+            )
+        ]
+
+    derived = _derived(reply)
+    if source_field == 'hgvs_g':
+        # VariantValidator answers a g. on its own choice of transcript; only
+        # the genomic values are the agent's change.
+        derived = {k: derived.get(k) for k in ('hgvs_g', 'gnomad_style_coordinates')}
+    flags: list[ReasoningFlag] = []
+
+    def differs_on_genome(written: str, as_hgvs: str | None) -> bool:
+        if written == derived.get('hgvs_g'):
+            return False
+        try:
+            genomic = _genomic_of(as_hgvs) if as_hgvs else None
+        except requests.RequestException:
+            return False  # unchecked rather than flagged
+        return genomic != derived.get('hgvs_g')
+
+    if (
+        source_field == 'hgvs_c'
+        and variant.hgvs_g
+        and derived.get('hgvs_g')
+        and differs_on_genome(variant.hgvs_g, variant.hgvs_g)
+    ):
+        flags.append(
+            _mismatch(
+                f'hgvs_g {variant.hgvs_g} is not {source}',
+                f'VariantValidator places {source} at {derived["hgvs_g"]}; the agent '
+                f'wrote {variant.hgvs_g}, which is a different change or not a valid '
+                f'one. {derived["hgvs_g"]} is stored.',
+                source,
+            )
+        )
+    gnomad = variant.gnomad_style_coordinates
+    if (
+        gnomad
+        and derived.get('gnomad_style_coordinates')
+        and gnomad != derived['gnomad_style_coordinates']
+        and differs_on_genome(gnomad, gnomad_as_hgvs(gnomad))
+    ):
+        flags.append(
+            _mismatch(
+                f'gnomAD coordinates {gnomad} are not {source}',
+                f'VariantValidator gives {derived["gnomad_style_coordinates"]} for '
+                f'{source}; the agent wrote {gnomad}, which is a different change or '
+                f'names bases the genome does not have there. '
+                f'{derived["gnomad_style_coordinates"]} is stored.',
+                source,
+            )
+        )
+    protein = derived.get('hgvs_p')
+    if (
+        variant.hgvs_p
+        and protein
+        and not protein.endswith(('p.?', 'p.(?)'))
+        and not same_protein_change(variant.hgvs_p, protein)
+    ):
+        flags.append(
+            _mismatch(
+                f'hgvs_p {variant.hgvs_p} is not {source}',
+                f'VariantValidator predicts {protein} from {source}; the agent wrote '
+                f'{variant.hgvs_p}. One of the two descriptions was copied wrong. '
+                f'{protein} is stored, since it follows from the stored c.',
+                source,
+            )
+        )
+
+    checked = variant.model_copy(
+        update={k: v for k, v in derived.items() if v is not None}
+    )
+    return checked, flags
+
+
 VARIANT_HARMONIZATION_INSTRUCTIONS = """
 System: You are an expert genomics curator and deterministic variant normalizer.
 
@@ -976,7 +1368,21 @@ Action
         returned as hgvs_c on it. Quote the warning in basis.
 
     4. If projection fails:
-        Retry once with select_canonical_transcript to handle retired versions.
+        Call transcripts_fitting_description(gene, hgvs_c, protein change)
+        once, passing the paper's protein change when there is one (hgvs_p,
+        or one written into the variant string). A paper often numbers a
+        change on a transcript other than the one chosen, or on an older
+        version of it; the tool tries the change, as the paper numbers it, on
+        each coding RefSeq transcript of the gene, and returns the first it
+        fits where the fit is evidence: the change states at least two
+        reference bases, or the protein predicted there is the paper's.
+        - It returns one: continue at step 5 on that transcript, with its
+          gnomad_ids.
+        - It returns none: State 4. Transcripts under fits_without_evidence
+          are not the answer: the change fits them, but would fit a wrong
+          transcript about as often.
+        Say in basis which transcript fitted, or for a rejection the warning
+        VariantValidator gave.
 
     5. If projection succeeds:
         Call allele_registry_resolver using hgvs_c and genome_build.
@@ -1194,6 +1600,7 @@ agent = Agent(
         genomic_accession_for_gene_and_transcript,
         allele_registry_resolver,
         gnomad_style_ids_from_variant_validator,
+        transcripts_fitting_description,
         clinvar_lookup,
         dbsnp_lookup,
     ],

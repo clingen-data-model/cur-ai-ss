@@ -99,6 +99,7 @@ from lib.agents.variant_extraction_agent import (
 )
 from lib.agents.variant_harmonization_agent import (
     VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
+    check_harmonized_variant,
 )
 from lib.agents.variant_harmonization_agent import (
     agent as variant_harmonization_agent,
@@ -172,6 +173,7 @@ from lib.models.flag import (
     ExtractionFlag,
     ExtractionVerificationOutput,
     FlagKind,
+    ReasoningFlag,
 )
 from lib.models.mondo import (
     MondoDiseaseScope,
@@ -1469,6 +1471,16 @@ async def handle_variant_harmonization(task_id: int) -> None:
                     f'VARIANT_HARMONIZATION rate limited: {reasoning_text[:200]}'
                 )
 
+    # The g., gnomAD coordinates and p. are derived by code from the c. the
+    # agent settled on, not taken from what it copied out of tool replies
+    # (check_harmonized_variant); where they differ, a flag says so.
+    check_flags: list[ReasoningFlag] = []
+    if result.final_output and result.final_output.value:
+        checked, check_flags = await asyncio.to_thread(
+            check_harmonized_variant, result.final_output.value
+        )
+        result.final_output.value = checked
+
     # Update DB with results
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -1485,7 +1497,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
             session,
             paper_id=task.paper_id,
             source=TaskType.VARIANT_HARMONIZATION.name,
-            flags=flags_of(result.final_output),
+            flags=[*flags_of(result.final_output), *check_flags],
             scope={'variant_id': variant_id},
         )
 

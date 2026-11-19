@@ -5,17 +5,26 @@ import json
 from pathlib import Path
 
 import pytest
+import requests
 
+import lib.agents.variant_harmonization_agent as harmonization
 from lib.agents.variant_harmonization_agent import (
     VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
     _builds_of_chromosome_accessions,
     _clinvar_records,
+    _coding_transcripts,
     _registry_gnomad_id,
     _registry_protein_hgvs,
     _registry_query,
-    _variant_validator_projection,
+    _stated_reference_bases,
+    check_harmonized_variant,
+    fits_as_written,
+    gnomad_as_hgvs,
+    same_protein_change,
+    variant_validator_projection,
 )
-from lib.models.variant import GenomeBuild
+from lib.models.flag import FlagKind
+from lib.models.variant import GenomeBuild, HarmonizedVariant
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'clinvar_esummary_14879.json'
 
@@ -242,7 +251,7 @@ def test_variant_validator_says_why_it_gave_no_id():
         },
         'metadata': {'variantvalidator_version': '3'},
     }
-    projection = _variant_validator_projection(reply)
+    projection = variant_validator_projection(reply)
     assert projection['gnomad_ids'] == []
     assert [w.split(':')[0] for w in projection['validation_warnings']] == [
         'IntronBaseMismatchWarning',
@@ -265,11 +274,12 @@ def test_variant_validator_ids_keep_their_warnings():
             ],
         },
     }
-    assert _variant_validator_projection(reply) == {
+    assert variant_validator_projection(reply) == {
         'gnomad_ids': ['17-78997907-A-T'],
         'validation_warnings': [
             'NM_138793.4:c.-286+1G>A automapped to NM_138793.4:c.-285T>A'
         ],
+        'predicted_proteins': [],
     }
 
 
@@ -278,3 +288,259 @@ def test_a_rejected_description_is_a_failed_projection():
     state_3 = rules[rules.index('STATE 3') : rules.index('STATE 4')]
     assert 'validation_warnings say why' in state_3
     assert 'not\n        returned as hgvs_c' in state_3
+
+
+def test_every_coding_refseq_transcript_is_tried_in_variantvalidators_order():
+    """gene2transcripts for TSEN2, trimmed: the non-coding NR_ records are
+    left out, every NM_ version is kept."""
+    reply = json.loads(
+        (
+            Path(__file__).parent / 'fixtures' / 'vv_gene2transcripts_tsen2.json'
+        ).read_text()
+    )
+    assert _coding_transcripts(reply) == [
+        'NM_025265.3',
+        'NM_025265.2',
+        'NM_001145393.3',
+        'NM_025265.4',
+    ]
+    assert _coding_transcripts(None) == []
+
+
+@pytest.mark.parametrize(
+    'warning',
+    [
+        'ReferenceMismatchError: NM_022336.4:c.1056T>C: Variant reference (T) does '
+        'not agree with reference sequence (C)',
+        'ExonBoundaryError: Position c.914-5 does not correspond with an exon '
+        'boundary for transcript NM_025265.4',
+        'NM_138793.4:c.-286+1G>A automapped to NM_138793.4:c.-285T>A',
+    ],
+)
+def test_a_description_variantvalidator_changed_or_rejected_does_not_fit(warning):
+    assert not fits_as_written(
+        {'gnomad_ids': ['17-78997907-A-T'], 'validation_warnings': [warning]}
+    )
+
+
+def test_a_mapped_description_fits():
+    assert fits_as_written(
+        {'gnomad_ids': ['3-12516615-T-A'], 'validation_warnings': []}
+    )
+    assert not fits_as_written({'gnomad_ids': [], 'validation_warnings': []})
+
+
+def test_a_rejected_description_is_tried_on_the_genes_other_transcripts():
+    rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
+    state_3 = rules[rules.index('STATE 3') : rules.index('STATE 4')]
+    assert (
+        'Call transcripts_fitting_description(gene, hgvs_c, protein change)' in state_3
+    )
+    assert 'fits_without_evidence' in state_3
+
+
+@pytest.mark.parametrize(
+    'hgvs_c, bases',
+    [
+        ('NM_000039.3:c.251T>G', 1),
+        ('c.547_548delCT', 2),
+        ('c.960+1delGTAAG', 5),
+        ('c.1-33247_787+101071del', 0),
+        ('c.293dup', 0),
+        ('c.154_155delinsTT', 0),
+        ('c.154_155delCCinsTT', 2),
+        ('c.4397_4398insAAT', 0),
+    ],
+)
+def test_stated_reference_bases(hgvs_c, bases):
+    assert _stated_reference_bases(hgvs_c) == bases
+
+
+@pytest.mark.parametrize(
+    'paper, predicted, same',
+    [
+        ('p.Leu84Arg', 'NP_000030.1:p.(Leu84Arg)', True),
+        ('L84R', 'NP_000030.1:p.(Leu84Arg)', True),
+        ('p.Leu84Arg', 'NP_000030.1:p.(Leu84Pro)', False),
+        # legacy numbering: mature protein, 24 residues short
+        ('p.Leu178His', 'NP_000030.1:p.(Leu202His)', False),
+        ('p.Asn98Lysfs*?', 'NP_000030.1:p.(Asn98LysfsTer106)', True),
+        ('p.Y747*', 'NP_001362737.1:p.(Tyr747Ter)', True),
+        ('Ser439fs', 'NP_001362737.1:p.(Ser439TrpfsTer15)', True),
+        ('p.?', 'NP_598397.1:p.?', False),
+    ],
+)
+def test_a_predicted_protein_is_the_papers(paper, predicted, same):
+    assert same_protein_change(paper, predicted) is same
+
+
+# --- the agent's coordinates, derived by code from its description ---------
+
+
+def _vv_record(c, g, vcf, p=None, warnings=()):
+    """One transcript record of a VariantValidator reply, in its shape."""
+    chrom, pos, ref, alt = vcf.split('-')
+    return {
+        'hgvs_transcript_variant': c,
+        'hgvs_predicted_protein_consequence': {'tlr': p} if p else {},
+        'primary_assembly_loci': {
+            'grch38': {
+                'hgvs_genomic_description': g,
+                'vcf': {'chr': chrom, 'pos': pos, 'ref': ref, 'alt': alt},
+            }
+        },
+        'validation_warnings': list(warnings),
+    }
+
+
+def _replay(monkeypatch, replies):
+    """VariantValidator answering from ``replies``, keyed by description."""
+    asked = []
+
+    def reply(description):
+        asked.append(description)
+        return replies[description]
+
+    monkeypatch.setattr(harmonization, 'variant_validator_reply', reply)
+    return asked
+
+
+APOA1_T_TO_C = {
+    'NM_000039.3:c.251T>C': {
+        'NM_000039.3:c.251T>C': _vv_record(
+            'NM_000039.3:c.251T>C',
+            'NC_000011.10:g.116836361A>G',
+            '11-116836361-A-G',
+            'NP_000030.1:p.(Leu84Pro)',
+        )
+    },
+    'NC_000011.10:g.116836361A>C': {
+        'NM_000039.3:c.251T>G': _vv_record(
+            'NM_000039.3:c.251T>G',
+            'NC_000011.10:g.116836361A>C',
+            '11-116836361-A-C',
+            'NP_000030.1:p.(Leu84Arg)',
+        )
+    },
+}
+
+
+def test_fields_copied_from_another_change_are_flagged_and_replaced(monkeypatch):
+    """APOA1 (paper 29): ClinVar's record was c.251T>G, Leu84Arg; the agent
+    wrote c.251T>C with that record's g., gnomAD and p."""
+    _replay(monkeypatch, APOA1_T_TO_C)
+    written = HarmonizedVariant(
+        hgvs_c='NM_000039.3:c.251T>C',
+        hgvs_p='NP_000030.1:p.Leu84Arg',
+        hgvs_g='NC_000011.10:g.116836361A>C',
+        gnomad_style_coordinates='11-116836361-A-C',
+    )
+    checked, flags = check_harmonized_variant(written)
+    assert checked.hgvs_g == 'NC_000011.10:g.116836361A>G'
+    assert checked.gnomad_style_coordinates == '11-116836361-A-G'
+    assert checked.hgvs_p == 'NP_000030.1:p.(Leu84Pro)'
+    assert [f.flag.value.split()[0] for f in flags] == ['hgvs_g', 'gnomAD', 'hgvs_p']
+    assert {f.kind for f in flags} == {FlagKind.MISMATCH}
+
+
+def test_the_same_change_spelled_another_way_is_not_flagged(monkeypatch):
+    """A deletion in a repeat can be written at more than one position; the
+    agent's spelling is sent to VariantValidator, whose normalised g. is
+    compared, so only a different change is flagged."""
+    asked = _replay(
+        monkeypatch,
+        {
+            'NM_001375808.2:c.1456del': {
+                'NM_001375808.2:c.1456del': _vv_record(
+                    'NM_001375808.2:c.1456del',
+                    'NC_000018.10:g.2931256del',
+                    '18-2931254-AC-A',
+                    'NP_001362737.1:p.(Glu486LysfsTer20)',
+                )
+            },
+            'NC_000018.10:g.2931255del': {
+                'NM_001375808.2:c.1456del': _vv_record(
+                    'NM_001375808.2:c.1456del',
+                    'NC_000018.10:g.2931256del',
+                    '18-2931254-AC-A',
+                )
+            },
+        },
+    )
+    written = HarmonizedVariant(
+        hgvs_c='NM_001375808.2:c.1456del',
+        hgvs_p='NP_001362737.1:p.Glu486LysfsTer20',
+        hgvs_g='NC_000018.10:g.2931255del',
+        gnomad_style_coordinates='18-2931254-AC-A',
+    )
+    checked, flags = check_harmonized_variant(written)
+    assert flags == []
+    assert checked.hgvs_g == 'NC_000018.10:g.2931256del'
+    assert asked == ['NM_001375808.2:c.1456del', 'NC_000018.10:g.2931255del']
+
+
+def test_a_rejected_description_keeps_the_agents_values_and_says_why(monkeypatch):
+    _replay(
+        monkeypatch,
+        {
+            'NM_022336.4:c.1056T>C': {
+                'validation_warning_1': {
+                    'validation_warnings': [
+                        'ReferenceMismatchError: NM_022336.4:c.1056T>C: Variant '
+                        'reference (T) does not agree with reference sequence (C)'
+                    ]
+                }
+            }
+        },
+    )
+    written = HarmonizedVariant(hgvs_c='NM_022336.4:c.1056T>C')
+    checked, flags = check_harmonized_variant(written)
+    assert checked == written
+    assert len(flags) == 1
+    assert 'ReferenceMismatchError' in flags[0].flag.reasoning
+
+
+def test_a_splice_change_gets_the_predicted_protein(monkeypatch):
+    """CAMK4 c.387-1G>A: the registry's protein field held
+    NP_001735.1:n.387-1G>A; VariantValidator predicts p.?."""
+    _replay(
+        monkeypatch,
+        {
+            'NM_001744.6:c.387-1G>A': {
+                'NM_001744.6:c.387-1G>A': _vv_record(
+                    'NM_001744.6:c.387-1G>A',
+                    'NC_000005.10:g.111259941G>A',
+                    '5-111259941-G-A',
+                    'NP_001735.1:p.?',
+                )
+            }
+        },
+    )
+    checked, flags = check_harmonized_variant(
+        HarmonizedVariant(hgvs_c='NM_001744.6:c.387-1G>A')
+    )
+    assert checked.hgvs_p == 'NP_001735.1:p.?'
+    assert flags == []
+
+
+def test_an_unreachable_variant_validator_changes_nothing(monkeypatch):
+    def down(description):
+        raise requests.ConnectionError('down')
+
+    monkeypatch.setattr(harmonization, 'variant_validator_reply', down)
+    written = HarmonizedVariant(hgvs_c='NM_000039.3:c.251T>C', hgvs_p='p.Leu84Arg')
+    assert check_harmonized_variant(written) == (written, [])
+
+
+@pytest.mark.parametrize(
+    'coordinates, hgvs',
+    [
+        ('15-44715509-CC-TT', 'NC_000015.10:g.44715509_44715510delCCinsTT'),
+        ('11-116836361-A-C', 'NC_000011.10:g.116836361A>C'),
+        ('2-108910783-CTCTT-C', 'NC_000002.12:g.108910783_108910787delCTCTTinsC'),
+        ('chrX-100-A-AT', 'NC_000023.11:g.100delAinsAT'),
+        ('NC_000008.12:g.106123456A>G', None),
+    ],
+)
+def test_gnomad_coordinates_as_a_description_that_states_its_bases(coordinates, hgvs):
+    assert gnomad_as_hgvs(coordinates) == hgvs
