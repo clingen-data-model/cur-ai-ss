@@ -39,14 +39,18 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  clearOverlay = false,
   ...props
 }: SheetPrimitive.Popup.Props & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
+  /** Leave the page behind undimmed and unblurred (the backdrop is still
+   * there, so a click on the page closes the sheet). */
+  clearOverlay?: boolean
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay className={clearOverlay ? "bg-transparent supports-backdrop-filter:backdrop-blur-none" : undefined} />
       <SheetPrimitive.Popup
         data-slot="sheet-content"
         data-side={side}
