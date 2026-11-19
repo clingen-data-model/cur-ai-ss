@@ -5,9 +5,10 @@ SpliceAI comes from the SpliceAI Lookup when VEP has none."""
 from typing import Any
 
 import pytest
+import requests
 
 from lib.agents import variant_annotation_agent as agent
-from lib.models.variant import AnnotatedVariant, SpliceAI
+from lib.models.variant import AnnotatedVariant, HarmonizedVariant
 
 
 class _Response:
@@ -105,187 +106,107 @@ def test_only_malformed_ids_means_no_search(monkeypatch):
     assert result.pathogenicity is None
 
 
-# --- SpliceAI Lookup fallback -------------------------------------------------
+# gnomAD: "Variant not found" is the only answer that leaves the frequency
+# empty; anything else means gnomAD did not answer, and that fails the task.
 
-# The Lookup's answer for IFT74 c.789+2T>G (chr9-27011970-T-G), trimmed to one
-# MANE Select and one other IFT74 transcript plus a neighbouring gene; delta
-# scores come back as strings.
-_LOOKUP_IFT74 = {
-    'variant': 'chr9-27011970-T-G',
-    'source': 'spliceai:model',
-    'scores': [
-        {
-            'g_name': 'OTHER',
-            't_priority': 'MS',
-            'DS_AG': '0.999',
-            'DS_AL': '0.000',
-            'DS_DG': '0.000',
-            'DS_DL': '0.000',
-            'DP_AG': 1,
-            'DP_AL': 1,
-            'DP_DG': 1,
-            'DP_DL': 1,
-        },
-        {
-            'g_name': 'IFT74',
-            't_priority': 'N',
-            'DS_AG': '0.004',
-            'DS_AL': '0.000',
-            'DS_DG': '0.302',
-            'DS_DL': '0.500',
-            'DP_AG': 152,
-            'DP_AL': -64,
-            'DP_DG': 162,
-            'DP_DL': -2,
-        },
-        {
-            'g_name': 'IFT74',
-            't_priority': 'MS',
-            'DS_AG': '0.004',
-            'DS_AL': '0.000',
-            'DS_DG': '0.302',
-            'DS_DL': '0.998',
-            'DP_AG': 152,
-            'DP_AL': -64,
-            'DP_DG': 162,
-            'DP_DL': -2,
-        },
+
+class _GnomadResponse:
+    def __init__(self, payload: Any = None, status: int = 200) -> None:
+        self._payload = payload
+        self.status = status
+
+    def raise_for_status(self) -> None:
+        if self.status >= 400:
+            raise requests.HTTPError(f'{self.status} Client Error')
+
+    def json(self) -> Any:
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
+
+
+def _gnomad_answers(monkeypatch, response: _GnomadResponse) -> None:
+    class _PostSession:
+        def post(self, url: str, **_: Any) -> _GnomadResponse:
+            return response
+
+    monkeypatch.setattr(agent, '_get_session_with_retries', lambda: _PostSession())
+
+
+def test_gnomad_not_found_is_an_empty_frequency(monkeypatch):
+    _gnomad_answers(
+        monkeypatch,
+        _GnomadResponse(
+            {'errors': [{'message': 'Variant not found'}], 'data': {'variant': None}}
+        ),
+    )
+    result = agent.gnomad_lookup('9-27011970-T-G')
+    assert result.gnomad_top_level_af is None
+    assert result.gnomad_an is None
+
+
+def test_gnomad_answer_is_read(monkeypatch):
+    _gnomad_answers(
+        monkeypatch,
+        _GnomadResponse(
+            {
+                'data': {
+                    'variant': {'joint': {'ac': 10, 'an': 1579274, 'populations': []}}
+                }
+            }
+        ),
+    )
+    result = agent.gnomad_lookup('9-27011970-T-G')
+    assert result.gnomad_ac == 10
+    assert result.gnomad_top_level_af == pytest.approx(10 / 1579274)
+
+
+@pytest.mark.parametrize(
+    'response',
+    [
+        # Under load gnomAD has answered ordinary variants with a 400.
+        _GnomadResponse(status=400),
+        _GnomadResponse(status=503),
+        _GnomadResponse({'errors': [{'message': 'Rate limit exceeded'}]}),
+        _GnomadResponse(ValueError('Expecting value')),
     ],
-}
+    ids=['http-400', 'http-503', 'other-graphql-error', 'unreadable-json'],
+)
+def test_gnomad_failure_raises(monkeypatch, response):
+    _gnomad_answers(monkeypatch, response)
+    with pytest.raises(agent.GnomadLookupError):
+        agent.gnomad_lookup('9-27011970-T-G')
 
 
-def _lookup_session(monkeypatch, payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Answers every GET with payload and records the params it was sent."""
-    calls: list[dict[str, Any]] = []
+def test_gnomad_failure_fails_the_batch(monkeypatch):
+    def fail(_coordinates: str) -> AnnotatedVariant:
+        raise agent.GnomadLookupError('gnomAD lookup failed')
 
-    class Session:
-        def get(self, url: str, **kwargs: Any) -> _Response:
-            calls.append({'url': url, **kwargs.get('params', {})})
-            return _Response(payload)
-
-    monkeypatch.setattr(agent, '_get_session_with_retries', Session)
-    return calls
-
-
-def test_lookup_reads_the_curated_genes_mane_transcript(monkeypatch):
-    calls = _lookup_session(monkeypatch, _LOOKUP_IFT74)
-
-    result = agent.spliceai_lookup('9-27011970-T-G', 'IFT74')
-
-    assert result is not None
-    assert result.max_score == pytest.approx(0.998)
-    assert result.effect_type == 'DS_DL'
-    assert result.position == -2
-    # Same 50 bp window as VEP's precomputed scores, chr-prefixed coordinates.
-    assert calls[0]['variant'] == 'chr9-27011970-T-G'
-    assert calls[0]['distance'] == 50
-
-
-def test_lookup_error_or_no_scores_is_none(monkeypatch):
-    _lookup_session(monkeypatch, {'error': 'unable to parse variant'})
-    assert agent.spliceai_lookup('9-1-A-AT', 'IFT74') is None
-
-    _lookup_session(monkeypatch, {'scores': []})
-    assert agent.spliceai_lookup('9-1-A-T', 'IFT74') is None
-
-
-def test_lookup_failure_is_none(monkeypatch):
-    class Session:
-        def get(self, url: str, **_: Any) -> _Response:
-            raise agent.requests.exceptions.ConnectionError('refused')
-
-    monkeypatch.setattr(agent, '_get_session_with_retries', Session)
-
-    assert agent.spliceai_lookup('9-27011970-T-G', 'IFT74') is None
-
-
-def _vep(spliceai: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """A VEP answer for the IFT74 variant, with or without a SpliceAI score."""
-    tx: dict[str, Any] = {
-        'gene_symbol': 'IFT74',
-        'mane_select': 'NM_025103.4',
-        'impact': 'HIGH',
-        'consequence_terms': ['splice_donor_variant'],
-    }
-    if spliceai is not None:
-        tx['spliceai'] = spliceai
-    return [{'transcript_consequences': [tx]}]
-
-
-def _vep_session(monkeypatch, answer: Any) -> list[str]:
-    """VEP gives answer (an exception is raised); records the coordinates the
-    Lookup is asked for."""
-    asked: list[str] = []
-
-    class Session:
-        def get(self, url: str, **_: Any) -> _Response:
-            if isinstance(answer, Exception):
-                raise answer
-            return _Response(answer)
-
-    def lookup(coords: str, gene: str) -> SpliceAI:
-        asked.append(coords)
-        return SpliceAI(max_score=0.998, effect_type='DS_DL', position=-2)
-
-    monkeypatch.setattr(agent, '_get_session_with_retries', Session)
-    monkeypatch.setattr(agent, 'spliceai_lookup', lookup)
-    return asked
-
-
-def _vep_lookup() -> AnnotatedVariant:
-    return agent.vep_lookup(
-        None, 'NC_000009.12:g.27011970T>G', None, 'IFT74', '9-27011970-T-G'
+    monkeypatch.setattr(agent, 'gnomad_lookup', fail)
+    monkeypatch.setattr(agent, 'clinvar_lookup', lambda *_: AnnotatedVariant())
+    monkeypatch.setattr(agent, 'vep_lookup', lambda *_: AnnotatedVariant())
+    hv = HarmonizedVariant(
+        gnomad_style_coordinates='9-27011970-T-G', hgvs_c='NM_025103.4:c.789+2T>G'
     )
+    with pytest.raises(agent.GnomadLookupError):
+        agent.enrich_variants_batch([hv], 'IFT74')
 
 
-def test_vep_answer_without_spliceai_asks_the_lookup(monkeypatch):
-    asked = _vep_session(monkeypatch, _vep(None))
+def test_other_source_failure_still_soft(monkeypatch):
+    def fail(*_: Any) -> AnnotatedVariant:
+        raise RuntimeError('VEP down')
 
-    result = _vep_lookup()
-
-    assert asked == ['9-27011970-T-G']
-    assert result.spliceai is not None
-    assert result.spliceai.max_score == pytest.approx(0.998)
-    assert result.vep_consequence == 'splice_donor_variant'
-
-
-def test_vep_spliceai_is_kept_without_asking_the_lookup(monkeypatch):
-    asked = _vep_session(
-        monkeypatch, _vep({'DS_AG': 0.95, 'DS_AL': 0.97, 'DP_AG': 8, 'DP_AL': 2})
+    monkeypatch.setattr(
+        agent,
+        'gnomad_lookup',
+        lambda c: AnnotatedVariant(
+            gnomad_style_coordinates=c, gnomad_an=2, gnomad_ac=1
+        ),
     )
-
-    result = _vep_lookup()
-
-    assert asked == []
-    assert result.spliceai is not None
-    assert result.spliceai.effect_type == 'DS_AL'
-
-
-def test_vep_failure_does_not_ask_the_lookup(monkeypatch):
-    """Only a VEP answer lacking SpliceAI sends a variant to the Lookup, whose
-    public API is rate-limited; a VEP error leaves SpliceAI empty."""
-    asked = _vep_session(
-        monkeypatch, agent.requests.exceptions.ConnectionError('refused')
+    monkeypatch.setattr(agent, 'clinvar_lookup', lambda *_: AnnotatedVariant())
+    monkeypatch.setattr(agent, 'vep_lookup', fail)
+    hv = HarmonizedVariant(
+        gnomad_style_coordinates='9-27011970-T-G', hgvs_c='NM_025103.4:c.789+2T>G'
     )
-
-    result = _vep_lookup()
-
-    assert asked == []
-    assert result.spliceai is None
-
-
-def test_no_coordinates_no_lookup(monkeypatch):
-    asked = _vep_session(monkeypatch, _vep(None))
-
-    result = agent.vep_lookup(None, 'NC_000009.12:g.27011970T>G', None, 'IFT74')
-
-    assert asked == []
-    assert result.spliceai is None
-
-
-def test_from_raw_reads_string_scores():
-    result = SpliceAI.from_raw({'DS_AG': '0.004', 'DS_DL': '0.998', 'DP_DL': -2})
-
-    assert result.max_score == pytest.approx(0.998)
-    assert result.effect_type == 'DS_DL'
-    assert result.position == -2
+    [result] = agent.enrich_variants_batch([hv], 'IFT74')
+    assert result.gnomad_an == 2

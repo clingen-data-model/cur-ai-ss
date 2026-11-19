@@ -20,6 +20,27 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
+# gnomAD's answer for a variant it has no record of: the one GraphQL error
+# that means "absent", so the frequency is left empty. Any other error, an
+# HTTP error or an unreadable reply means the question went unanswered.
+GNOMAD_NOT_FOUND = 'Variant not found'
+
+
+class GnomadLookupError(RuntimeError):
+    """gnomAD did not answer, as opposed to answering that it has no record.
+
+    Raised out of the annotation task so the worker retries it and, if gnomAD
+    keeps failing, marks it Failed. Until 2026-11 a failure was logged and the
+    variant stored with no frequency, which the curation deck prints as
+    "gnomAD: MISSING", a claim that the variant is absent. Two bulk
+    re-annotations (2026-09-18, 2026-10-15) lost the frequencies of variants
+    gnomAD does have that way (IFT74 c.789+2T>G, paper 90, among them): under
+    sustained load gnomAD answered some requests with HTTP 400, which the
+    session's retry list does not cover, and the same coordinates gave a
+    normal answer when asked again later.
+    """
+
+
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
 VEP_BASE = 'https://rest.ensembl.org'
 # The SpliceAI Lookup's public GRCh38 SpliceAI API, as documented in the
@@ -378,17 +399,22 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
         r.raise_for_status()
         payload = r.json()
     except requests.exceptions.RequestException as e:
-        logger.error(f'gnomAD lookup failed for {gnomad_style_coordinates}: {e}')
-        return result_variant
+        raise GnomadLookupError(
+            f'gnomAD lookup failed for {gnomad_style_coordinates}: {e}'
+        ) from e
     except ValueError as e:
-        logger.error(f'gnomAD JSON parse failed for {gnomad_style_coordinates}: {e}')
-        return result_variant
+        raise GnomadLookupError(
+            f'gnomAD answered {gnomad_style_coordinates} with unreadable JSON: {e}'
+        ) from e
 
-    if 'errors' in payload:
-        logger.error(
-            f'gnomAD GraphQL error for {gnomad_style_coordinates}: {payload["errors"]}'
+    errors = payload.get('errors')
+    if errors:
+        if all(e.get('message') == GNOMAD_NOT_FOUND for e in errors):
+            logger.info(f'{gnomad_style_coordinates} is not in gnomAD')
+            return result_variant
+        raise GnomadLookupError(
+            f'gnomAD GraphQL error for {gnomad_style_coordinates}: {errors}'
         )
-        return result_variant
 
     variant = payload.get('data', {}).get('variant')
     if not variant:
@@ -490,6 +516,9 @@ def enrich_variant(hv: HarmonizedVariant, gene_symbol: str) -> AnnotatedVariant:
                 result = future.result()
                 if isinstance(result, AnnotatedVariant):
                     results.append(result)
+            except GnomadLookupError:
+                # Fails the task rather than storing no frequency; see the class.
+                raise
             except Exception as e:
                 # Fail-soft: log individual tool failure
                 variant_id = (
@@ -523,6 +552,8 @@ def enrich_variants_batch(
         try:
             annotated = enrich_variant(hv, gene_symbol)
             results.append(annotated)
+        except GnomadLookupError:
+            raise
         except Exception as e:
             logger.exception(f'Failed to enrich variant: {e}')
 

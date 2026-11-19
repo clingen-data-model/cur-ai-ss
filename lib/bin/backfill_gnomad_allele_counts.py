@@ -22,7 +22,7 @@ import argparse
 import sys
 import time
 
-from lib.agents.variant_annotation_agent import gnomad_lookup
+from lib.agents.variant_annotation_agent import GnomadLookupError, gnomad_lookup
 from lib.api.db import session_scope
 from lib.models import AnnotatedVariantDB
 
@@ -46,13 +46,20 @@ def backfill(refresh_all: bool = False, dry_run: bool = False) -> None:
         print(f'Backfilling gnomAD allele counts for {len(rows)} annotated variants.')
 
         updated = 0
+        failed = 0
         for index, row in enumerate(rows):
             if index:
                 time.sleep(REQUEST_INTERVAL_SECONDS)
 
             coordinates = row.gnomad_style_coordinates
             assert coordinates is not None  # guaranteed by the query filter
-            result = gnomad_lookup(coordinates)
+            try:
+                result = gnomad_lookup(coordinates)
+            except GnomadLookupError as e:
+                # Left as it was, so a later run asks again.
+                print(f'  variant {row.variant_id} ({coordinates}): {e}')
+                failed += 1
+                continue
 
             if result.gnomad_an is None:
                 print(f'  variant {row.variant_id} ({coordinates}): no gnomAD data')
@@ -90,6 +97,8 @@ def backfill(refresh_all: bool = False, dry_run: bool = False) -> None:
             print(f'Dry run: {len(rows)} variants queried, nothing written.')
         else:
             print(f'Updated {updated} annotated variants.')
+        if failed:
+            print(f'gnomAD did not answer for {failed}; re-run to retry them.')
 
 
 if __name__ == '__main__':
