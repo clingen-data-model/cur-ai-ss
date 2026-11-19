@@ -1161,6 +1161,12 @@ def check_harmonized_variant(
     return checked, flags
 
 
+# EVERY NOTATION THE PAPER GIVES: until 2026-11-19 the state machine returned
+# from the first state that resolved, so a paper's other notations were never
+# looked at. IFT74 (paper 90, variant 1205) gave c.305+1664delG and a table
+# g.26982820delG, a digit swap of the text's g.26982280delG; State 1 took the
+# g. and stored c.306-1437del, 537 bp away, and the check after the agent
+# (check_harmonized_variant) found it consistent with itself.
 VARIANT_HARMONIZATION_INSTRUCTIONS = """
 System: You are an expert genomics curator and deterministic variant normalizer.
 
@@ -1174,15 +1180,40 @@ You should not need to call genomic_accession_for_gene_and_transcript more than 
 After allele_registry_resolver, you may call gnomad_style_ids_from_variant_validator once if needed to derive gnomad-style coordinates.
 The pipeline MUST terminate after allele_registry_resolver (and optionally the follow-up VariantValidator call for gnomad coordinates),
 unless the consequence check of State 3 rejects what the registry returned; then the next numbering candidate, or State 4, follows.
+That rule is for each notation the paper gives: when it gives more than one,
+each is resolved in turn and the run ends at State 6 (EVERY NOTATION THE PAPER
+GIVES, below).
 
 Goal:
 Normalize the provided variant to a GRCh38 gnomAD-style identifier and resolve via
 allele_registry_resolver as the final step whenever possible.
 
 If VariantValidator successfully produces a gnomAD-style ID at any stage:
-    - This defines the canonical genomic representation.
+    - This defines the canonical genomic representation of that notation.
     - Proceed directly to the allele_registry_resolver.
     - No further discovery steps (including ClinVar or dbSNP lookup) are allowed.
+
+============================================================
+EVERY NOTATION THE PAPER GIVES
+============================================================
+
+A paper often gives one variant in several notations -- a c. change, a g.
+change or genomic coordinates, an rsID or CAID -- and any of them can be
+wrong: a digit swapped in a genomic position, a position on a build the paper
+does not name, an identifier copied from a neighbouring row. A notation is
+evidence for the variant only as far as the others agree with it, so each one
+in the input is resolved on its own, by the state that handles it:
+    - genomic_coordinates or hgvs_g: State 1
+    - rsid or caid: State 2
+    - hgvs_c: State 3
+hgvs_p is not resolved on its own: it is what State 3's consequence check and
+the reconciliation in State 6 test the others against.
+
+In States 1 to 3, RETURN means that state's notation is resolved. When the
+input holds a notation not yet resolved, go on to its state instead of
+returning; the run returns once, from State 6, after reconciling. A notation
+that does not resolve is recorded as such and does not stop the others.
+State 4 is entered only when none of them resolved.
 
 ============================================================
 STATE 0 — INITIAL DATA ASSESSMENT
@@ -1523,6 +1554,21 @@ After allele_registry_resolver returns:
 STATE 6 — FINALIZATION
 ============================================================
 
+Reconcile first, when more than one notation resolved. Compare where each
+landed -- the GRCh38 gnomAD-style ID or normalised g., not the spelling:
+    - All agree: that is the allele.
+    - A genomic form disagrees and genome_build was not stated: resolve it
+      once on the other build. If it then agrees, it is the same allele, given
+      on that build; say so in basis, and it is not a conflict.
+    - They still disagree: keep the allele most of the notations agree on.
+      When that does not decide it, keep the c. change if its predicted
+      protein change is the paper's hgvs_p or there is no hgvs_p, since a
+      genomic position is the form a paper most often mistypes; otherwise
+      keep the genomic form. Every returned field describes the kept allele,
+      so an rsID or CAID found only for another one is dropped. Raise a
+      conflict flag naming each notation, where it resolved, and which was
+      kept and why.
+
 Return a single harmonized variant object with:
 - basis (clear human-readable summary)
 - allele_registry_resolver fields if available: rsid, caid, hgvs_c, hgvs_g, hgvs_p
@@ -1552,6 +1598,7 @@ BASIS REQUIREMENT
 - Short declarative sentences, numerically ordered.
 - Lead with which resolution path was taken and why (e.g., "No genomic coordinates or rsID provided, so resolved via transcript HGVS (State 3)" or "rsID present — resolved directly via identifier lookup (State 2)"). This gives the curator an immediate sense of the harmonization approach.
 - Then describe what happened at each step: which states were entered, why each was entered or skipped, and what was found.
+- When the paper gave several notations, say where each resolved and whether they agreed.
 - Include the specific identifiers and terms you searched for (e.g., "Searched ClinVar for 'BRCA1 Arg175His'").
 - Mention which databases and tools you consulted and what they returned (e.g., "Called VariantValidator with NM_007294.4:c.524G>A — returned gnomAD ID 17-41246481-C-T").
 - Mention canonical transcript selection if it occurred (e.g., "Selected NM_007294.4 as canonical transcript for BRCA1").
