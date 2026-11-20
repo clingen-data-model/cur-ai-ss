@@ -1,199 +1,113 @@
 # Writing Agents for the Extraction Pipeline
 
-Agents use the `openai_agents` library to perform structured extraction with step-by-step reasoning. Each agent defines tools, detailed instructions, and a Pydantic output model.
+An agent is an `agents.Agent` (the `openai-agents` package) with a Pydantic output model. A task handler in `lib/tasks/handlers.py` runs it and writes the result to the database. `lib/agents/paper_classifier_agent.py` and `handle_paper_classifier` are the smallest complete pair. `lib/agents/hpo_linking_agent.py` shows an agent with tools.
 
-## Agent Structure
+## Adding an agent
 
-```python
-from openai_agents import Agent, function_tool
-from pydantic import BaseModel, Field
-from lib.core.environment import env
+1. **The agent** goes in `lib/agents/<name>_agent.py`:
 
-@function_tool
-def my_tool(param: str) -> dict:
-    """Tool description (LLM reads this docstring)."""
-    return result
+   ```python
+   from agents import Agent
 
-class MyOutput(BaseModel):
-    field: str = Field(description="Output description")
+   from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+   from lib.agents.model_facing import model_facing_output
+   from lib.agents.model_factory import extraction_model, extraction_model_settings
 
-INSTRUCTIONS = """
-You are an expert at [task].
+   MY_AGENT_INSTRUCTIONS = """..."""  # the task prompt, sent by the handler (below)
 
-INPUT: [describe what the agent receives]
-OUTPUT: Return MyOutput with [describe what to extract]
+   agent = Agent(
+       name='my_agent',
+       instructions=BASE_SYSTEM_INSTRUCTIONS,
+       model=extraction_model(),
+       model_settings=extraction_model_settings(),
+       output_type=model_facing_output(MyOutput),
+   )
+   ```
 
-PROCESS
-1. [First step]
-2. [Second step — use my_tool when...]
-3. [Final step]
+   - `instructions` is the shared one-line system prompt. The task prompt goes in a constant that the handler sends as an input item, so the prompt cache can reuse it (see "Sending the paper").
+   - Pick the model with a factory in `lib/agents/model_factory.py`:
+     - `extraction_model()` for agents that read the paper;
+     - `linking_model()` for the many small ontology-linking calls;
+     - `vlm_model()` for vision.
+   - Model names are `<provider>/<model>`, configured in `lib/core/environment.py`.
 
-EXAMPLES
-Input: [example] → Output: [example]
+2. **The task.** Add a `TaskType` (with its `label` and description) and its edges in `TASK_SUCCESSORS`, both in `lib/tasks/models.py`. A task scoped to a patient, family, variant, phenotype or occurrence also needs its `scope_column`.
 
-EDGE CASES
-- When [condition], do [action]
-"""
+3. **The handler.** Add an `async def handle_<name>(task_id: int) -> None` in `lib/tasks/handlers.py` and register it in `TASK_HANDLERS`. The pattern, from `handle_paper_classifier`:
+   1. Read the task (its `additional_context`, `context_origin` and `budget_model`) and the rows it needs inside `session_scope()`.
+   2. Get `agent_session(task_id)`. Use `continues_conversation` to decide between a follow-up (`build_followup_prompt`) and a fresh first message (`clear_session`, then `paper_input(...)`, then `with_curator_note(...)`).
+   3. Run `agent_on_tier(agent, budget_model)`, so a quick run uses `EXTRACTION_BUDGET_MODEL`:
+      - with `run_with_checked_output(..., citation_check(paper_id))` when the output carries evidence;
+      - otherwise with `Runner.run`;
+      - with `run_with_manual_output` when the schema is too big for the provider (see "Schema limits").
+   4. Call `log_run_metrics`, then write the output inside `session_scope()` through a converter in `lib/models/converters.py` (`*_to_db`). Then call `replace_flags` if the agent raises flags.
 
-agent = Agent(
-    name='my_agent',
-    instructions=INSTRUCTIONS,
-    model=extraction_model(),  # from lib.agents.model_factory
-    output_type=MyOutput,
-    tools=[my_tool],
-)
-```
+4. **Storage.** Add the model in `lib/models/`, an alembic migration (read the migration rules in CLAUDE.md first), the API fields, and the UI.
 
-## Key Components
+## Instructions
 
-### Tools (`@function_tool`)
+Write the task prompt as sections: the task, INPUT, OUTPUT, PROCESS (numbered steps naming the tools to use and when), EXAMPLES, EDGE CASES (negation, missing data, conflicts).
+- Write "basis" wherever the prompt means reasoning (see below).
+- Keep prompts generic. The paper that motivated a rule (its gene, PMID or phrasing) goes in a code comment, never in the prompt.
+- Field descriptions and enums or `Literal` types in the output model steer the model as much as the prose does.
 
-- **Type hints required** for all parameters and return value
-- **Docstring is critical** — the LLM reads it to understand when to use the tool
-- **Return structured data** (dict, list, BaseModel) — never raw strings
-- **One tool per logical action** — avoid mega-tools
+Tools (`@function_tool`) need full type hints. The model reads the docstring to decide when to call a tool, so write it for that. Return structured data, and give each tool one action.
 
-```python
-@function_tool
-def search_database(query: str, limit: int = 10) -> list[dict]:
-    """Search database, return list of {id, name, score}."""
-    return [{'id': r.id, 'name': r.name, 'score': r.score} for r in db.search(query, limit)]
-```
+## Evidence and citations
 
-### Instructions
+Any extracted value a curator will check goes in an `EvidenceBlock` (`lib/models/evidence_block.py`): `value`, `reasoning`, and `citations`, a list of `{anchor, quote}`.
 
-The prompt string should have these sections:
+- **The model never sees the word `reasoning`.** `lib/agents/model_facing.py` presents the field as `basis` in every output schema and maps it back on the reply. Wrap an agent's `output_type` in `model_facing_output(...)`; the manual-output path does this itself. Prompt prose says "basis" too, and `test_no_agent_prose_asks_for_reasoning` checks it. Otherwise Anthropic's `reasoning_extraction` classifier cuts Sonnet and Opus off mid-answer.
+- **What the agent reads** is the anchored document (`lib/misc/pdf/anchors.py`):
+  - each paragraph is prefixed `[paragraph-N]`;
+  - each table `[table-N]`, with an `anchor` column of `table-N-row-R` ids;
+  - each figure `[figure-N]`;
+  - supplement ids start with `supp-`.
+- **How it cites:** it copies an id as printed and gives the shortest exact span of that block that supports the value. For a table row that is the cell's text; for a figure, no quote.
+- **The contract** is `CORE_EXTRACTION_SPEC` (`lib/agents/core_extraction_rules.py`). Append it to any prompt that produces evidence blocks.
+- **The citation check.** The schema can't check that a cited id exists or that a quote is in its block, so the handler passes `citation_check(paper_id)`. `verify_citations` raises with one line per bad citation, and the runner sends that back to the model as a repair turn in the same session. After three failed attempts the task fails, so nothing with unverified evidence is stored.
 
-- **Task description** — what you want extracted
-- **INPUT** — what data the agent receives
-- **OUTPUT** — fields to return with descriptions
-- **PROCESS** — numbered steps; mention which tools to use and when
-- **EXAMPLES** — one or two concrete examples
-- **EDGE CASES** — how to handle negation, missing data, conflicts, etc.
+## Schema limits
 
-Keep instructions explicit and specific. Don't assume the LLM will infer.
+Anthropic limits output schemas in two ways:
+- A dereferenced schema may have at most 16 union/nullable nodes.
+- Above that, a schema whose compiled grammar is too large is refused. This limit is undocumented: roughly 20 objects, and each `EvidenceBlock` counts as two once `Citation` is inlined.
 
-### Output Model
+`test/agents/test_output_schema_census.py` fails if an agent's schema goes over the union limit. It also pins which agents run without a native schema. Variant extraction and demographics use `output_type=None` and `run_with_manual_output` (`lib/agents/manual_output.py`), which puts the schema in the prompt and validates the reply client-side. Keep both limits in mind when adding fields to an output model.
 
-A Pydantic model that defines the agent's return structure. OpenAI uses this as a JSON schema:
+## Flags
 
-```python
-class MyOutput(BaseModel):
-    field1: str = Field(description="What this contains")
-    field2: int | None = Field(default=None, description="Optional field")
-    nested: NestedModel = Field(description="Complex field")
-```
+A decision a curator should look at but the output can't show goes in a `flags` list on the output model (`lib/models/flag.py`). Examples are something left out under a rule, or a call the paper leaves open.
 
-### Evidence and citations
+- **Types:**
+  - `ExtractionFlag`, an evidence block, for agents that read the paper;
+  - `ReasoningFlag`, a reasoning block, for lookup agents with nothing to cite;
+  - an agent whose whole output is one `ReasoningBlock` returns a `FlaggedReasoningBlock` instead.
+- **`kind`** is one of the closed `FlagKind` list: excluded, conflict, ambiguous, inferred, unresolved, mismatch. A prompt's FLAGS section says which kinds that task may raise. A decision that fits none of them is not a flag.
+- **`about`** is the identifier of the thing the flag concerns, or null.
+- **`FLAG_RULES`** (`lib/agents/core_extraction_rules.py`) states the rule once. It is inside `CORE_EXTRACTION_SPEC` for the paper-reading agents and appended directly by the lookup agents. A prompt adds at most a few task-specific examples.
+- **The handler** calls `replace_flags` (`lib/tasks/flags.py`) after writing its rows. It passes the task's scope and a resolver that turns `about` into the row it just wrote. A flag about a compound-het pair links both occurrences (`occurrence_id`, `paired_occurrence_id`).
+- **Endpoints:**
+  - `/papers/{id}/flags` lists them;
+  - its `/resolve` child resolves a flag, once and for good;
+  - `/rerun` queues the raising agent again for its scope, with the curator's note as follow-up context, which replaces the flag with whatever the agent raises next.
 
-Any extracted value a curator will check goes in an `EvidenceBlock` (`lib/models/evidence_block.py`):
-`value`, `reasoning`, and `citations`, a list of `{anchor, quote}`. The model never sees the
-word `reasoning`: `lib/agents/model_facing.py` presents the field as `basis` in every output
-schema (wrap an agent's `output_type` in `model_facing_output(...)`; the manual-output path
-does it itself) and maps it back on the reply, and prompt prose says "basis" too
-(`test_no_agent_prose_asks_for_reasoning`). Anthropic's `reasoning_extraction` classifier
-otherwise cuts Sonnet and Opus off mid-answer. The text agents read is
-the anchored document (`lib/misc/pdf/anchors.py`): every paragraph is prefixed
-`[paragraph-N]`, every table `[table-N]` with an `anchor` column of `table-N-row-R` ids, every
-figure `[figure-N]`; supplement ids start with `supp-`. An agent cites by copying an id as
-printed and giving the shortest verbatim span of that block that supports the value (a
-table cell's text for a row citation, nothing for a figure).
+The per-entity agents run concurrently and each sees only its own scope, so one decision is often flagged several times in different words. Two examples: a country inferred from the study site gets flagged once per relative; a label that differs from the pedigree gets flagged by patient extraction and again by demographics.
 
-Append `CORE_EXTRACTION_SPEC` (`lib/agents/core_extraction_rules.py`) to any prompt that
-produces evidence blocks; it states the contract once. The schema cannot check that a
-cited id exists or that a quote is really in its block, so the handler passes
-`citation_check(paper_id)` (`lib/tasks/handlers.py`) to the runner: `verify_citations`
-(`lib/models/evidence_block.py`) raises with one line per bad citation, and the runner
-sends that message back to the model as a repair turn in the same session, up to three
-attempts, before the task fails. Nothing with unverified evidence is stored.
+Extraction Verification is the pipeline's last task (`lib/agents/extraction_verification_agent.py`, `lib/tasks/extraction_verification.py`). It folds each repeated decision into its earliest flag:
+- the absorbed flags are deleted;
+- their agent, row and subject are appended to the surviving flag's reasoning;
+- the survivor keeps only the links the group agreed on: the family when the patients differ but share one, nothing when they don't.
 
-Anthropic caps a dereferenced output schema at 16 union/nullable nodes and, above that,
-refuses one whose compiled grammar is too large (undocumented; roughly 20 objects, and every
-`EvidenceBlock` is two objects once `Citation` is inlined). `test/agents/test_output_schema_census.py`
-fails if any agent's schema crosses the union limit and pins which agents run without a
-native schema: variant extraction and demographics, whose schemas the grammar compiler
-refuses, use `output_type=None` and `run_with_manual_output` (`lib/agents/manual_output.py`),
-which puts the schema in the prompt and validates the reply client-side. Every other agent
-passes its `output_type` to the runner; the ones whose handler passes `citation_check` get
-the same repair loop from `run_with_checked_output`. Keep both limits in mind when adding
-fields to an output model.
+The worker queues it whenever a paper settles, so an agent's prompt never needs to know what another agent flagged.
 
-### Flags
+## Sending the paper
 
-A decision a curator should look at but the output cannot show -- something left out
-under a rule, a call the paper leaves open -- goes in a `flags` list on the output model
-(`lib/models/flag.py`): `ExtractionFlag` (an evidence block, for agents that read the
-paper) or `ReasoningFlag` (a reasoning block, for the lookup agents with nothing to
-cite); an agent whose whole output is one `ReasoningBlock` returns a
-`FlaggedReasoningBlock` instead. Each flag's `kind` is one of the closed `FlagKind`
-list (excluded, conflict, ambiguous, inferred, unresolved, mismatch); a prompt's FLAGS
-section says which kinds that task may raise, and a decision that fits none is not a
-flag. Each flag's `about` is the identifier of the thing it concerns, or null. `FLAG_RULES` (`lib/agents/core_extraction_rules.py`) states the rule
-once -- inside `CORE_EXTRACTION_SPEC` for the paper-reading agents, appended directly by
-the lookup agents -- and a prompt adds at most a few task-specific examples. The handler
-calls `replace_flags` (`lib/tasks/flags.py`) after writing its rows, with the task's
-scope (the patient, family, variant, phenotype or occurrence a per-entity task ran for)
-and a resolver that turns `about` into the row it just wrote; a flag about a compound-het
-pair links both occurrences (`occurrence_id`, `paired_occurrence_id`). Flags are listed
-through `/papers/{id}/flags`, resolved, once and for good, through its `/resolve` child,
-and `/rerun` queues the raising agent again for its scope (`TaskType.scope_column`) with
-the curator's note as follow-up context -- which replaces the flag with whatever the
-agent raises next.
+Send the paper through `paper_input(format_paper_context(markdown, gene_symbol), INSTRUCTIONS, task_data)`, never inlined into the task text. It gives the runner three input items in this order:
+1. the paper block: the paper plus the gene, the same bytes for every agent;
+2. the agent's instruction constant: the same bytes for every run of that agent;
+3. this run's data (patient JSON, variants JSON, ...). Omit `task_data` for an agent that reads only the paper.
 
-The per-entity agents run concurrently and see only their own scope, so one decision is
-often flagged several times in different words (a country inferred from the study site,
-once per relative; a label that differs from the pedigree, once by patient extraction
-and once by demographics). Extraction verification (`lib/agents/extraction_verification_agent.py`,
-`lib/tasks/extraction_verification.py`), the pipeline's last task, reads every open flag
-on the paper and folds each repeated decision into its earliest flag: the absorbed
-flags are deleted, their agent, row and subject appended to the survivor's reasoning,
-and the survivor keeps only the links the group agreed on -- a family when the patients
-differ but share one, nothing when they do not. The worker queues it whenever a paper
-settles, including after a single re-run, so an agent's prompt does not need to know
-what another agent flagged.
+Get the markdown from `paper_text`, which inserts each figure description under its figure id.
 
-## Calling an Agent
-
-```python
-from lib.agents.my_agent import agent
-from lib.models.converters import convert_to_db_model
-
-result = agent.run(pdf_markdown=content, paper_id=paper_id)
-
-# Save to database
-db_entry = convert_to_db_model(result)
-session.add(db_entry)
-session.commit()
-```
-
-Agents are invoked from `lib/bin/worker.py` as part of the extraction pipeline.
-
-**Send the paper through `paper_input`** (`lib/tasks/handlers.py`), never inlined into
-the task text: `paper_input(format_paper_context(markdown, gene_symbol), INSTRUCTIONS,
-task_data)` gives the runner three input items in this order: the paper block (paper
-plus gene, byte-identical across agents; get the markdown from `paper_text`, which
-splices every figure description in under its figure id), the agent's instruction
-constant (byte-identical across runs of that agent), and last the data for this run
-(patient JSON, variants JSON, ...). Omit `task_data` for an agent that reads the paper
-alone. The prompt-cache
-breakpoints in `lib/agents/model_factory.py` target those items by position, so every
-agent on a paper reads the paper block the first one wrote, and every run of one agent
-reads its instructions after the first, instead of re-sending ~25k tokens of paper and
-~10k of instructions each call. Write instructions to match the order: the paper is
-"above", the run's data "below". `Runner.run` and `run_with_checked_output` both accept
-the list.
-
-## Tips
-
-- **Field descriptions matter** — the LLM uses them to understand the schema
-- **Examples in instructions** should show the exact output format you want
-- **Docstrings are critical** — tool docstrings appear in the agent's reasoning; unclear ones hurt tool usage
-- **Use Optional/None** for fields that might not exist
-- **Use enum** or literal types to constrain values
-
-## Reference
-
-- **Full example:** See `lib/agents/hpo_linking_agent.py` for a complete agent with multiple tools and edge-case handling
-- **Paper files:** `lib/misc/pdf/paths.py` has the path builders for everything kept per paper (`documents/<id>/`: the upload, anchored text, table and figure images)
-- **Database conversion:** `lib/models/converters.py` converts agent outputs to database models
-- **Config:** `lib/core/environment.py` provides `EXTRACTION_MODEL` / `VLM_MODEL` ('<provider>/<model>' names, prefix required, e.g. `openai/gpt-5.6-luna`) plus `OPENAI_API_KEY`. Agents get their model via `lib/agents/model_factory.extraction_model()`, vision tools via `vlm_model()`, and the two ontology-linking agents (HPO, MONDO) via `linking_model()`, which follows `LINKING_MODEL` so a deployment can run those many small calls on a cheaper model than the paper-reading agents.
+The prompt-cache breakpoints in `lib/agents/model_factory.py` target those items by position. Every agent on a paper then reuses the paper block the first one sent, and every run of one agent after the first reuses its instructions. That saves resending about 25k tokens of paper and 10k of instructions per call. Write instructions to match this order: the paper is "above", the run's data "below".
