@@ -20,17 +20,17 @@
  * The modal renders the PDF itself (EvidencePanes) and wraps its body in an
  * inline PdfHighlightProvider, so a flag's View in PDF lands in this pane
  * rather than opening the paper page's sheet on top of the modal -- the same
- * arrangement as the Review Mode page. */
+ * arrangement as the occurrence review (OccurrenceReviewDialog.tsx). */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Check, Circle, FileSearch } from 'lucide-react'
+import { ArrowDown, Check, Circle, FileSearch } from 'lucide-react'
 import {
   deletePhenotypePapersPaperIdPhenotypesPhenotypeIdDelete,
   signoffPhenotypesPapersPaperIdPhenotypesSignoffPost,
   startHpoReviewPapersPaperIdIndividualsPatientIdPhenotypesReviewPost,
 } from '@/api/generated'
-import type { Citation, PhenotypeResp } from '@/api/generated/types.gen'
+import type { PhenotypeResp } from '@/api/generated/types.gen'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -41,9 +41,17 @@ import {
   type HighlightTarget,
 } from '@/components/PdfHighlightProvider'
 import { RelinkHpoDialog } from '@/components/RelinkHpoDialog'
+import {
+  ReviewSplit,
+  KeyLegend,
+  Quotes,
+  StepLabel,
+  Why,
+  useReviewKeys,
+} from '@/components/ReviewParts'
 import { FlagCard } from '@/components/FlagIndicator'
 import { usePaperFlags } from '@/hooks/usePaperFlags'
-import { describeAnchor, parseAnchor } from '@/lib/anchors'
+import { parseAnchor } from '@/lib/anchors'
 import { apiErrorMessage } from '@/lib/apiError'
 import { cn } from '@/lib/utils'
 
@@ -54,36 +62,6 @@ const KEYS: [string, string][] = [
   ['x', 'reject (delete)'],
   ['Esc', 'close'],
 ]
-
-function isTyping(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
-}
-
-function Quotes({ citations }: { citations: Citation[] }) {
-  const { anchorPage, openHighlight } = usePdfHighlight()
-  if (citations.length === 0) return <p className="text-muted-foreground">No passage cited.</p>
-  return (
-    <ul className="space-y-1">
-      {citations.map((citation, index) => (
-        <li key={`${citation.anchor}-${index}`}>
-          <button
-            type="button"
-            className="flex w-full items-start gap-1.5 rounded text-left hover:bg-muted cursor-pointer"
-            onClick={() => openHighlight({ citations: [citation] })}
-          >
-            <Badge variant="outline" className="shrink-0 font-normal">
-              {describeAnchor(citation.anchor, anchorPage(citation.anchor))}
-            </Badge>
-            {citation.quote && (
-              <span className="min-w-0 [overflow-wrap:anywhere]">“{citation.quote}”</span>
-            )}
-          </button>
-        </li>
-      ))}
-    </ul>
-  )
-}
 
 function TermDetail({
   paperId,
@@ -109,28 +87,19 @@ function TermDetail({
   const citations = phenotype.concept_evidence.citations ?? []
 
   return (
-    <div className="space-y-4 text-sm">
-      <section className="space-y-2">
+    <div className="space-y-2 text-sm">
+      <section className="space-y-2 rounded-lg border bg-card p-3">
+        <StepLabel step={1}>Phenotype in the paper</StepLabel>
         <div className="flex flex-wrap items-center gap-1.5">
           <h3 className="text-base font-semibold">{phenotype.concept}</h3>
           {phenotype.negated && <Badge variant="outline">Negated</Badge>}
           {phenotype.uncertain && <Badge variant="outline">Uncertain</Badge>}
           {phenotype.family_history && <Badge variant="outline">Family history</Badge>}
-          {phenotype.reviewed_at && (
-            <Badge className="bg-emerald-600 text-white">
-              Accepted{phenotype.reviewed_by ? ` by ${phenotype.reviewed_by.first_name}` : ''}
-            </Badge>
-          )}
         </div>
-        {details.length > 0 && (
-          <p className="text-xs text-muted-foreground">{details.join(' · ')}</p>
-        )}
+        {details.length > 0 && <p className="text-xs text-muted-foreground">{details.join(' · ')}</p>}
         <Quotes citations={citations} />
         {phenotype.concept_evidence.reasoning && (
-          <p className="break-words">
-            <span className="font-medium">Reasoning: </span>
-            {phenotype.concept_evidence.reasoning}
-          </p>
+          <Why label="Why this phenotype">{phenotype.concept_evidence.reasoning}</Why>
         )}
         {citations.length > 1 && (
           <Button variant="ghost" size="sm" className="gap-1.5 px-2" onClick={() => openHighlight({ citations })}>
@@ -140,24 +109,14 @@ function TermDetail({
         )}
       </section>
 
-      <section className="space-y-2 border-t pt-3">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">HPO</span>
-          {hpo ? (
-            <>
-              <span>{hpo.name}</span>
-              <a
-                href={`https://hpo.jax.org/app/browse/term/${hpo.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-link hover:underline"
-              >
-                <code className="text-xs">{hpo.id}</code>
-              </a>
-            </>
-          ) : (
-            <span className="text-muted-foreground">No match</span>
-          )}
+      <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+        <ArrowDown className="size-3.5" />
+        linked to
+      </div>
+
+      <section className="space-y-2 rounded-lg border bg-card p-3">
+        <div className="flex items-center justify-between gap-2">
+          <StepLabel step={2}>HPO match</StepLabel>
           <RelinkHpoDialog
             paperId={paperId}
             phenotypeId={phenotype.id}
@@ -168,19 +127,37 @@ function TermDetail({
             onOpenChange={onRelinkOpenChange}
           />
         </div>
-        {phenotype.hpo.reasoning && (
-          <p className="break-words">
-            <span className="font-medium">Link reasoning: </span>
-            {phenotype.hpo.reasoning}
-          </p>
+        {hpo ? (
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h3 className="text-base font-semibold">{hpo.name}</h3>
+            <a
+              href={`https://hpo.jax.org/app/browse/term/${hpo.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-link hover:underline"
+            >
+              <code className="text-xs">{hpo.id}</code>
+            </a>
+          </div>
+        ) : (
+          <p className="text-muted-foreground">No HPO term linked</p>
         )}
+        {phenotype.hpo.reasoning && <Why label="Why this term">{phenotype.hpo.reasoning}</Why>}
         {phenotype.hpo.edited_by_name && (
           <p className="text-xs text-muted-foreground">Linked by {phenotype.hpo.edited_by_name}</p>
         )}
       </section>
 
+      {phenotype.reviewed_at && (
+        <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+          <Check className="size-3.5" />
+          Accepted
+          {phenotype.reviewed_by ? ` by ${phenotype.reviewed_by.first_name}` : ''}
+        </p>
+      )}
+
       {termFlags.length > 0 && (
-        <section className="space-y-2 border-t pt-3">
+        <section className="space-y-2 pt-2">
           {termFlags.map((flag) => (
             <FlagCard key={flag.id} flag={flag} />
           ))}
@@ -233,7 +210,10 @@ export function HpoReviewDialog({
       .map(({ p }) => p)
   }, [phenotypes, anchorPosition])
 
-  const index = Math.max(0, ordered.findIndex((p) => p.id === currentId))
+  const index = Math.max(
+    0,
+    ordered.findIndex((p) => p.id === currentId),
+  )
   const current: PhenotypeResp | undefined = ordered[index]
   const reviewed = ordered.filter((p) => p.reviewed_at).length
 
@@ -284,9 +264,7 @@ export function HpoReviewDialog({
       }),
     onMutate: ({ id, reviewed }) =>
       patchCache((rows) =>
-        rows.map((p) =>
-          p.id === id ? { ...p, reviewed_at: reviewed ? new Date().toISOString() : null } : p,
-        ),
+        rows.map((p) => (p.id === id ? { ...p, reviewed_at: reviewed ? new Date().toISOString() : null } : p)),
       ),
     onSuccess: (response) => {
       const fresh = new Map(response.map((p) => [p.id, p]))
@@ -341,25 +319,12 @@ export function HpoReviewDialog({
     setCurrentId(next?.id ?? null)
   }
 
-  useEffect(() => {
-    if (!open || relinkOpen) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return
-      const actions: Record<string, () => void> = {
-        j: () => move(-1),
-        k: () => move(1),
-        a: accept,
-        r: () => current && setRelinkOpen(true),
-        x: rejectCurrent,
-      }
-      const action = actions[event.key]
-      if (action) {
-        event.preventDefault()
-        action()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+  useReviewKeys(open && !relinkOpen, {
+    j: () => move(-1),
+    k: () => move(1),
+    a: accept,
+    r: () => current && setRelinkOpen(true),
+    x: rejectCurrent,
   })
 
   // Keep the current term in view in a long list.
@@ -384,57 +349,52 @@ export function HpoReviewDialog({
           </span>
         </div>
         <PdfHighlightProvider paperId={paperId} pdfUrl={pdfUrl} filename={filename} inline={setOverride}>
-          <div className="flex min-h-0 flex-1">
-            <div className="flex w-[26rem] shrink-0 flex-col border-r">
-              <ol ref={listRef} className="max-h-[40%] overflow-y-auto border-b p-2 text-sm">
-                {ordered.map((phenotype) => (
-                  <li key={phenotype.id}>
-                    <button
-                      type="button"
-                      data-current={phenotype.id === current?.id}
-                      onClick={() => setCurrentId(phenotype.id)}
-                      className={cn(
-                        'flex w-full items-center gap-2 rounded px-2 py-1 text-left cursor-pointer hover:bg-muted',
-                        phenotype.id === current?.id && 'bg-muted font-medium',
-                      )}
-                    >
-                      {phenotype.reviewed_at ? (
-                        <Check className="size-3.5 shrink-0 text-emerald-600" />
-                      ) : (
-                        <Circle className="size-3.5 shrink-0 text-muted-foreground" />
-                      )}
-                      <span className="truncate">{phenotype.concept}</span>
-                      <span className="ml-auto truncate text-xs text-muted-foreground">
-                        {phenotype.hpo.value?.name ?? 'No match'}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                {current ? (
-                  <TermDetail
-                    paperId={paperId}
-                    phenotype={current}
-                    relinkOpen={relinkOpen}
-                    onRelinkOpenChange={setRelinkOpen}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">No phenotypes left to review.</p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 border-t px-4 py-2 text-xs text-muted-foreground">
-                {KEYS.map(([key, label]) => (
-                  <span key={key}>
-                    <kbd className="rounded border bg-muted px-1 font-mono">{key}</kbd> {label}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="flex min-w-0 flex-1 flex-col">
-              <EvidencePanes paperId={paperId} pdfUrl={pdfUrl} filename={filename} target={target} />
-            </div>
-          </div>
+          <ReviewSplit
+            reviewSize="32%"
+            review={
+              <>
+                <ol ref={listRef} className="max-h-[40%] overflow-y-auto border-b p-2 text-sm">
+                  {ordered.map((phenotype) => (
+                    <li key={phenotype.id}>
+                      <button
+                        type="button"
+                        data-current={phenotype.id === current?.id}
+                        onClick={() => setCurrentId(phenotype.id)}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded px-2 py-1 text-left cursor-pointer hover:bg-muted',
+                          phenotype.id === current?.id && 'bg-muted font-medium',
+                        )}
+                      >
+                        {phenotype.reviewed_at ? (
+                          <Check className="size-3.5 shrink-0 text-emerald-600" />
+                        ) : (
+                          <Circle className="size-3.5 shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="truncate">{phenotype.concept}</span>
+                        <span className="ml-auto truncate text-xs text-muted-foreground">
+                          {phenotype.hpo.value?.name ?? 'No match'}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  {current ? (
+                    <TermDetail
+                      paperId={paperId}
+                      phenotype={current}
+                      relinkOpen={relinkOpen}
+                      onRelinkOpenChange={setRelinkOpen}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No phenotypes left to review.</p>
+                  )}
+                </div>
+                <KeyLegend keys={KEYS} />
+              </>
+            }
+            pdf={<EvidencePanes paperId={paperId} pdfUrl={pdfUrl} filename={filename} target={target} />}
+          />
         </PdfHighlightProvider>
       </DialogContent>
     </Dialog>

@@ -120,7 +120,7 @@ prefix and lands on the root redirect:
 
 ### Known deployment caveats
 
-- **The pdf.js worker is loaded from a CDN.** `PaperMetadataTab.tsx` sets
+- **The pdf.js worker is loaded from a CDN.** `PdfViewer.tsx` sets
   `pdfjs.GlobalWorkerOptions.workerSrc` to `//cdnjs.cloudflare.com/ajax/libs/pdf.js/<version>/...`,
   so PDF rendering depends on cdnjs being reachable from the browser. Serving the worker
   from our own bundle would remove that third-party runtime dependency.
@@ -136,7 +136,8 @@ prefix and lands on the root redirect:
 - **Find-in-PDF draws its own overlays.** The evidence "View in PDF" sheet
   (`PdfViewer.tsx`) has an in-document search that reads the text layer itself and
   positions its own rectangles, the same way the evidence highlight is drawn; the
-  browser's Cmd+F cannot help because only one page is ever in the DOM at a time. A
+  browser's Cmd+F cannot help because pages are drawn as canvases with no text layer,
+  and only the pages near the view are drawn at all (next item). A
   pdf.js-native attempt (`PDFFindController` + its own viewer stack, bypassing
   react-pdf) was tried first and reverted: it required a second, directly-imported
   `pdfjs-dist` alongside react-pdf's own copy, and under React StrictMode the two viewer
@@ -144,6 +145,27 @@ prefix and lands on the root redirect:
   API and hand-built `Range`-based approaches were also abandoned (Lightning CSS strips
   `::highlight()` rules from the production build, and react-pdf's `TextLayer` tears
   itself down on every render unless its callbacks are memoized).
+- **The PDF viewer is one continuous scroll, drawn lazily.** `PdfViewer.tsx` (every PDF
+  view: the paper page panel and the occurrence and HPO reviews) works in four layers:
+  1. *Layout.* On load it asks pdf.js for every page's size at scale 1 with the page's
+     own `/Rotate` applied (`getViewport({ scale: 1 })`) and lays out one fixed-size
+     slot per page (`PageSlot`), so the scroll height is right before anything is drawn.
+  2. *Drawing.* Each slot has an `IntersectionObserver` rooted on the scroll container,
+     its margin widened by `RENDER_MARGIN`; a react-pdf `<Page>` (a canvas) is mounted
+     only while the slot is inside that band and unmounted when it leaves, so a long
+     supplement at 200% does not hold a canvas per page.
+  3. *Overlays.* Evidence boxes (from `POST /papers/{id}/highlight`) and find matches are
+     absolutely positioned `div`s in percentages of the slot, in that same scale-1,
+     rotation-applied frame; they exist whether or not the canvas is drawn, which is
+     what lets the viewer scroll to evidence on a page it has not painted. A curator's
+     quarter turn (`turns`, kept in localStorage per PDF) swaps the slot's width and
+     height, and `turnRect` moves every box into the turned frame. Anything new drawn
+     over a page should go through `place()` the same way.
+  4. *Navigation.* `scrollTo` moves the scroll container itself (never
+     `scrollIntoView`, which would also scroll the dialog or page around it): page
+     jumps put a slot's top at the top, evidence puts the first box in the middle. The
+     page counter is derived from the scroll position (the last slot whose top has
+     passed a third of the view), so it is read-only state; to change page, scroll.
 - **Evidence highlights are resolved from a block's citations.** `PdfHighlightProvider.tsx`
   posts a block's `citations: [{anchor, quote}]` (see `docs/evidence-anchors-plan.md`) to
   `POST /papers/{id}/highlight`, which returns the cited blocks' precomputed boxes for the
@@ -183,7 +205,7 @@ declared but not imported anywhere in `src/` yet.
 | `cmdk` | Command-menu / filterable list primitive | Backs `ui/command.tsx`, which `ui/combobox.tsx` builds on (e.g. HPO term pickers). |
 | `embla-carousel-react` | Carousel engine | Backs `ui/carousel.tsx`, pulled in with the shadcn carousel component. |
 | `react-resizable-panels` | Draggable split panes | Backs `ui/resizable.tsx`, used for the paper detail split view. |
-| `react-pdf` | React wrapper around PDF.js | The only PDF renderer: `PaperMetadataTab.tsx` and `PdfViewer.tsx` (the evidence "View in PDF" sheet). It brings its own `pdfjs-dist`; nothing else may depend on that package — see the caveat below. |
+| `react-pdf` | React wrapper around PDF.js | The only PDF renderer, through `PdfViewer.tsx`, the one PDF view (the evidence sheet, the reviews, Paper Metadata). It brings its own `pdfjs-dist`; nothing else may depend on that package — see the caveat below. |
 | `zustand` | Minimal global state store | `stores/ui.ts`, for UI state that shouldn't live in the URL or the query cache. |
 | `react-markdown` | Renders a markdown string as React elements | `PedigreeTab.tsx`, for the vision model's freeform pedigree description (headings, lists, bold); `DocumentEvidenceViewer.tsx`, the evidence sheet's "Markdown" tab. The document viewer's custom `p`/`tr`/`table` components read each block's `[anchor-id]` tag off the hast `node` react-markdown hands them, so no remark/rehype plugin (and no `unist-util-visit` dependency) is needed. |
 | `remark-gfm` | GitHub-flavored markdown extensions for `react-markdown` | Tables/strikethrough/task-lists in the same pedigree description and markdown evidence tabs (the anchored document's tables are GFM pipe tables). |

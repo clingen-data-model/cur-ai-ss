@@ -32,7 +32,6 @@ export function UnassociatedPatientsTab({
   tasks,
   flags,
   focus,
-  compact = false,
 }: {
   paperId: number
   patients: PatientResp[]
@@ -42,9 +41,6 @@ export function UnassociatedPatientsTab({
   flags: FlagIndex
   /** A patient to open on arrival (from a flag's About chip). */
   focus?: FlagTarget | null
-  /** The review rail's form: the table alone, without the Add Patient
-   * button, the search box or single-page pagination. */
-  compact?: boolean
 }) {
   const queryClient = useQueryClient()
   const reveal = useMemo(
@@ -168,13 +164,10 @@ export function UnassociatedPatientsTab({
         </Empty>
       ) : (
         <>
-          {!compact && (
-            <div className="flex justify-end mb-2">
-              <AddPatientDialog paperId={paperId} />
-            </div>
-          )}
+          <div className="flex justify-end mb-2">
+            <AddPatientDialog paperId={paperId} />
+          </div>
           <DataTable
-            compact={compact}
             columns={columns}
             data={patients}
             filterPlaceholder="Filter individuals..."

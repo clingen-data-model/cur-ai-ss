@@ -10,14 +10,15 @@
  * highlighted by id. Neither writes anything on disk, so this is safe for
  * several curators at once.
  *
- * The review page (routes/papers.$paperId.review.tsx) keeps the viewer open
- * beside the case instead of in a sheet: it passes `inline`, every
- * openHighlight then goes to that callback, and the page renders
+ * The review dialogs (OccurrenceReviewDialog, HpoReviewDialog) and the paper
+ * metadata tab keep the viewer open beside their content instead of in a
+ * sheet: each passes `inline`, every openHighlight then goes to that
+ * callback, and the component renders
  * EvidencePanes itself with whatever target it holds. In that mode a field
  * row's label is a click target too (EditableField's FieldRow reads
  * `inline` off the context), so one click narrows the highlight to a field.
  */
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 import {
@@ -99,34 +100,36 @@ function fetchAnnotations(paperId: number, target: HighlightTarget): Promise<Gro
   })
 }
 
+/** Stable, so the Markdown view's memos do not rerun on every render. */
+const NO_CITATIONS: Citation[] = []
+
 /** The PDF and Markdown tabs that show a target's evidence: the sheet's
- * body below, and the review page's right-hand pane. With no target the PDF
- * shows unhighlighted (the review page's state between cases); the sheet
- * never renders it that way, since it opens only on a target. */
+ * body below, and the paper beside the reviews and Paper Metadata. With no
+ * target both show the paper unhighlighted; the sheet never renders it that
+ * way, since it opens only on a target. */
+
 export function EvidencePanes({
   paperId,
   pdfUrl,
   filename,
   target,
   onClose,
-  toolbar,
 }: {
   paperId: number
   pdfUrl: string | undefined
   filename?: string | null
   target: HighlightTarget | null
   onClose?: () => void
-  /** Controls shown beside the tabs (the review page's highlight scope). */
-  toolbar?: ReactNode
 }) {
   const [activeTab, setActiveTab] = useState<ViewerTab>('pdf')
   const fullPdfUrl = pdfUrl ? `${API_BASE_URL}${pdfUrl}` : ''
   const supplementOnly = target !== null && isSupplementOnly(target)
 
-  // A new target picks the tab that can show it; the reader's own choice
-  // holds until then.
+  // The reader's choice of tab holds from one target to the next (a review
+  // steps through dozens), except that a passage only the supplement has
+  // moves it to the Markdown view, the one that can show it.
   useEffect(() => {
-    if (target !== null) setActiveTab(isSupplementOnly(target) ? 'markdown' : 'pdf')
+    if (target !== null && isSupplementOnly(target)) setActiveTab('markdown')
   }, [target])
 
   const annotationsQuery = useQuery({
@@ -149,12 +152,11 @@ export function EvidencePanes({
             <TabsTrigger value="pdf" disabled={supplementOnly}>
               PDF
             </TabsTrigger>
-            <TabsTrigger value="markdown" disabled={target === null}>
+            <TabsTrigger value="markdown">
               Markdown
             </TabsTrigger>
           </TabsList>
         </Hint>
-        {toolbar}
       </div>
       <TabsContent value="pdf" className="flex-1 min-h-0">
         {supplementOnly ? (
@@ -180,13 +182,13 @@ export function EvidencePanes({
         ) : null}
       </TabsContent>
       <TabsContent value="markdown" className="flex-1 min-h-0">
-        {target && (
-          <DocumentEvidenceViewer
-            paperId={paperId}
-            citations={target.citations}
-            enabled={activeTab === 'markdown'}
-          />
-        )}
+        {/* With nothing to highlight it is still the paper, as the PDF tab
+            is: Paper Metadata and a review between fields open that way. */}
+        <DocumentEvidenceViewer
+          paperId={paperId}
+          citations={target?.citations ?? NO_CITATIONS}
+          enabled={activeTab === 'markdown'}
+        />
       </TabsContent>
     </Tabs>
   )
@@ -248,6 +250,9 @@ export function PdfHighlightProvider({
           <SheetContent
             side="right"
             showCloseButton={false}
+            // The page stays in sight beside the highlight: curators read the
+            // row they came from against the passage.
+            clearOverlay
             className="gap-0 data-[side=right]:sm:max-w-3xl"
           >
             {/* The viewer's own toolbar carries the close button, so the sheet

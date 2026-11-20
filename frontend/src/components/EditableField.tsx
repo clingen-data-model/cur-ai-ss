@@ -42,7 +42,11 @@ function FieldRow({
   // whose value never has evidence (a looked-up annotation) leaves them out
   // rather than showing two disabled icons.
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0">
+    // data-review-field: a stop for the occurrence review's j/k.
+    <div
+      data-review-field
+      className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0 data-[review-active=true]:rounded data-[review-active=true]:-mx-2 data-[review-active=true]:px-2 data-[review-active=true]:bg-amber-50 data-[review-active=true]:ring-2 data-[review-active=true]:ring-amber-400 dark:data-[review-active=true]:bg-amber-950/30"
+    >
       <span className="text-sm text-muted-foreground shrink-0 w-44">{label}</span>
       <div className="flex items-center gap-1 flex-1 justify-end min-w-0">
         {children}

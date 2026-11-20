@@ -22,7 +22,6 @@ const APPLIED_EDIT_QUERIES = [
   'occurrences',
   'phenotypes',
   'flags',
-  'review-cases',
   'segregation-analysis',
 ]
 
