@@ -1,253 +1,72 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+A curation assistant: it reads genetics papers (PDF) and extracts individuals, phenotypes and variants, links them to HPO, MONDO and variant registries, and lets curators review and sign off what it found. Three processes share one SQLite database:
 
-## Quick Start
+- **API**: FastAPI, `lib/api/app.py`. Database sessions come from `lib/api/db.py`: `session_scope()` in background code, `Depends(get_session)` in endpoints.
+- **Worker**: `lib/bin/worker.py`. It runs the pipeline as tasks from the `tasks` table.
+- **SPA**: React in `frontend/`, the only UI (Streamlit is retired). See `frontend/README.md` for its architecture and dependencies.
 
-**Install dependencies:**
+## Commands
+
 ```bash
-uv sync
-uv pip install -e .
+uv sync && uv pip install -e .
+uv run ruff check lib && uv run ruff format --check lib test && uv run mypy lib
+uv run pytest test/path/to/test_file.py          # CI runs the whole suite with coverage of lib/
+./bin/api    ./bin/worker    ./bin/ui            # ports 8000 and 8501; `./bin/ui <script>` runs a pnpm script
+./bin/generate-api-spec                          # frontend/api-spec.json from the FastAPI app, no server needed
+alembic upgrade head
 ```
 
-**Common commands:**
-```bash
-uv run ruff check lib              # Run ruff linter
-uv run ruff format --check lib test  # Check code formatting with ruff
-uv run mypy lib                    # Run mypy type checking
-uv run pytest test --cov=lib --cov-report=term-missing  # Run all tests with coverage
-uv run pytest test/path/to/test_file.py  # Run a specific test
-```
+From `frontend/`: `pnpm type-check`, `pnpm lint`, `pnpm build` (regenerates the API client first). CI does not run these, so run them yourself before merging frontend work.
 
-**Commits are Conventional Commits** (`feat: ...`, `fix(worker): ...`; types build, bump, chore, ci, docs, feat, fix, perf, refactor, revert, style, test), and so are PR titles, since a squash merge puts the title on `main`. commitizen checks them (`[tool.commitizen]` in `pyproject.toml`) in three places that run the same rule: the `commit-msg` hook, `bin/check-commits`, and the Conventional Commits workflow on every pull request.
-```bash
-git config core.hooksPath .githooks   # once per clone: turns the commit-msg hook on
-bin/check-commits                     # every commit on this branch since origin/main
-bin/check-commits --message 'feat: a PR title'
-uv run cz commit                      # optional: prompts for the parts of the message
-```
+Tests read `ENV_FILE=.env.test`. Settings live in `lib/core/environment.py`, loaded from `.env` or the environment. Data is under `CAA_ROOT` (`/var/caa`): `sqllite/app.db`, `documents/`, `logs/`, `reference_data/`.
 
-**Run the application (three terminals):**
-```bash
-./bin/api       # FastAPI backend (port 8000)
-./bin/worker    # Background job processor
-./bin/ui        # React dev server on port 8501; `./bin/ui <script>` runs any pnpm script (Ansible uses install/build)
-```
+**Commits and PR titles are Conventional Commits** (`feat: ...`, `fix(worker): ...`), because a squash merge puts the PR title on `main`. commitizen checks them in the `commit-msg` hook (`git config core.hooksPath .githooks`, once per clone), in `bin/check-commits` (add `--message 'feat: a title'` to check a title) and in CI.
 
-**Frontend setup (first time only):**
-```bash
-cd frontend
-pnpm install
-pnpm dlx skills add shadcn/ui   # Install shadcn/ui AI skill (gitignored, run once per machine)
-```
+## Pipeline
 
-**Frontend commands** (from `frontend/`; not covered by CI, so run them before deploying):
-```bash
-pnpm dev          # Vite dev server on port 8501
-pnpm type-check   # tsc --noEmit
-pnpm lint         # eslint
-pnpm build        # regenerates the API client, then tsc -b && vite build
-```
+Tasks form a graph. `TaskType` and `TASK_SUCCESSORS` are in `lib/tasks/models.py`, and the handlers are `TASK_HANDLERS` in `lib/tasks/handlers.py`. Finishing a task queues its successors. A task is scoped to a paper, and optionally to a patient, family, variant, phenotype or occurrence.
 
-**Database migrations:**
-```bash
-alembic current             # Check current migration version
-alembic upgrade head        # Apply pending migrations
-alembic revision --autogenerate -m "description"  # Create new migration
-```
+PDF Parsing (docling-serve on Cloud Run, `docs/cloud-run-parsing.md`) → Paper Classifier, which then branches:
 
-## Project Architecture
+- Paper Metadata → Paper MONDO Linking
+- Figure Description → Individual Extraction → per individual: Demographics → Phenotype Extraction → HPO Linking, plus segregation per family
+- Variant Extraction → Harmonization → Annotation
+- Individual Variant Occurrences, once both extractions are done → Compound Het, MONDO linking, segregation
+- Extraction Verification, last, once every other task has settled
 
-This is a research paper analysis system that extracts genetic information (patients, phenotypes, variants) from scientific papers and links them to standard databases (HPO for phenotypes).
+**Read `docs/pipeline.md` before changing a step's behaviour, re-runs, curator notes, the quick run, worker scheduling or model choice.** It records why each step works the way it does, the cases that broke earlier versions, and how notes and `budget_model` travel down the graph. Workers are sharded by paper id, one process per shard. Two workers on the same shard take each other's tasks.
 
-### Core Components
+## Agents
 
-**Three components:**
+- Agents use `openai_agents` structured outputs. Their output reaches the database through `lib/models/converters.py`. See `lib/agents/AGENT_GUIDE.md` for writing one.
+- **Models see "basis", never the word "reasoning".** Wrap `output_type` in `model_facing_output(...)` (`lib/agents/model_facing.py`) and write prompts with "basis". Anthropic's `reasoning_extraction` classifier cuts Sonnet and Opus off mid-JSON otherwise. `test_no_agent_prose_asks_for_reasoning` guards this. The database, API and UI keep `reasoning`.
+- Models are named `<provider>/<model>`. `anthropic/` goes through LiteLLM; `openai/` goes to the agents SDK. dev-caa's choices, and why, are in `infrastructure/ansible/templates/env.j2` and `docs/pipeline.md`.
+- Keep prompts generic: a motivating paper's gene, PMID or wording belongs in comments, never in prompt text.
 
-1. **Backend API** (`lib/api/app.py`)
-   - FastAPI server handling PDF uploads, data storage, and retrieval
-   - SQLite database (configured via `lib/api/db.py`)
-   - CORS middleware configured for the SPA's dev server
-   - Serves both API endpoints and static assets
+## Data
 
-2. **React SPA** (`frontend/`)
-   - React 19 + TypeScript + Vite, Tailwind v4, shadcn/ui primitives vendored into `src/components/ui/`
-   - TanStack Router and TanStack Query. Route components live in
-     `src/routes/`, but the route table `src/routeTree.ts` is **hand-written** —
-     the TanStack codegen plugin is not installed, so adding a component there
-     does nothing until it is imported, declared and listed in `addChildren`
-   - The API client in `src/api/generated/` is generated from the FastAPI OpenAPI schema
-     by `pnpm build` — never edit it by hand, and regenerate after changing API models
-   - The only UI (Streamlit has been retired): dashboard, paper pages, PDF evidence
-     viewer. Served at the site root
-   - **See `frontend/README.md`** for architecture, the base-path rules, and a
-     description of every JavaScript dependency
+- Models come in four forms: `SomeModel` (Pydantic), `SomeDB` (SQLAlchemy), `SomeResp` (API), `SomeUpdateRequest` (PATCH).
+- A paper's files are under `documents/<paper_id>/`. Use the `document_*` helpers in `lib/misc/pdf/paths.py`. Tables and images are numbered by Docling index, the same N as the `table-N` and `figure-N` anchors. The Docling document itself is not saved; `parse_content(force=True)` rebuilds everything from `raw.*`.
+- **Curators see "Individual" wherever the code says patient.** That covers UI strings, API routes and error details. Models, fields and tables keep `patient`. Curators see a task's `TaskType.label`, never its value. Read `docs/curation.md` before changing curator-facing wording, the patient or occurrence fields, or sign-off and review.
 
-3. **Background Worker** (`lib/bin/worker.py`)
-   - Polls database for papers with extraction tasks
-   - Runs extraction agents sequentially in a pipeline
-   - Updates paper `pipeline_status` as tasks progress
-   - Admission from the tasks table: starts what the concurrency limits leave room for, with a lease per attempt
+## Migrations (SQLite)
 
-### Extraction Pipeline
+Both failures below are silent, and both have destroyed production data.
 
-Papers flow through this sequence of agents (all triggered by worker):
+- **Enum columns store the member's name** (`'COMPLETED'`), not its value. A `server_default` or raw-SQL backfill must write `.name`. Confirm by reading a freshly migrated row back through the ORM: a wrong value only fails on read, with a `LookupError` (this took down `GET /papers` on 2026-09-17).
+- **`batch_alter_table` on a table with CASCADE dependents recreates it and deletes the child rows** unless foreign keys are really off. `PRAGMA foreign_keys` does nothing inside alembic's open transaction. Calling `connection.commit()` to escape it leaves `alembic_version` one revision behind. Use `autocommit_block()`:
 
-1. **Paper Extraction** → Parses PDF, extracts metadata, markdown content, tables. The Docling conversion is the only model run of our own and takes the VM minutes per paper; `parse_content` sends it to the PDF parsing service on a Cloud Run GPU instead, the PDF and the converted document passing through a bucket rather than an HTTP body (`PDF_PARSING_SERVICE_URL`, `PDF_PARSING_EXCHANGE_BUCKET`, set in the deployment since 2026-11-02; `docs/cloud-run-parsing.md`), everything after the conversion staying in the worker. What stays allocates a few hundred MB of short-lived buffers that glibc keeps after Python frees them (a worker went from 477 MB to 1,074 MB across its first parse on 2026-11-09 and stayed there), so the handler calls `release_freed_memory` (`lib/core/memory.py`, `malloc_trim`) after each parse, which returns about two thirds of it
-2. **Paper Classifier** → Decides whether the paper has identifiable cases for the gene; a paper judged not relevant gets the `FailedPaperRelevancy` tag and no successors. The verdict is stored with its basis (`papers.is_paper_relevant_evidence`, migration `d4e8f1a2b3c5`; until 2026-10-29 only the bool was kept and the basis lived in the task's conversation), and the paper page shows it in a notice above the tabs (`PaperRelevanceNotice.tsx`) with the re-run dialog opened on the classifier; a paper classified before the column shows no basis until the classifier runs again
-3. **Individual Extraction** → Identifies patients, demographics, proband status
-4. **Figure Description** → Shows every figure to the vision model, which classifies it against the readable kinds (`FigureKind` in `lib/models/figure.py`: pedigree, chromatogram, gel, copy-number plot, read pileup, karyotype or FISH) and describes the ones that match; one `figure_descriptions` row per described figure, carrying the caption the model was shown (`caption`, the alt text of the figure's `[figure-N] ![caption](...)` line in anchored.md, which is where Docling's caption-to-picture link is transcribed at parse time; where Docling linked none, the parser's walk looks at the one part right under the picture and, if `_legend_item` accepts it (one visible heading or paragraph, not a list item, whose text opens like a figure label: `is_figure_legend`), folds it into the figure line as a Docling caption would be, alt text and caption boxes, marks the anchor `caption_adopted`, and skips the part so it is not printed twice; the comment above `_legend_item` in `lib/misc/pdf/anchors.py` spells out the four ways Docling's link fails on dev and the five steps of the rule, which recovered 9 of dev's 24 uncaptioned described figures on 2026-10-27, all below their picture; parsing runs first with no model, and the Figure Description step reads what it wrote: a readable figure whose line still carries no caption is asked of the vision model, `find_legend`, shown the headings and paragraphs within ten blocks either side (`figure_neighbourhoods`) and answering with a block id, a transcription of a legend drawn inside the image, or none; both describing prompts also ask for a legend printed inside the image to be transcribed at the top of the description (`LEGEND_IN_IMAGE_SECTION`, since 2026-11-03: the layout model had cut the first column of one paper's legend into the picture and the parser linked the second column as the caption); a legend further away than that is not found and the figure has no caption; the answer goes on the row, never into anchored.md; this settled the other 15 on dev, panels of one figure getting their own panel labels; both describing prompts are shown those same surrounding blocks every time (`_surroundings_section`, since 2026-10-30), because Docling often links only a legend's title line and leaves its body, where marks like an asterisk are defined, as the paragraph under the figure (MAG paper, PMID 32629324), and a model reading what is around the figure beats a parser rule for each way a legend comes apart; `caption_source` (`CaptionSource`: Docling, Adjacent text, Model chose, Model transcribed) records which way each row's caption came, `Anchor.caption_adopted` in anchors.json telling the first two apart for a parse-time adoption; rows from before migration `b7e2f9c4d6a1` are filled by `lib.bin.backfill_figure_captions` from what `paper_figures` would hand a re-run (the figure line's caption, else the same question), `--no-model` to skip the question; a stored caption the figure line lacks is spliced under the line for the agents, `splice_figure_descriptions`). Not an agent (`lib/agents/figure_describer.py`), so it has no conversation to ask and curator notes go into its vision prompts. Every paper-reading agent then gets each description spliced into the paper text as a quoted block under its `[figure-N]` line (`paper_text` in `lib/tasks/handlers.py`, `lib/misc/pdf/figure_text.py`); the `/document` endpoint serves the same text, a quote from a description checks out against its figure, highlights the picture in the PDF view and both the figure and the span in the Markdown view
-5. **Variant Extraction** → Extracts genetic variant information
-6. **Variant Harmonization** → Normalizes variants to standard formats. Its input is the variant row's plain fields (no evidence text), so anything it needs from the paper has to be in a field. Older papers number nucleotides from a GenBank mRNA start rather than the ATG (paper 109, PKD1, runs 211 ahead); the agent checks a position against its residue's codon window (residue N is c.3N-2..3N) before projecting, tries the window's three positions when the paper's is outside it, and rejects a registry allele whose consequence names another residue instead of storing it with a note (`C7696T` once came back as p.Leu2566Phe with an rsID). Extraction feeds that check by writing silent changes as `p.Ser1949=` and keeping a GenBank cDNA accession in `transcript`. A variant extracted as words alone ("deletion of exon 2", "arginine 66 to tryptophan") met no state's condition and came back null until 2026-11-06; State 0 now infers the terms the words could mean (hgvs_c candidates, protein forms, ClinVar search names) and the existing states consume them as the fields they stand in for, the lookups being the check, confidence low and the inference stated in basis
-7. **Variant Annotation** → Adds annotations (SpliceAI, etc.)
-8. **Phenotype Extraction + HPO Linking** → Links phenotypes to HPO ontology terms. Phenotype extraction is queued per patient when their demographics completes, for every patient but those it marked Unaffected (a curator can still queue it for anyone); HPO linking follows for every phenotype the run produced that the HPO link cache did not already link, whatever the patient's variants (it used to wait for a variant occurrence, which saved ~15 calls a paper and left a manual phenotype run linking nothing)
-9. **Patient-Variant Linking** → Links patients to their variants with inheritance info. Waits on Individual Extraction and Variant Extraction, not on demographics, which it never reads; segregation (evidence extraction, then the computed analysis) is the step that waits on the last per-patient demographics run, since it reads affected status (`TASK_SUCCESSORS` in `lib/tasks/models.py`)
-10. **Extraction Verification** → Runs once every other task of the paper has settled (queued by the worker, not by a graph edge). First a model looks over the extracted individual and link values, with their basis and the text of the blocks they cite (not the paper), for values that should agree and do not, and raises `inconsistent` flags; a re-run replaces the open ones and keeps those a curator resolved, which the model is shown so it does not raise them again (`replace_flags(keep_resolved=True)`; every other source's re-run still deletes its resolved flags). Then it merges curator flags that raise the same decision more than once (`lib/tasks/extraction_verification.py`)
-
-Each agent is implemented with OpenAI API calls. Output files are stored in JSON format alongside the PDF.
-
-### Data Models
-
-All models are defined with Pydantic (for serialization) and SQLAlchemy ORM (for database):
-
-- **Paper** (`lib/models/paper.py`) - Represents a research paper with pipeline status and path references
-- **Patient** (`lib/models/patient.py`) - Patient demographics and clinical data. A patient a pedigree places is identified position first, then the paper's label in parentheses ("II-1 (Subject 1)"), the format curators asked for on 2026-10-29 after naming came out mixed within one family; a patient no pedigree places keeps the paper's label alone. The identifier rules in `lib/agents/individual_extraction_agent.py` still decide which label the paper gives; this only fixes its form. The family is never in the identifier: it is `family_identifier`, two families may each have a "II-1" or a "sister", so a flag's `about` names every patient as family then identifier, "Family 2 II-1" (`individual_label` in `lib/tasks/flags.py`) and `PatientIdCell` shows the family beside the name when the paper has more than one Origin is three fields: `country_of_origin` is where the paper places the family (an enum of countries), `ancestry` the descent in the paper's own words (free text, nullable, migration `b8c3d7e2f4a1`, since 2026-10-29), `race` the census bucket that descent maps to; a "Brazilian family of Italian descent" had been landing in the country field as Italy for some members and Brazil for others. Four ages: `age_diagnosis` (the age the paper calls a diagnosis), `age_report` (age when described), `age_death`, and `age_onset` with `onset_category`, HPO's onset bucket (`OnsetCategory`: Antenatal ... Adult; migration `c9d4e8f3a5b2`, since 2026-10-29), because papers give onset far more often than diagnosis and the agent had been writing it into `age_diagnosis` for some patients and not others
-- **Phenotype** (`lib/models/phenotype.py`) - Extracted phenotypes with HPO matching candidates and confidence scores
-- **Variant** (`lib/models/variant.py`) - Extracted, harmonized, and annotated variants
-- **PatientVariantOccurrence** (`lib/models/patient_variant_occurrences.py`) - Links patients to variants with zygosity, testing info and two distinct inheritance facts: `inheritance` is the *mechanism* (Dominant, Recessive, ..., the same enum as the paper's `disease_inheritance_mode`; labelled "Inheritance mechanism" in the UI) and `variant_inheritance` is which parent the copy came from (Maternal, Paternal, Both parents, De novo, ...). They were one field until 2026-10-26, when the agent was found reading a paper's "Inheritance: Maternal" table cell as a mechanism; `variant_inheritance` replaced the `de_novo` boolean (migration `a4e7c2d9f1b3`), the UI exposes it only as the De Novo switch (on writes De novo, off writes Unknown; the evidence popover shows the full value), and rows from before the migration carry Unknown until Individual Variant Occurrences is re-run (`lib.bin.requeue_papers --all --from-task 'Individual Variant Occurrences'`)
-- **Evidence** (`lib/models/evidence_block.py`) - Text blocks from paper supporting extracted data
-
-Models use a consistent pattern:
-- `SomeModel` - Pydantic base (serializable)
-- `SomeDB` - SQLAlchemy ORM model (database)
-- `SomeResp` - API response model (may include computed fields)
-- `SomeUpdateRequest` - Pydantic model for PATCH requests
-
-### Database
-
-- **Engine:** SQLite with foreign key constraints enabled
-- **Location:** `{CAA_ROOT}/sqllite/app.db` (see `lib/core/environment.py`)
-- **Migrations:** Alembic under `migrations/versions/`
-- **Session management:** `lib/api/db.py` provides `session_scope()` context manager and FastAPI dependency
-
-Key tables:
-- `papers` - Paper metadata and extraction status
-- `patients` - Extracted patient information
-- `extracted_phenotypes` - Raw extracted phenotype text with extraction confidence
-- `hpos` - HPO term candidates matched to phenotypes
-- `extracted_variants` - Raw variant extractions
-- `harmonized_variants` - Normalized to standard genomic coordinates
-- `enriched_variants` - With annotation data
-- `patient_variant_links` - Patient-to-variant associations with inheritance/testing data
-
-## Environment & Configuration
-
-Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
-
-**Required:**
-- `EXTRACTION_MODEL` - Text-extraction model as `<provider>/<model>` (default: `openai/gpt-5.6-luna`); prefix required; the
-  dev-caa deployment overrides this to `anthropic/claude-haiku-5-5` in
-  `infrastructure/ansible/templates/env.j2`
-- `LINKING_MODEL` - The model the two ontology-linking agents (HPO, MONDO) run on, same form (default: `openai/gpt-5.6-luna`; dev-caa sets `anthropic/claude-haiku-5-5`). Every other agent is on `EXTRACTION_MODEL`, which dev-caa moved to `anthropic/claude-sonnet-5-5` on 2026-10-22: the Haiku 5.5 trial showed its HPO links match Sonnet's, while no prompt fixed its paper-reading failures (skipped pedigree members on paper 108, a cohort-wide testing method applied to 3 of 11 subjects in three runs where Sonnet gave 11 of 11 in three). Linking is many small calls per paper, extraction a few large ones, so this is where the cost split pays
-- `VLM_MODEL` - Vision model, same form (default: `openai/gpt-5.6-sol`; the
-  dev-caa deployment overrides this to `anthropic/claude-opus-5-5` in
-  `infrastructure/ansible/templates/env.j2`; it was Fable 5.1 until 2026-10-19,
-  when Fable's safety classifier deterministically refused a table-correction
-  call on paper 106 and failed its PDF parse). A classifier refusal through
-  LiteLLM now raises `ModelDeclined` (`lib/agents/model_factory.py`) on the
-  first turn instead of looping to `MaxTurnsExceeded`; table correction
-  catches it and marks the table unrecovered
-- `OPENAI_API_KEY` - required whenever a configured model names `openai/`
-- `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
-
-**Optional:**
-- `EXTRACTION_BUDGET_MODEL` - The cheaper model a curator can pick for one run: the "Quick run" box in every re-run dialog sets `tasks.budget_model`, which comes down the successor graph like a curator note, and each handler whose agent runs on `EXTRACTION_MODEL` runs a per-run clone of it on this model instead (`agent_on_tier` in `lib/agents/model_factory.py`; linking and vision are unaffected). Unset, a quick run is an ordinary run. dev-caa sets `anthropic/claude-haiku-5-5`. The UI never names a model: the box says quick and lower-cost, and the task timeline marks rows that ran that way
-- `ANTHROPIC_API_KEY` - required whenever a configured model names `anthropic/`. `anthropic/` routes through LiteLLM; `openai/` goes to the agents SDK's default provider. The two settings may name different providers, so vision and extraction can be pointed at different providers independently. Extraction used to be pinned to OpenAI because `responses_api_model()`'s server-side `conversation_id` had no Anthropic equivalent; that dependency is gone now that `lib.tasks.agent_session` gives every task its own provider-agnostic `SQLiteSession` (see `docs/anthropic-migration.md`), so extraction can run on Claude too -- verified live against the MASP1 test paper (PMID 26419238) before flipping dev-caa to it
-- `PDF_PARSING_SERVICE_URL` / `PDF_PARSING_EXCHANGE_BUCKET` - The PDF parsing service's base URL and the bucket the PDF and the converted document pass through (required together); set, PDF Parsing converts each PDF there (`lib/misc/pdf/remote.py`) instead of running Docling's models in the worker. The service is docling-serve on a Cloud Run GPU, `infrastructure/terraform/pdf-parsing/`; the deployment sets both since 2026-11-02, see `docs/cloud-run-parsing.md`
-- `NCBI_API_KEY` / `NCBI_EMAIL` - For variant enrichment
-- `API_ENDPOINT` / `PROTOCOL` - Address the worker puts in the paper-completion email (default: `http://localhost:8000`)
-- `CORS_ALLOWED_ORIGINS` - CORS origins (default: `http://localhost:8501`)
-- `LOG_LEVEL` - Logging level (default: `INFO`)
-- `JWT_ALGORITHM` - JWT signing algorithm (default: `HS256`)
-- `ACCESS_TOKEN_EXPIRE_MINUTES` - Access token lifetime (default: `1440`)
-
-**Directories (relative to `CAA_ROOT`, default `/var/caa`):**
-- `sqllite/` - Database file
-- `documents/` - Per paper: the uploaded files, parsed and anchored text, table and figure images, thumbnail and extraction snapshots (layout in `lib/misc/pdf/paths.py`)
-- `evagg/` - (Legacy, may be deprecated)
-- `logs/` - Application logs
-- `reference_data/` - HPO data cache
-
-Load from `.env` file or environment variables. Override with `ENV_FILE=.env.test` for testing.
-
-## Testing
-
-- **Framework:** pytest with asyncio support
-- **Coverage:** Must maintain coverage for `lib/` (checked in CI)
-- **Fixtures:** `test/conftest.py` provides shared fixtures
-
-Run tests:
-```bash
-make test                    # All tests with coverage
-uv run pytest test/          # All tests (no coverage)
-uv run pytest test/api/test_app.py::test_function  # Specific test
-```
-
-**Test database:** Uses `ENV_FILE=.env.test` which should point to a test SQLite database or use in-memory database.
-
-### Key Test Files
-
-- `test/api/test_app.py` - API endpoint tests
-- `test/models/test_converters.py` - Model conversion logic
-- `test/migrations/test_alembic.py` - Database migration validation
-- `test/evagg/pdf/` - PDF parsing tests
-- `test/reference_data/test_hpo.py` - HPO data loading
-
-## Code Patterns & Conventions
-
-**Type hints:** Strict mypy configuration (`disallow_untyped_defs`). All functions must have type hints including return types.
-
-**Imports:** Sorted by ruff with import-sorting rule (`I`).
-
-**Formatting:** Single quotes for strings, ruff format rules applied.
-
-**Pydantic models:**
-- Use `BaseModel` for serializable objects
-- Use `computed_field` for derived values (e.g., file paths)
-- Use `field_validator` for input validation
-- Use `model_validator` for cross-field validation
-
-**Database access:**
-- Use `session_scope()` context manager in background code
-- Use FastAPI dependency injection in endpoints: `session: Session = Depends(get_session)`
-- Explicitly handle `IntegrityError` for constraint violations
-
-**SQLAlchemy enum columns round-trip through the member's *name*, not its value** — `SQLEnum(SomeEnum)` with no `values_callable` stores e.g. `'COMPLETED'`, not `'completed'` (see `TaskStatus`). A `server_default` (or any raw-SQL backfill) that writes the lowercase *value* instead of the uppercase *name* leaves rows the ORM cannot map back to an enum member — a `LookupError` on every read, not on write, so it passes the migration and only surfaces the first time something queries the table. This broke `GET /papers` (and the whole dashboard) in production on 2026-09-17: migration `f3a8c2d914b7` added `papers.review_status` with `server_default=ReviewStatus.NOT_ASSIGNED.value`; fixed by `4a424fffb965`, which repairs the already-written data and corrects the default to `.name`. When adding a new enum column, default it to the member's name, and confirm by reading a freshly-migrated row back through the ORM (not just checking the raw SQL value) before merging.
-
-**Database migrations (SQLite safety):**
-
-When using `batch_alter_table()` on any table that has CASCADE foreign keys pointing to it, you **MUST disable foreign key constraints** before the batch operation, then re-enable them. Otherwise, when SQLite drops and recreates the table, CASCADE constraints will delete child rows unexpectedly.
-
-**`PRAGMA foreign_keys` is a no-op inside an open transaction** (documented SQLite behavior), and alembic's `env.py` (`context.begin_transaction()`) already has one open by the time `upgrade()` runs. `connection.execute(text('PRAGMA foreign_keys = OFF'))` alone therefore silently does nothing — this is exactly what caused both the June 2026 incident below and a September 2026 repeat (migration `f3a8c2d914b7`, wiped every row in patients/families/variants/tasks/chat_messages; recovered from a same-day backup with ~9 hours of data loss).
-
-**Do not "fix" this with `connection.commit()`.** A same-day follow-up incident: calling `.commit()` directly on the connection deactivates alembic's own managed transaction object. The DDL/data changes still commit, but alembic's post-migration `alembic_version` bookkeeping write then lands in a transaction whose final commit (at the end of `context.begin_transaction()`) silently becomes a no-op — so whichever migration runs *last* in a given `alembic upgrade head` invocation leaves `alembic_version` one revision behind the schema it actually produced. No exception, no warning; it only surfaces when a later migration tries to re-run against a table that already has the change, or (worse) when that stale-versioned re-run hits this exact CASCADE bug a second time. Use `op.get_context().autocommit_block()` — alembic's own supported mechanism for stepping outside its managed transaction — instead.
-
-**Safe pattern for batch alterations:**
 ```python
-from alembic import op
-
-def upgrade() -> None:
-    connection = op.get_bind()
+connection = op.get_bind()
+with op.get_context().autocommit_block():
+    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
+try:
+    with op.batch_alter_table('table_name') as batch_op:
+        ...
+finally:
     with op.get_context().autocommit_block():
-        connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
-
-    try:
-        with op.batch_alter_table('table_name', schema=None) as batch_op:
-            batch_op.add_column(...)
-            # ... other operations
-    finally:
-        with op.get_context().autocommit_block():
-            connection.exec_driver_sql('PRAGMA foreign_keys = ON')
+        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
 ```
 
 **Additional rules:**
@@ -320,19 +139,16 @@ Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`.
 
 **PDF highlighting:** Words/images can be highlighted in PDFs with colors (red, orange, yellow, blue, green, violet, gray, primary). Uses Grobid annotations for word positioning.
 
-**OpenAI agents:** Uses `openai_agents.Runner` for structured outputs. Models must have Pydantic schema for OpenAI to use as response schema.
+## Frontend
 
-**Deployment:** One GCP VM (instance `dev-caa-2`; the address, service account and secrets are named `dev-caa`; domain `gene-curation-ai.app`) behind nginx:
-FastAPI at `/api/` (prefix stripped), the React SPA's static build at `/`. Deploy with `ansible-playbook -i dev-caa-2.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
-which pulls `main` from GitHub — so changes must be merged and pushed before deploying.
-See the Deployment section of `README.md`.
+- `src/routeTree.ts` is **hand-written**: a new route component does nothing until it is imported, declared and added to `addChildren`.
+- `src/api/generated/` is generated. Regenerate it after changing API models, never edit it by hand.
+- Use the rows in `EditableField.tsx` for curator input; they require an edit note.
+- The SPA is built against `VITE_BASE_PATH`, so build root-relative URLs from it:
+  - navigate with TanStack `<Link>`;
+  - write public assets as `${import.meta.env.BASE_URL}<file>`, or `%BASE_URL%<file>` in `index.html`;
+  - build API-served URLs from `API_BASE_URL` in `lib/api.ts`.
 
-**The SPA is built against a configurable base path** (`VITE_BASE_PATH`, `/` today), so
-anything root-relative in `frontend/` must be built from `import.meta.env.BASE_URL`, or it
-breaks the day the app is served under a prefix again:
+## Deployment
 
-- Navigate with `<Link>` from TanStack Router, never `<a href="/...">`
-- Reference `public/` assets as `` `${import.meta.env.BASE_URL}<file>` `` in TSX, or
-  `%BASE_URL%<file>` in `index.html`
-- Build API-served URLs (PDFs, thumbnails) from `API_BASE_URL` exported by `lib/api.ts`,
-  not from `import.meta.env.VITE_API_URL` directly
+dev-caa is one GCP VM (instance `dev-caa-2`, domain `gene-curation-ai.app`). nginx serves FastAPI at `/api/` (prefix stripped) and the SPA at `/`. `ansible-playbook -i dev-caa-2.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml` deploys `main` from GitHub, so merge and push first. See the Deployment section of `README.md`.
