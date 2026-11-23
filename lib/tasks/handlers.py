@@ -25,6 +25,7 @@ from lib.agents.extraction_verification_agent import (
 from lib.agents.figure_describer import FigureRef, describe_figures
 from lib.agents.hpo_linking_agent import (
     HPO_LINKING_AGENT_INSTRUCTIONS,
+    candidate_terms,
 )
 from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
@@ -194,7 +195,6 @@ from lib.models.variant import (
     VariantExtractionOutput,
     is_harmonized,
 )
-from lib.reference_data.hpo import find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
 from lib.tasks.extraction_verification import (
@@ -2111,7 +2111,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         if not phenotype_row:
             return
 
-        candidates = find_matching_hpo_terms(str(phenotype_row.concept))
+        candidates = candidate_terms(str(phenotype_row.concept))
 
         # Everything the rest of the handler needs from the row is copied out
         # here: the session commits on exit and expires the row, so reading
@@ -2123,7 +2123,7 @@ async def handle_hpo_linking(task_id: int) -> None:
             'negated': phenotype_row.negated,
             'uncertain': phenotype_row.uncertain,
             'family_history': phenotype_row.family_history,
-            'candidates': [c.model_dump() for c in candidates],
+            'candidates': candidates,
         }
 
     agent_sess = agent_session(task_id)

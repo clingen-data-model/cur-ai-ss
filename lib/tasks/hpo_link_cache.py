@@ -14,6 +14,13 @@ those up.
 
 Only negated/family-history-free phenotypes are cached or served: the agent is
 instructed to return no term for those regardless of the concept text.
+
+Nor is an agent's link for a concept carrying a number ("LDL cholesterol
+132 mg/dl", "height SDS -1.97"): whether such a value fits a term turns on the
+value against HPO's threshold, which the agent now checks and flags, and an
+older link made without that check would otherwise be reused for every
+identical concept (dev, 2026-11-23). A curator's link is served whatever the
+concept, and a measured concept rarely recurs verbatim, so this costs little.
 """
 
 import logging
@@ -59,7 +66,13 @@ def is_cacheable(phenotype: PhenotypeDB) -> bool:
     return not phenotype.negated and not phenotype.family_history
 
 
+def carries_number(concept: str) -> bool:
+    return any(ch.isdigit() for ch in concept)
+
+
 def _put(cache: dict[str, CachedHpoLink], concept: str, link: CachedHpoLink) -> None:
+    if not link.curated and carries_number(concept):
+        return
     key = normalize_concept(concept)
     existing = cache.get(key)
     if existing is not None and existing.curated and not link.curated:

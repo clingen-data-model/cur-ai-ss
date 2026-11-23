@@ -69,7 +69,13 @@ A phenotype is an observable trait, sign, or symptom that a patient exhibits or 
 - A finding read from a number against a normal range (a pressure, an enzyme
   level, a head circumference), with the threshold and where it comes from in
   the basis; when the paper itself states no range, the finding is
-  uncertain: true and flagged inferred
+  uncertain: true and flagged inferred. The value names the finding in words,
+  its direction first, with the measurement after it in parentheses ("low
+  <analyte> (<number> <unit>)", "short stature (height <number> SD)"), never
+  the bare measurement ("<analyte> <number> <unit>"): the term is chosen
+  from the words. A value inside the normal range, by the paper's range or
+  the threshold you name, is not a phenotype, nor is a value you cannot place
+  above or below a range at all
 
 **DO NOT extract:**
 - Syndromes and named disorders: a diagnosis that names a condition rather

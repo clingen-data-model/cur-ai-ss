@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 import hpotk
 from agents import Agent, function_tool
 
@@ -8,73 +10,62 @@ from lib.agents.model_factory import linking_model, linking_model_settings
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.flag import FlaggedReasoningBlock
 from lib.models.phenotype import HPOTerm
-from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
+from lib.reference_data.hpo import (
+    describe_term,
+    describe_term_id,
+    find_matching_hpo_terms,
+    get_ontology,
+)
 
 
 @function_tool
 def get_hpo_term(hpo_id: str) -> dict:
     """
-    Fetch HPO term information.
+    Fetch an HPO term: its name, definition, comment and synonyms. A term's
+    numeric threshold, when HPO gives one, is in its definition or comment.
     """
-    ontology = get_ontology()
-    term_id = hpotk.TermId.from_curie(hpo_id)
-    term = ontology.get_term(term_id)
-
-    if not term:
+    described = describe_term_id(hpo_id)
+    if described is None:
         raise ValueError(f'HPO term {hpo_id} not found')
+    return described
 
-    return {
-        'id': str(term.identifier.value),
-        'name': term.name,
-        'definition': term.definition,
-        'synonyms': [s.name for s in term.synonyms] if term.synonyms else [],
-    }
+
+def _related(term_ids: Iterable[hpotk.TermId]) -> list[dict]:
+    ontology = get_ontology()
+    terms = (ontology.get_term(term_id) for term_id in term_ids)
+    return [describe_term(term) for term in terms if term is not None]
 
 
 @function_tool
 def get_hpo_parents(hpo_id: str) -> list[dict]:
-    ontology = get_ontology()
-    term_id = hpotk.TermId.from_curie(hpo_id)
-
-    parents = []
-    for pid in ontology.graph.get_parents(term_id):
-        term = ontology.get_term(pid)
-        if term:
-            parents.append(
-                {
-                    'id': str(term.identifier.value),
-                    'name': term.name,
-                    'definition': term.definition,
-                    'synonyms': [s.name for s in term.synonyms]
-                    if term.synonyms
-                    else [],
-                }
-            )
-
-    return parents
+    """The terms directly above an HPO term, each described like get_hpo_term."""
+    return _related(get_ontology().graph.get_parents(hpotk.TermId.from_curie(hpo_id)))
 
 
 @function_tool
 def get_hpo_children(hpo_id: str) -> list[dict]:
-    ontology = get_ontology()
-    term_id = hpotk.TermId.from_curie(hpo_id)
+    """The terms directly below an HPO term, each described like get_hpo_term."""
+    return _related(get_ontology().graph.get_children(hpotk.TermId.from_curie(hpo_id)))
 
-    children = []
-    for cid in ontology.graph.get_children(term_id):
-        term = ontology.get_term(cid)
-        if term:
-            children.append(
-                {
-                    'id': str(term.identifier.value),
-                    'name': term.name,
-                    'definition': term.definition,
-                    'synonyms': [s.name for s in term.synonyms]
-                    if term.synonyms
-                    else [],
-                }
-            )
 
-    return children
+def candidate_terms(phenotype_text: str, limit: int = 10) -> list[dict]:
+    """Fuzzy-matched HPO terms for a phenotype, each with its similarity score
+    and its definition and comment, so a threshold HPO writes for a candidate
+    is in front of the agent before it picks one (the handler's candidate
+    list and the search tool both hand these over)."""
+    candidates = []
+    for c in find_matching_hpo_terms(phenotype_text, limit=limit):
+        described = describe_term_id(c.id) or {}
+        candidates.append(
+            {
+                'id': c.id,
+                'name': c.name,
+                'similarity_score': c.similarity_score,
+                'definition': described.get('definition'),
+                'comment': described.get('comment'),
+            }
+        )
+    return candidates
 
 
 @function_tool
@@ -82,19 +73,11 @@ def search_hpo_terms(phenotype_text: str, limit: int = 10) -> list[dict]:
     """
     Search the HPO ontology for terms matching a phenotype description.
 
-    Returns a list of matching terms with their IDs, names, and similarity scores.
-    Use this when the provided candidates don't have a clear match or when you need
-    to explore alternative terms.
+    Returns a list of matching terms with their IDs, names, similarity scores,
+    definitions and comments. Use this when the provided candidates don't have
+    a clear match or when you need to explore alternative terms.
     """
-    candidates = find_matching_hpo_terms(phenotype_text, limit=limit)
-    return [
-        {
-            'id': c.id,
-            'name': c.name,
-            'similarity_score': c.similarity_score,
-        }
-        for c in candidates
-    ]
+    return candidate_terms(phenotype_text, limit=limit)
 
 
 INSTRUCTIONS = """
@@ -128,6 +111,7 @@ You will receive a JSON object for a single phenotype with:
         - id (str)
         - name (str)
         - similarity_score (float 0–100)
+        - definition, comment (str or null): HPO's own text for the term
 
 ---------------------------------------------------------------------
 
@@ -340,6 +324,28 @@ Actively use tools before giving up.
 
 ---------------------------------------------------------------------
 
+MEASURED VALUES AND THRESHOLDS
+
+A number in your basis comes from the concept or from an HPO definition or
+comment that a tool or the candidate list gave you, never from memory. No
+reference range, cutoff, grading scale or "typical" value of your own.
+
+When the concept gives a measured value:
+- The direction (increased, decreased, abnormal) is the one the concept
+  states in words. A bare value ("<analyte> <number> <unit>") states none:
+  link the term for an abnormal level of that measure, not its increased or
+  decreased child, and raise an unresolved flag saying the concept gives no
+  direction.
+- When the term you choose, or a graded sibling of it, defines a numeric
+  range (an SD, a centile, a dB band, a gestational week), check the value
+  against that range. A value outside the range of the term the concept
+  names still gets that term, with a mismatch flag naming the value and
+  HPO's range. A value inside a graded child's range gets that child.
+- A term defined only as above or below "the limit of normal" has no
+  threshold for you to apply: the concept's words decide.
+
+---------------------------------------------------------------------
+
 HPO BASIS REQUIREMENTS (BRIEF)
 
 The `hpo.basis` field is a short audit note for a human curator, not a
@@ -360,10 +366,12 @@ HPO_LINKING_AGENT_INSTRUCTIONS = (
     + """
 FLAGS for this task. Kinds:
 - unresolved: no term, or only a provisional one that does not describe the
-  finding.
+  finding, or a bare measured value whose direction the concept does not
+  state.
 - mismatch: the nearest term names a different organ, system or mechanism
-  than the concept (an organ the concept does not state and you assumed), or
-  a negated or family-history concept linked anyway.
+  than the concept (an organ the concept does not state and you assumed), a
+  negated or family-history concept linked anyway, or a measured value
+  outside the numeric range HPO defines for the term.
 - ambiguous: two candidate terms name different findings and both fit the
   concept -- not two wordings of one finding.
 Not: a broader term when the ontology has nothing closer, a qualifier,

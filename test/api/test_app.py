@@ -3667,6 +3667,11 @@ def test_load_hpo_link_cache(db_session, seeded_paper):
     link('No seizures', 'HP:NEGATED', negated=True)
     link('Maternal ataxia', 'HP:FAMILY', family_history=True)
     link('Unmatched', None)
+    # A measured concept: the agent's link is not reused, a curator's is.
+    link('LDL cholesterol 132 mg/dl', 'HP:AGENT_MEASURED')
+    measured = link('HDL cholesterol 44 mg/dl', 'HP:CURATED_MEASURED')
+    db_session.add(EditDB(hpo_link_id=measured.hpo.id, field_name='hpo'))
+    link('HDL cholesterol 44 mg/dl', 'HP:LATER_AGENT_MEASURED')
     db_session.flush()
 
     cache = load_hpo_link_cache(db_session)
@@ -3674,6 +3679,7 @@ def test_load_hpo_link_cache(db_session, seeded_paper):
     assert {key: entry.hpo_id for key, entry in cache.items()} == {
         'seizures': 'HP:CURATED',
         'short stature': 'HP:SECOND',
+        'hdl cholesterol 44 mg/dl': 'HP:CURATED_MEASURED',
     }
     assert cache['seizures'].curated
     assert cache['seizures'].source_phenotype_id == curated.id
@@ -3995,7 +4001,7 @@ def test_hpo_linking_prompt_carries_an_inherited_note_last(db_session, seeded_pa
     db_session.commit()
 
     with (
-        patch('lib.tasks.handlers.find_matching_hpo_terms', return_value=[]),
+        patch('lib.tasks.handlers.candidate_terms', return_value=[]),
         patch('lib.tasks.handlers.Runner.run', side_effect=RuntimeError('stop')) as run,
     ):
         with pytest.raises(RuntimeError):
@@ -4034,7 +4040,7 @@ def test_hpo_linking_stores_the_link_after_its_first_session_closed(
         value=HPOTerm(id='HP:0001250', name='Seizure'), reasoning='exact match'
     )
     with (
-        patch('lib.tasks.handlers.find_matching_hpo_terms', return_value=[]),
+        patch('lib.tasks.handlers.candidate_terms', return_value=[]),
         patch('lib.tasks.handlers.Runner.run', return_value=result),
         patch('lib.tasks.handlers.remember_hpo_link'),
     ):
