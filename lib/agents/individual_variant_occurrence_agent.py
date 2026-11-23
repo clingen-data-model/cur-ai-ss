@@ -4,7 +4,42 @@ from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
-from lib.models.patient_variant_occurrences import IndividualVariantOccurrenceOutput
+from lib.models.patient_variant_occurrences import (
+    IndividualVariantOccurrenceOutput,
+    TestingMethod,
+)
+
+# One line per TestingMethod, so the model never has to guess a value from its
+# name. The list mirrors the testing-method pick-list of ClinGen's Gene
+# Curation Interface, which is why Genotyping is a bucket for targeted allele
+# assays rather than one technique. test_every_testing_method_is_defined
+# keeps it complete.
+TESTING_METHOD_DEFINITIONS: dict[TestingMethod, str] = {
+    TestingMethod.chromosomal_microarray: 'an array measuring copy number across the genome (CMA, array CGH)',
+    TestingMethod.mlpa: 'multiplex ligation-dependent probe amplification, copy number of exons',
+    TestingMethod.next_generation_sequencing_panels: 'massively parallel sequencing of a set of genes, short of the exome',
+    TestingMethod.exome_sequencing: 'whole-exome or clinical exome sequencing',
+    TestingMethod.genome_sequencing: 'whole-genome sequencing',
+    TestingMethod.sanger_sequencing: 'direct (capillary, dideoxy) sequencing of an amplified region',
+    TestingMethod.pcr: (
+        'PCR whose product itself reads the result (allele-specific, '
+        'deletion-spanning or breakpoint PCR); PCR that only amplifies DNA '
+        'for sequencing is part of the sequencing'
+    ),
+    TestingMethod.homozygosity_mapping: 'shared runs of homozygosity used to locate the gene',
+    TestingMethod.linkage_analysis: 'markers traced through the family to map the locus',
+    TestingMethod.genotyping: (
+        'a targeted assay calling the allele at a known position that has no '
+        'value of its own (TaqMan, KASP, SNaPshot, MassARRAY, allele-specific '
+        'oligonucleotide hybridization)'
+    ),
+    TestingMethod.denaturing_gradient_gel: 'denaturing gradient gel electrophoresis (DGGE)',
+    TestingMethod.high_resolution_melting: 'melt-curve analysis of an amplicon (HRM)',
+    TestingMethod.restriction_digest: 'an amplicon cut by an enzyme the variant creates or abolishes (PCR-RFLP)',
+    TestingMethod.single_strand_conformation_polymorphism: 'single-strand conformation analysis (SSCP)',
+    TestingMethod.unknown: 'a result reported for this patient with no method named',
+    TestingMethod.other: 'a DNA test none of the values names; the basis names the test',
+}
 
 INSTRUCTIONS = """
 You are an expert clinical genetic data curator performing structured evidence extraction
@@ -48,8 +83,7 @@ Return **exactly** the following for each link:
   When it does -- a genotype in a table row, a sentence or a pedigree label,
   a trace or gel lane shown for them, a statement about a tested group they
   belong to -- the list holds the method the paper used, and `Unknown`
-  when the paper names none, its basis saying so (not Genotyping, which is a
-  genotyping assay the paper names). The proband's own result is always
+  when the paper names none, its basis saying so. The proband's own result is always
   reported. An empty list means one thing only: the paper reports no result
   of this patient's own and the link rests on inference (a carrier symbol
   with no genotype label, a parent named as the variant's origin, a parent
@@ -65,11 +99,8 @@ Return **exactly** the following for each link:
   RNA studies (RT-PCR, cDNA sequencing, minigene assays), protein and
   functional assays (immunohistochemistry, western blot, enzyme activity) and
   the screening of controls are evidence about the variant, not how the
-  patient was tested, and are never listed. PCR is a method only where the
-  PCR itself reads the result (allele-specific, deletion-spanning or
-  breakpoint PCR); PCR that amplifies DNA for sequencing is part of the
-  sequencing. Other is for a DNA test none of the values names, and its basis
-  names the test
+  patient was tested, and are never listed. The values:
+<<TESTING_METHODS>>
 - disease_name: EvidenceBlock[str] (OPTIONAL: the disease name SPECIFIC TO THIS PATIENT-VARIANT LINK.
   Use when the paper describes multiple conditions or when this patient's case clarifies, narrows, or
   differs from the paper-level disease. This value OVERRIDES the paper-level disease for this link.
@@ -288,6 +319,14 @@ BEFORE RETURNING, CHECK:
 - Every listed method is a test of the patient's DNA: no RNA,
   protein or functional assay, no PCR that only amplified for sequencing.
 """
+
+INSTRUCTIONS = INSTRUCTIONS.replace(
+    '<<TESTING_METHODS>>',
+    '\n'.join(
+        f'  - `{method.value}`: {text}'
+        for method, text in TESTING_METHOD_DEFINITIONS.items()
+    ),
+)
 
 INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (
     INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC

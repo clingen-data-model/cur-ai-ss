@@ -15,7 +15,17 @@ from lib.models.segregation_analysis import (
     SequencingMethodology,
 )
 
-_DOMINANT_INHERITANCE_PATTERNS = {'Dominant', 'Semi-dominant', 'X-linked'}
+# Inheritance value on the links -> ClinGen scoring method. X-linked scores
+# like Dominant but a daughter of an affected father is a certain carrier
+# (SOP v12 p. 31); Semidominant is scored as AD or AR per family, whichever
+# meets its minimum (appendix, pp. 64-66). Anything else has no formula.
+_SCORING_METHODS = {
+    'Dominant': 'Dominant',
+    'X-linked': 'X-linked',
+    'Semi-dominant': 'Semidominant',
+    'Recessive': 'Recessive',
+}
+_DOMINANT_LIKE = {'Dominant', 'X-linked'}
 
 _TESTING_TO_METHODOLOGY = {
     # Genome-wide / unbiased
@@ -43,12 +53,15 @@ _TESTING_TO_METHODOLOGY = {
 
 def scoring_method(inheritance_values: list[str]) -> dict:
     """The ClinGen scoring method from the most frequent inheritance value
-    across the family's links: Dominant / Semi-dominant / X-linked score as
-    Dominant, Recessive as Recessive, and anything else -- Unknown,
-    Mitochondrial, Somatic Mosaicism -- gives no method, so the family is not
-    scored. Until 2026-11-23 anything not dominant scored as Recessive, so a
-    family whose links mostly said Unknown silently got the recessive formula,
-    counting rules and minimum.
+    across the family's links: Dominant, X-linked, Semidominant or Recessive;
+    anything else -- Unknown, Mitochondrial, Somatic Mosaicism -- gives no
+    method, so the family is not scored.
+
+    Until 2026-11-23 anything not dominant scored as Recessive (a family
+    whose links mostly said Unknown got the recessive formula), and X-linked
+    and Semi-dominant both scored as plain Dominant, which over-credits a
+    daughter of an affected father and scores a semidominant family that only
+    qualifies as AR by the dominant rules.
     """
     if not inheritance_values:
         return {
@@ -58,12 +71,7 @@ def scoring_method(inheritance_values: list[str]) -> dict:
 
     counts: Counter[str] = Counter(inheritance_values)
     most_common, count = counts.most_common(1)[0]
-    if most_common in _DOMINANT_INHERITANCE_PATTERNS:
-        method: str | None = 'Dominant'
-    elif most_common == 'Recessive':
-        method = 'Recessive'
-    else:
-        method = None
+    method = _SCORING_METHODS.get(most_common)
     tally = f'Most frequent inheritance: {most_common} ({count} of {len(inheritance_values)} links)'
     if method is None:
         return {
@@ -75,9 +83,11 @@ def scoring_method(inheritance_values: list[str]) -> dict:
 
 @function_tool
 def compute_scoring_method(inheritance_values: list[str]) -> dict:
-    """Derive the ClinGen scoring method (Dominant or Recessive) from the
-    family's inheritance values; null when the most frequent value is
-    Unknown or not Mendelian, and then the family is not scored."""
+    """Derive the ClinGen scoring method (Dominant, X-linked, Semidominant or
+    Recessive) from the family's inheritance values; null when the most
+    frequent value is Unknown or not Mendelian, and then the family is not
+    scored. Semidominant is resolved to Dominant or Recessive with
+    choose_semidominant_model before counting is final."""
     return scoring_method(inheritance_values)
 
 
@@ -141,15 +151,25 @@ def lod_score(
     unaffected_count: int,
     scoring_method: str | None,
     extracted_lod_score: float | None,
+    certain_segregations: int = 0,
+    affected_parent: bool = False,
 ) -> dict:
     """The family's LOD score per the ClinGen Gene-Disease Validity SOP (v12,
     pp. 29-32): a published LOD as given, else the simplified estimate.
 
+    Dominant / X-linked: Z = log10(1 / 0.5^segregations), assuming a carrier
+    mother. For X-linked, ``certain_segregations`` are the counted daughters
+    of an affected father: she inherits his only X, so her base is 1 and she
+    adds nothing to the LOD (p. 31), though she still counts toward the
+    segregation minimum. Grandfather -> two carrier daughters -> an affected
+    son each is 0.6, not the 1.2 four ordinary segregations give.
+
     Recessive: Z = log10(1 / (0.25^(affected - 1) * 0.75^unaffected)), where
-    ``affected_count`` includes the proband -- the SOP's "# of Affected
-    Individuals - 1" is the segregations from the proband. It used to be
-    passed affected siblings only and subtracted one again, so a proband with
-    one affected brother scored 0.0 instead of 0.6 (dev, paper 146, 2026-11-23).
+    ``affected_count`` includes the proband. With ``affected_parent`` -- one
+    parent affected (biallelic), the other a carrier -- each sibling is
+    affected or unaffected with probability 0.5, so both bases are 0.5
+    (p. 32, the CRADD example). Proband + 2 affected siblings + 1 unaffected
+    is then 0.90, not 1.33.
     """
     if extracted_lod_score is not None:
         return {
@@ -157,23 +177,42 @@ def lod_score(
             'reasoning': f'Using published LOD score: {extracted_lod_score}',
         }
 
-    if scoring_method == 'Dominant':
-        lod = segregation_count * math.log10(2)
+    if scoring_method in _DOMINANT_LIKE:
+        certain = certain_segregations if scoring_method == 'X-linked' else 0
+        certain = min(max(certain, 0), segregation_count)
+        informative = segregation_count - certain
+        lod = informative * math.log10(2)
+        if certain:
+            formula = (
+                f'log10(1/((0.5)^{informative} * 1^{certain})), the {certain} '
+                f'daughter(s) of an affected father being certain carriers'
+            )
+        else:
+            formula = f'log10(1/(0.5)^{segregation_count})'
         return {
             'lod_score': round(lod, 2),
-            'reasoning': f'Dominant: Z = log10(1/(0.5)^{segregation_count}) = {round(lod, 2)}',
+            'reasoning': f'{scoring_method}: Z = {formula} = {round(lod, 2)}',
         }
 
     if scoring_method == 'Recessive':
         affected_segregations = max(affected_count - 1, 0)
-        lod = affected_segregations * math.log10(4) + unaffected_count * math.log10(
-            4 / 3
-        )
+        if affected_parent:
+            lod = (affected_segregations + unaffected_count) * math.log10(2)
+            formula = (
+                f'log10(1/((0.5)^({affected_count}-1) * (0.5)^{unaffected_count})), '
+                'one parent affected and the other a carrier'
+            )
+        else:
+            lod = affected_segregations * math.log10(4) + unaffected_count * math.log10(
+                4 / 3
+            )
+            formula = (
+                f'log10(1/((0.25)^({affected_count}-1) * (0.75)^{unaffected_count}))'
+            )
         return {
             'lod_score': round(lod, 2),
             'reasoning': (
-                f'Recessive: Z = log10(1/((0.25)^({affected_count}-1) * '
-                f'(0.75)^{unaffected_count})) = {round(lod, 2)}, counting '
+                f'Recessive: Z = {formula} = {round(lod, 2)}, counting '
                 f'{affected_count} affected including the proband'
             ),
         }
@@ -188,15 +227,22 @@ def calculate_lod_score(
     unaffected_count: int,
     scoring_method: str | None,
     extracted_lod_score: float | None,
+    certain_segregations: int,
+    affected_parent: bool,
 ) -> dict:
     """Calculate the family's LOD score. affected_count includes the proband;
-    a published LOD score, when given, is used as is."""
+    a published LOD score, when given, is used as is. certain_segregations:
+    X-linked only, the counted daughters of an affected father (0 otherwise).
+    affected_parent: Recessive only, true when one parent is affected and the
+    other a carrier."""
     return lod_score(
         segregation_count,
         affected_count,
         unaffected_count,
         scoring_method,
         extracted_lod_score,
+        certain_segregations,
+        affected_parent,
     )
 
 
@@ -209,12 +255,13 @@ def minimum_criteria(
 ) -> dict:
     """Whether the family's LOD may be scored (SOP v12, p. 29).
 
-    The size minimums -- 4 segregations dominant, 3 affected including the
-    proband recessive -- are conditions for *estimating* a LOD. A published
-    LOD is used as the authors give it, so a family with one is not held to
-    them; it used to be, and scored 0 points whenever fewer segregations were
-    counted than the minimum. An unexplainable non-segregation fails a family
-    either way.
+    The size minimums -- 4 segregations Dominant or X-linked, 3 affected
+    including the proband Recessive -- are conditions for *estimating* a LOD.
+    A published LOD is used as the authors give it, so a family with one is
+    not held to them; it used to be, and scored 0 points whenever fewer
+    segregations were counted than the minimum. An unexplainable
+    non-segregation fails a family either way. A Semidominant family is
+    resolved to Dominant or Recessive first (choose_semidominant_model).
     """
     failed = []
 
@@ -222,10 +269,10 @@ def minimum_criteria(
         failed.append('Unexplainable non-segregations present')
 
     if extracted_lod_score is None:
-        if scoring_method == 'Dominant':
+        if scoring_method in _DOMINANT_LIKE:
             if segregation_count < 4:
                 failed.append(
-                    f'Dominant requires 4+ segregations (has {segregation_count})'
+                    f'{scoring_method} requires 4+ segregations (has {segregation_count})'
                 )
         elif scoring_method == 'Recessive':
             if affected_count < 3:
@@ -233,6 +280,10 @@ def minimum_criteria(
                     'Recessive requires 3+ affected including the proband '
                     f'(has {affected_count})'
                 )
+        elif scoring_method == 'Semidominant':
+            failed.append(
+                'Semidominant must be resolved to Dominant or Recessive first'
+            )
         else:
             failed.append(f'No scoring method ({scoring_method})')
 
@@ -261,6 +312,75 @@ def check_minimum_criteria(
         scoring_method,
         has_unexplainable_non_segregations,
         extracted_lod_score,
+    )
+
+
+def semidominant_model(
+    ad_segregation_count: int,
+    ar_affected_count: int,
+    ar_unaffected_count: int,
+    ar_affected_parent: bool,
+    has_unexplainable_non_segregations: bool,
+) -> dict:
+    """Which model a semidominant family is scored under (SOP v12 appendix,
+    pp. 64-66): "the eLOD is calculated from EITHER the AD individuals OR the
+    AR, whichever group meets the current specifications" -- 4 segregations
+    for AD, 3 affected genotype+ including the proband for AR -- and only one
+    model per family. When both qualify the higher LOD is used; when neither
+    does, the higher LOD is still reported and the family fails its minimum.
+    """
+    candidates = []
+    for method, seg, aff, unaff, parent in (
+        ('Dominant', ad_segregation_count, 0, 0, False),
+        (
+            'Recessive',
+            max(ar_affected_count - 1, 0),
+            ar_affected_count,
+            ar_unaffected_count,
+            ar_affected_parent,
+        ),
+    ):
+        lod = lod_score(seg, aff, unaff, method, None, 0, parent)['lod_score']
+        meets = minimum_criteria(
+            seg, aff, method, has_unexplainable_non_segregations, None
+        )['meets_criteria']
+        candidates.append((meets, lod, method))
+    ad, ar = candidates
+    meets, lod, method = max(candidates)
+    qualifying = [c[2] for c in candidates if c[0]]
+    if len(qualifying) == 1:
+        why = f'only the {method} model meets its minimum'
+    elif qualifying:
+        why = f'both models meet their minimums; {method} gives the higher LOD'
+    else:
+        why = f'neither model meets its minimum; {method} gives the higher LOD'
+    return {
+        'scoring_method': method,
+        'reasoning': (
+            f'Semidominant family: as AD {ad[1]} '
+            f'({ad_segregation_count} segregations), as AR {ar[1]} '
+            f'({ar_affected_count} affected, {ar_unaffected_count} unaffected); {why}'
+        ),
+    }
+
+
+@function_tool
+def choose_semidominant_model(
+    ad_segregation_count: int,
+    ar_affected_count: int,
+    ar_unaffected_count: int,
+    ar_affected_parent: bool,
+    has_unexplainable_non_segregations: bool,
+) -> dict:
+    """For a Semidominant family: given its counts under the AD rules and
+    under the AR rules (ar_affected_count includes the proband), return the
+    model to score it under, Dominant or Recessive."""
+    return semidominant_model(
+        ad_segregation_count,
+        ar_affected_count,
+        ar_unaffected_count,
+        ar_affected_parent,
+        has_unexplainable_non_segregations,
     )
 
 
@@ -318,7 +438,7 @@ System: You are an expert in ClinGen segregation analysis following the simplifi
 
 Task: Compute segregation analysis metrics for a family using ClinGen LOD score methodology.
 
-INPUT (database-derived, no paper text):
+INPUT (the paper text above, and this family's data from the database):
 1. Family structure (family identifier, patients with their affected/proband status, relationships,
    and each patient's genotype for each segregating variant -- see GENOTYPES), plus
    segregating_variant_ids and sequencing_methods (the testing methods that set the
@@ -328,11 +448,12 @@ INPUT (database-derived, no paper text):
 
 Flags raised by other steps are never part of the input; who was tested comes only from the genotype field.
 
-You have access to five tools:
-- compute_scoring_method: Derives the ClinGen scoring method (Dominant/Recessive) from the inheritance values in the patient-variant links
+You have access to six tools:
+- compute_scoring_method: Derives the ClinGen scoring method (Dominant, X-linked, Semidominant or Recessive) from the inheritance values in the patient-variant links
+- choose_semidominant_model: For a Semidominant family, picks Dominant or Recessive from its counts under both
 - compute_sequencing_methodology: Derives the sequencing methodology from the testing methods in sequencing_methods
 - check_minimum_criteria: Evaluates if family meets ClinGen size/segregation requirements
-- calculate_lod_score: Computes LOD using ClinGen formulas (or uses published LOD if available); its affected_count includes the proband
+- calculate_lod_score: Computes LOD using ClinGen formulas (or uses published LOD if available); its affected_count includes the proband, and it takes the two pedigree adjustments below (certain_segregations, affected_parent)
 - assign_points: Assigns points based on LOD score and sequencing methodology per Figure 6 matrix
 
 Your task:
@@ -340,7 +461,16 @@ Your task:
 0. **Determine scoring method** (call compute_scoring_method tool first):
    - Collect all `inheritance` values from the patient-variant links
    - Pass them to `compute_scoring_method` to get the scoring method (Dominant or Recessive) and basis
-   - Use this scoring method for all subsequent steps
+   - Use this scoring method for all subsequent steps. X-linked follows the
+     Dominant rules, with the affected-father adjustment in step 1.
+   - Semidominant: count the family twice -- once by the Dominant rules
+     (step 1), once by the Recessive rules (step 2) -- and pass both to
+     `choose_semidominant_model`. It returns Dominant or Recessive: report the
+     counts of that model and use it for every later step, naming in the
+     basis both counts and why the model was chosen. In the Dominant count of
+     a family with two variants, count carriers of one variant only (the one
+     that gives more segregations); a biallelic member counts toward it only
+     when they carry that variant and sit between two carriers of it.
    - When it returns null (the family's inheritance is mostly Unknown, or not
      Mendelian), the family is not scored: count nothing (all counts 0), still
      call the remaining tools with scoring_method null -- the minimum criteria
@@ -399,6 +529,16 @@ their links show.
    carrier = 3 segregations (sister, mother as obligate carrier, grandmother);
    the aunt is not counted.
 
+   **X-linked, affected father**: a daughter of an affected father inherits
+   his only X, so she is a certain carrier and tells nothing about
+   segregation. She is still counted as a segregation (for the minimum), but
+   report how many of the counted segregations are daughters of an affected
+   father as certain_segregations, which calculate_lod_score gives base 1
+   instead of 0.5. Name them in the basis. Sons of an affected father do not
+   inherit his X and are not his segregations. Example: affected grandfather,
+   his two carrier daughters, an affected son of each = 4 segregations, 2 of
+   them certain (LOD 0.6, not 1.2).
+
    **Recessive**: segregation_count is affected_count - 1.
 
    Name in the basis every person counted and every affected person left
@@ -427,17 +567,27 @@ their links show.
    Example: affected proband (homozygous), affected tested-homozygous
    sister, unaffected tested-heterozygous brother, untested unaffected sister,
    carrier parents = affected_count 2, unaffected_count 1.
+   - affected_parent: true when one of the sibship's parents is affected with
+     the proband's genotype (homozygous or biallelic, tested) and the other
+     is a carrier. Each sibling is then affected or unaffected with
+     probability 0.5, and calculate_lod_score uses 0.5 for both instead of
+     0.25 and 0.75. Say so in the basis. When the affected parent's genotype
+     is not reported, set it true only if the paper states the parent is
+     affected with this disease, and flag inferred.
 
 3. **Check minimum criteria** (call check_minimum_criteria tool):
    - Pass: segregation_count, affected_count, scoring_method,
      has_unexplainable_non_segregations, extracted_lod_score
    - Criteria: no unexplainable non-segregations; and, for an estimated LOD
-     only, at least 4 segregations (Dominant) or at least 3 affected
+     only, at least 4 segregations (Dominant, X-linked) or at least 3 affected
      including the proband (Recessive). A published LOD is not held to the
-     size minimums.
+     size minimums. A Semidominant family is passed as the model
+     choose_semidominant_model returned.
 
 4. **Calculate LOD score** (call calculate_lod_score tool):
-   - Pass: segregation_count, affected_count, unaffected_count, scoring_method, extracted_lod_score
+   - Pass: segregation_count, affected_count, unaffected_count, scoring_method,
+     extracted_lod_score, certain_segregations (X-linked; else 0),
+     affected_parent (Recessive; else false)
    - Returns: lod_score float and basis
    - Uses published LOD if available; otherwise applies ClinGen formula
 
@@ -469,7 +619,8 @@ FLAGS for this task. Kinds:
 - inferred: a family member counted or left out on an assumption -- an
   unknown affected status, an obligate carrier counted untested, twins of
   unstated type, siblings left out because the variants are not phased, a
-  methodology or segregating variants taken without a linked proband.
+  methodology or segregating variants taken without a linked proband, an
+  affected parent taken from the paper's words without their genotype.
 - conflict: a count the extracted LOD score disagrees with.
 - unresolved: no scoring method, because the family's inheritance is mostly
   Unknown or not Mendelian, so the family is not scored.
@@ -488,6 +639,7 @@ agent = Agent(
     output_type=model_facing_output(SegregationAnalysisComputedOutput),
     tools=[
         compute_scoring_method,
+        choose_semidominant_model,
         compute_sequencing_methodology,
         check_minimum_criteria,
         calculate_lod_score,

@@ -7,6 +7,7 @@ from lib.agents.segregation_analysis_computed_agent import (
     lod_score,
     minimum_criteria,
     scoring_method,
+    semidominant_model,
 )
 from lib.models import PatientVariantOccurrenceDB
 from lib.tasks.handlers import segregation_basis, segregation_genotype
@@ -145,8 +146,8 @@ def test_basis_falls_back_to_the_family_without_a_linked_proband() -> None:
     ('values', 'method'),
     [
         (['Dominant', 'Dominant', 'Unknown'], 'Dominant'),
-        (['X-linked'], 'Dominant'),
-        (['Semi-dominant'], 'Dominant'),
+        (['X-linked'], 'X-linked'),
+        (['Semi-dominant'], 'Semidominant'),
         (['Recessive', 'Unknown', 'Recessive'], 'Recessive'),
         (['Unknown', 'Unknown', 'Recessive'], None),
         (['Mitochondrial'], None),
@@ -162,3 +163,74 @@ def test_scoring_method_gives_none_for_unknown_or_non_mendelian(
 
 def test_no_scoring_method_fails_the_minimum_instead_of_raising() -> None:
     assert not _meets(scoring_method=None, segregation_count=6, affected_count=6)
+
+
+def test_x_linked_daughters_of_an_affected_father_add_nothing() -> None:
+    """SOP v12 p. 31: base 1 for a daughter of an affected father.
+    Grandfather -> two carrier daughters -> an affected son each."""
+    assert (
+        _lod(scoring_method='X-linked', segregation_count=4, certain_segregations=2)
+        == 0.6
+    )
+    assert _lod(scoring_method='X-linked', segregation_count=4) == 1.2
+
+
+def test_certain_segregations_apply_to_x_linked_only() -> None:
+    assert (
+        _lod(scoring_method='Dominant', segregation_count=4, certain_segregations=2)
+        == 1.2
+    )
+
+
+def test_x_linked_minimum_counts_certain_segregations() -> None:
+    assert _meets(scoring_method='X-linked', segregation_count=4)
+    assert not _meets(scoring_method='X-linked', segregation_count=3)
+
+
+def test_recessive_with_an_affected_parent_uses_half_for_both() -> None:
+    """SOP v12 p. 32: one parent affected, the other a carrier."""
+    assert (
+        _lod(
+            scoring_method='Recessive',
+            affected_count=3,
+            unaffected_count=1,
+            affected_parent=True,
+        )
+        == 0.9
+    )
+    assert (
+        _lod(scoring_method='Recessive', affected_count=3, unaffected_count=1) == 1.33
+    )
+
+
+def test_semidominant_must_be_resolved_before_the_minimum() -> None:
+    assert not _meets(scoring_method='Semidominant', segregation_count=6)
+
+
+def _semi(**kw) -> str:
+    args = {
+        'ad_segregation_count': 0,
+        'ar_affected_count': 1,
+        'ar_unaffected_count': 0,
+        'ar_affected_parent': False,
+        'has_unexplainable_non_segregations': False,
+        **kw,
+    }
+    return semidominant_model(**args)['scoring_method']
+
+
+def test_semidominant_sop_example_1_scores_as_recessive() -> None:
+    """Appendix p. 65: 6 affected biallelic members, 2 AD segregations."""
+    assert _semi(ad_segregation_count=2, ar_affected_count=6) == 'Recessive'
+
+
+def test_semidominant_sop_example_2_scores_as_dominant() -> None:
+    """Appendix p. 65: 5 AD segregations, 2 biallelic members."""
+    assert _semi(ad_segregation_count=5, ar_affected_count=2) == 'Dominant'
+
+
+def test_semidominant_takes_the_higher_lod_when_both_qualify() -> None:
+    # AD 4 segregations = 1.2 vs AR 4 affected = 1.81;
+    # AD 8 segregations = 2.41 vs AR 3 affected = 1.2.
+    assert _semi(ad_segregation_count=4, ar_affected_count=4) == 'Recessive'
+    assert _semi(ad_segregation_count=8, ar_affected_count=3) == 'Dominant'
