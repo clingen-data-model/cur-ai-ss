@@ -375,7 +375,7 @@ def test_occurrence_prompt_gives_a_labelled_person_the_familys_testing_method():
     # banned (paper 111 used the one, every other paper the other). An empty
     # list now means an inferred link, so a reported result with no named
     # method is Unknown again, and Genotyping keeps meaning the assay.
-    assert 'not Genotyping, which is a\n  genotyping assay the paper names' in prompt
+    assert '`Unknown`\n  when the paper names none' in prompt
     assert 'Never\n  `Unknown`' not in prompt
 
 
@@ -695,7 +695,9 @@ def test_testing_methods_are_dna_tests_checked_patient_by_patient():
     prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert "Only a test of this patient's DNA is a testing method" in prompt
     assert 'screened for or mapped the variant' in prompt
-    assert 'PCR that amplifies DNA for sequencing is part of the' in prompt
+    assert (
+        'PCR that only amplifies DNA for sequencing is part of the sequencing' in prompt
+    )
     assert 'Testing methods, patient by patient.' in prompt
     assert 'go through those patients one at a' in prompt
     assert 'found\n  their variants differently' in prompt
@@ -791,3 +793,19 @@ def test_segregation_prompt_handles_the_sops_pedigree_adjustments():
     assert '- Semidominant: count the family twice' in seg
     assert 'choose_semidominant_model' in seg
     assert 'INPUT (database-derived, no paper text)' not in seg
+
+
+def test_every_testing_method_is_defined():
+    """Each value the model can choose is defined in the prompt, Genotyping
+    included: the enum mirrors the GCI pick-list, where it is a bucket for
+    targeted allele assays."""
+    from lib.agents.individual_variant_occurrence_agent import (
+        TESTING_METHOD_DEFINITIONS,
+    )
+    from lib.models.patient_variant_occurrences import TestingMethod
+
+    assert set(TESTING_METHOD_DEFINITIONS) == set(TestingMethod)
+    prompt = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert '<<TESTING_METHODS>>' not in prompt
+    for method in TestingMethod:
+        assert f'  - `{method.value}`: ' in prompt

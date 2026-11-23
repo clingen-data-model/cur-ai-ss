@@ -29,7 +29,7 @@ The occurrence agent (`lib/agents/individual_variant_occurrence_agent.py`) fills
 | Reports a result without naming a method | `[Unknown]` | tested, method unstated |
 | Nothing; the link is inferred (obligate carrier, a parent of a homozygous child) | `[]` | not tested |
 
-`Genotyping` means a genotyping assay the paper names. It is never used as a placeholder. Links record carriers only. There is no negative link, so someone who tested negative has no link at all.
+Every value is defined in the prompt (`TESTING_METHOD_DEFINITIONS`). The enum mirrors the GCI's testing-method pick-list, so `Genotyping` is its bucket for targeted allele assays with no value of their own (TaqMan, KASP, SNaPshot), never a placeholder for an unnamed method. Links record carriers only. There is no negative link, so someone who tested negative has no link at all.
 
 ## 2. The handler turns links into a genotype per member
 
