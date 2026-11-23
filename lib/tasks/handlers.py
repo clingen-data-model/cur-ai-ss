@@ -1227,6 +1227,27 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         )
 
 
+def segregation_genotype(links: list[PatientVariantOccurrenceDB]) -> str:
+    """What a family member's links say about their genotype, for segregation
+    counting: "tested carrier" when a link names a testing method (the paper
+    reports the person's own result), "untested carrier" when the links name
+    none (the occurrence agent placed the variant on them by inference: a
+    carrier symbol, a parent named as the origin, a parent of a homozygous
+    child), "no result" with no link.
+
+    The ClinGen SOP counts an affected relative only once genotyped; the
+    segregation agent counted every affected member, so a family with two of
+    five affected members tested reached 5 segregations (dev, paper 181,
+    2026-11-23). "No result" covers both untested and tested negative, which
+    the links cannot tell apart, so it is never counted as genotyped.
+    """
+    if not links:
+        return 'no result'
+    if any(link.testing_methods for link in links):
+        return 'tested carrier'
+    return 'untested carrier'
+
+
 async def handle_segregation_analysis_computed(task_id: int) -> None:
     """Compute segregation analysis metrics for a specific family using ClinGen methodology."""
     family_id: int | None = None
@@ -1292,7 +1313,11 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
                     'identifier': p.identifier,
                     'affected_status': p.affected_status,
                     'proband_status': p.proband_status,
+                    'relationship_to_proband': p.relationship_to_proband,
                     'sex': p.sex,
+                    'genotype': segregation_genotype(
+                        [vl for vl in variant_links if vl.patient_id == p.id]
+                    ),
                 }
                 for p in patients
             ],

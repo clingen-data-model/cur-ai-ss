@@ -92,6 +92,52 @@ def compute_sequencing_methodology(testing_method_values: list[str]) -> dict:
     }
 
 
+def lod_score(
+    segregation_count: int,
+    affected_count: int,
+    unaffected_count: int,
+    scoring_method: str,
+    extracted_lod_score: float | None,
+) -> dict:
+    """The family's LOD score per the ClinGen Gene-Disease Validity SOP (v12,
+    pp. 29-32): a published LOD as given, else the simplified estimate.
+
+    Recessive: Z = log10(1 / (0.25^(affected - 1) * 0.75^unaffected)), where
+    ``affected_count`` includes the proband -- the SOP's "# of Affected
+    Individuals - 1" is the segregations from the proband. It used to be
+    passed affected siblings only and subtracted one again, so a proband with
+    one affected brother scored 0.0 instead of 0.6 (dev, paper 146, 2026-11-23).
+    """
+    if extracted_lod_score is not None:
+        return {
+            'lod_score': extracted_lod_score,
+            'reasoning': f'Using published LOD score: {extracted_lod_score}',
+        }
+
+    if scoring_method == 'Dominant':
+        lod = segregation_count * math.log10(2)
+        return {
+            'lod_score': round(lod, 2),
+            'reasoning': f'Dominant: Z = log10(1/(0.5)^{segregation_count}) = {round(lod, 2)}',
+        }
+
+    if scoring_method == 'Recessive':
+        affected_segregations = max(affected_count - 1, 0)
+        lod = affected_segregations * math.log10(4) + unaffected_count * math.log10(
+            4 / 3
+        )
+        return {
+            'lod_score': round(lod, 2),
+            'reasoning': (
+                f'Recessive: Z = log10(1/((0.25)^({affected_count}-1) * '
+                f'(0.75)^{unaffected_count})) = {round(lod, 2)}, counting '
+                f'{affected_count} affected including the proband'
+            ),
+        }
+
+    return {'lod_score': 0.0, 'reasoning': f'Unknown scoring method: {scoring_method}'}
+
+
 @function_tool
 def calculate_lod_score(
     segregation_count: int,
@@ -100,30 +146,59 @@ def calculate_lod_score(
     scoring_method: str,
     extracted_lod_score: float | None,
 ) -> dict:
-    """Calculate LOD score (tool for agent to call)."""
-    if extracted_lod_score is not None:
-        return {
-            'lod_score': extracted_lod_score,
-            'reasoning': f'Using published LOD score: {extracted_lod_score}',
-        }
+    """Calculate the family's LOD score. affected_count includes the proband;
+    a published LOD score, when given, is used as is."""
+    return lod_score(
+        segregation_count,
+        affected_count,
+        unaffected_count,
+        scoring_method,
+        extracted_lod_score,
+    )
 
-    if scoring_method == 'Dominant':
-        denominator = (0.5) ** segregation_count
-        lod_score = math.log10(1 / denominator) if denominator > 0 else 0.0
-        return {
-            'lod_score': round(lod_score, 2),
-            'reasoning': f'Dominant: Z = log10(1/(0.5)^{segregation_count}) = {round(lod_score, 2)}',
-        }
 
-    elif scoring_method == 'Recessive':
-        denominator = ((0.25) ** (affected_count - 1)) * ((0.75) ** unaffected_count)
-        lod_score = math.log10(1 / denominator) if denominator > 0 else 0.0
-        return {
-            'lod_score': round(lod_score, 2),
-            'reasoning': f'Recessive: Z = log10(1/((0.25)^{affected_count - 1} * (0.75)^{unaffected_count})) = {round(lod_score, 2)}',
-        }
+def minimum_criteria(
+    segregation_count: int,
+    affected_count: int,
+    scoring_method: str,
+    has_unexplainable_non_segregations: bool,
+    extracted_lod_score: float | None,
+) -> dict:
+    """Whether the family's LOD may be scored (SOP v12, p. 29).
 
-    return {'lod_score': 0.0, 'reasoning': f'Unknown scoring method: {scoring_method}'}
+    The size minimums -- 4 segregations dominant, 3 affected including the
+    proband recessive -- are conditions for *estimating* a LOD. A published
+    LOD is used as the authors give it, so a family with one is not held to
+    them; it used to be, and scored 0 points whenever fewer segregations were
+    counted than the minimum. An unexplainable non-segregation fails a family
+    either way.
+    """
+    failed = []
+
+    if has_unexplainable_non_segregations:
+        failed.append('Unexplainable non-segregations present')
+
+    if extracted_lod_score is None:
+        if scoring_method == 'Dominant':
+            if segregation_count < 4:
+                failed.append(
+                    f'Dominant requires 4+ segregations (has {segregation_count})'
+                )
+        elif scoring_method == 'Recessive':
+            if affected_count < 3:
+                failed.append(
+                    'Recessive requires 3+ affected including the proband '
+                    f'(has {affected_count})'
+                )
+        else:
+            raise ValueError(f'Received unexpected scoring method {scoring_method}')
+
+    meets = len(failed) == 0
+    if meets and extracted_lod_score is not None:
+        reasoning = 'Published LOD score: the family-size minimums do not apply'
+    else:
+        reasoning = 'Meets all criteria' if meets else f'Fails: {"; ".join(failed)}'
+    return {'meets_criteria': meets, 'reasoning': reasoning}
 
 
 @function_tool
@@ -132,29 +207,18 @@ def check_minimum_criteria(
     affected_count: int,
     scoring_method: str,
     has_unexplainable_non_segregations: bool,
+    extracted_lod_score: float | None,
 ) -> dict:
-    """Check if family meets ClinGen minimum criteria (tool for agent to call)."""
-    failed = []
-
-    if has_unexplainable_non_segregations:
-        failed.append('Unexplainable non-segregations present')
-
-    if scoring_method == 'Dominant':
-        if segregation_count < 4:
-            failed.append(
-                f'Dominant requires 4+ segregations (has {segregation_count})'
-            )
-    elif scoring_method == 'Recessive':
-        if affected_count < 3:
-            failed.append(f'Recessive requires 3+ affected (has {affected_count})')
-    else:
-        raise ValueError(f'Received unexpected scoring method {scoring_method}')
-
-    meets = len(failed) == 0
-    return {
-        'meets_criteria': meets,
-        'reasoning': 'Meets all criteria' if meets else f'Fails: {"; ".join(failed)}',
-    }
+    """Check whether the family meets the ClinGen criteria for scoring.
+    affected_count includes the proband; pass the published LOD score, or
+    null when the paper gives none."""
+    return minimum_criteria(
+        segregation_count,
+        affected_count,
+        scoring_method,
+        has_unexplainable_non_segregations,
+        extracted_lod_score,
+    )
 
 
 @function_tool
@@ -212,7 +276,8 @@ System: You are an expert in ClinGen segregation analysis following the simplifi
 Task: Compute segregation analysis metrics for a family using ClinGen LOD score methodology.
 
 INPUT (database-derived, no paper text):
-1. Family structure (family identifier, patients with their affected/proband status, relationships)
+1. Family structure (family identifier, patients with their affected/proband status, relationships,
+   and each patient's genotype: "tested carrier", "untested carrier" or "no result" -- see GENOTYPES)
 2. Patient-variant links (which patients carry the variant, with zygosity, inheritance pattern, and testing methods)
 3. Extracted segregation evidence (published LOD score if available, non-segregation flag)
 
@@ -220,7 +285,7 @@ You have access to five tools:
 - compute_scoring_method: Derives the ClinGen scoring method (Dominant/Recessive) from the inheritance values in the patient-variant links
 - compute_sequencing_methodology: Derives the sequencing methodology from the testing methods in the patient-variant links
 - check_minimum_criteria: Evaluates if family meets ClinGen size/segregation requirements
-- calculate_lod_score: Computes LOD using ClinGen formulas (or uses published LOD if available)
+- calculate_lod_score: Computes LOD using ClinGen formulas (or uses published LOD if available); its affected_count includes the proband
 - assign_points: Assigns points based on LOD score and sequencing methodology per Figure 6 matrix
 
 Your task:
@@ -235,49 +300,77 @@ Your task:
    - Pass them to `compute_sequencing_methodology` to get the sequencing methodology and basis
    - Use this methodology when calling `assign_points` in step 5
 
-1. **Extract segregation count**: Count affected individuals (excluding proband) + obligate carriers, accounting for twins
+GENOTYPES
 
-   Base counting rule:
-   - Start with number of affected individuals (phenotype+/genotype+)
-   - Subtract 1 (the proband, whose genotype phase is unknown)
-   - Add obligate carriers (even if untested or unaffected)
+The ClinGen SOP counts only people whose genotype is known: an affected
+person counts when they were tested and carry the variant, never because
+they are affected. Each patient's "genotype" says what the links show:
+- "tested carrier": a link carrying a testing method -- the paper reports
+  this person's own result.
+- "untested carrier": a link with no testing method -- the variant is
+  placed on them by inference (a carrier symbol with no genotype label, a
+  parent named as the variant's origin, a parent of a homozygous child).
+- "no result": no link. Not tested, or tested negative: the two cannot be
+  told apart here, so a "no result" person is never counted as genotyped,
+  in either direction.
+The proband is the index case and is counted as a tested carrier whatever
+their links show.
 
-   Twin handling (CRITICAL):
-   - **Dizygotic (fraternal) twins**: Each twin counts as a separate segregation
-     * If proband has 2 dizygotic affected twin siblings with variant: +2 segregations
-   - **Monozygotic (identical) twins**: Count as ONE segregation (not two)
-     * If proband has 2 monozygotic affected twin siblings with variant: +1 segregation
+1. **Count segregations (Dominant / X-linked)**:
+   - Count every affected "tested carrier" other than the proband.
+   - Add each obligate carrier: a person who must carry the variant because
+     of where they sit in the pedigree -- between two carriers in a line of
+     descent (a parent with the variant and a child with the variant; a
+     sibling with the variant and a child with the variant). An obligate
+     carrier counts whatever their phenotype and whether or not they were
+     tested. Name in the basis the carriers on either side of them.
+   - An "untested carrier" who is not an obligate carrier by that test is
+     not counted, and neither is any affected person with "no result": an
+     affected relative counts only once tested.
+   - A tested carrier who is unaffected is not counted (reduced penetrance or
+     later onset can explain them) unless they are an obligate carrier.
+   - Twins: dizygotic twins count as two segregations, monozygotic as one.
+     Twins of unstated type are counted as two, flagged inferred.
+   Example: affected proband, affected tested-carrier sister, affected
+   untested aunt, untested mother whose own mother is an affected tested
+   carrier = 3 segregations (sister, mother as obligate carrier, grandmother);
+   the aunt is not counted.
 
-   For dominant: count genotype+/phenotype+ individuals and obligate carriers
-   For recessive: 
-      - Count ONLY affected SIBLINGS of the proband (not parents, not offspring)
-      - segregation_count = number of affected siblings
-      - Parents are excluded (obligate carriers don't count in recessive eLOD)
-      - Twin handling: same as dominant (dizygotic separate, monozygotic one)
-      - Example: Proband + 1 affected sibling = 1 segregation; parent is not counted
+   **Recessive**: segregation_count is affected_count - 1.
 
-   Example: Proband + 2 dizygotic affected siblings with variant = 2 segregations (not 3)
-   Example: Proband + 2 monozygotic affected siblings with variant = 1 segregation
+   Name in the basis every person counted and every affected person left
+   out, with the reason.
 
-   Provide detailed basis showing which individuals were counted and how twins were handled
+2. **Count affected and unaffected**:
 
-2. **Extract affected/unaffected counts**:
+   For **Dominant / X-linked**:
+   - affected_count: the proband plus the affected people counted in step 1
+   - unaffected_count: 0 (not used)
 
-   For **Dominant**:
-   - affected_count: individuals with phenotype+
-   - unaffected_count: not used in dominant formula, set to 0
-
-   For **Recessive** (CRITICAL - parents excluded):
-   - affected_count: number of affected siblings ONLY (not including parents)
-   - unaffected_count: number of unaffected siblings ONLY (not including parents)
-   - **DO NOT include parents in either count**, even if they are known carriers
-   - Basis: Parents are obligate heterozygous carriers; only siblings are at same risk as proband to inherit two variants
-   - Example: Proband (affected) + affected sibling + unaffected sibling + carrier parent = affected_count=1, unaffected_count=1 (parent excluded)
+   For **Recessive** -- only the proband and their siblings, the people at
+   the same risk of inheriting both copies; parents and other relatives are
+   never counted:
+   - affected_count: the proband plus each affected sibling who is a tested
+     carrier with the proband's genotype (homozygous, or both of the
+     proband's variants). The proband is included.
+   - unaffected_count: each unaffected sibling who was tested and found not
+     to share the proband's genotype -- a tested carrier of one variant only.
+     A sibling with "no result" is not counted: tested-negative siblings
+     cannot be told from untested ones here, and leaving them out errs low.
+   - When the proband is compound heterozygous and no parent is a tested
+     carrier, the variants are not shown to be in trans: count no siblings
+     (affected_count 1, unaffected_count 0) and flag inferred.
+   Example: affected proband (homozygous), affected tested-homozygous
+   sister, unaffected tested-heterozygous brother, untested unaffected sister,
+   carrier parents = affected_count 2, unaffected_count 1.
 
 3. **Check minimum criteria** (call check_minimum_criteria tool):
-   - Pass: segregation_count, affected_count, scoring_method, has_unexplainable_non_segregations
-   - Returns: meets_criteria boolean and basis
-   - Criteria: no unexplainable non-segregations, plus scoring-method-specific thresholds
+   - Pass: segregation_count, affected_count, scoring_method,
+     has_unexplainable_non_segregations, extracted_lod_score
+   - Criteria: no unexplainable non-segregations; and, for an estimated LOD
+     only, at least 4 segregations (Dominant) or at least 3 affected
+     including the proband (Recessive). A published LOD is not held to the
+     size minimums.
 
 4. **Calculate LOD score** (call calculate_lod_score tool):
    - Pass: segregation_count, affected_count, unaffected_count, scoring_method, extracted_lod_score
@@ -310,7 +403,8 @@ SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS = (
     + """
 FLAGS for this task. Kinds:
 - inferred: a family member counted or left out on an assumption -- an
-  unknown affected status, an untested member, twins of unstated type.
+  unknown affected status, an obligate carrier counted untested, twins of
+  unstated type, siblings left out because the variants are not phased.
 - conflict: a count the extracted LOD score disagrees with.
 Not: a methodology defaulted to the conservative row (the rule decides it),
 a non-segregation treated as explained (the evidence extractor's flag), nor

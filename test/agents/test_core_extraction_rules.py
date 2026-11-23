@@ -371,12 +371,10 @@ def test_occurrence_prompt_gives_a_labelled_person_the_familys_testing_method():
         in (prompt)
     )
     assert 'Genotyping when the paper names none' in prompt
-    # An unstated method is an empty list, not the Unknown member (paper 111
-    # used the one, every other paper the other).
-    assert 'empty list when the paper does not say how this patient was tested' in (
-        prompt
-    )
-    assert 'never\n  `Unknown` for that' in prompt
+    # An unstated method is never the Unknown member (paper 111 used it, every
+    # other paper an empty list); since 2026-11-23 a reported result with no
+    # named method is Genotyping and an empty list means an inferred link.
+    assert 'Never\n  `Unknown`, which reads as a method the paper named' in prompt
 
 
 def test_occurrence_prompt_reads_a_pedigree_genotype_label_as_a_stated_genotype():
@@ -736,3 +734,26 @@ def test_phenotype_prompt_names_a_measured_finding_in_words():
     assert 'never\n  the bare measurement' in phenotype
     assert 'A value inside the normal range' in phenotype
     assert 'A finding read from a number against a normal range' in phenotype
+
+
+def test_segregation_prompt_counts_only_genotyped_members_per_the_sop():
+    """An affected relative counts once tested, an untested one only as an
+    obligate carrier; recessive counts include the proband and only tested
+    siblings; a published LOD skips the size minimums (SOP v12)."""
+    seg = SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS
+    assert 'affected relative counts only once tested' in seg
+    assert 'An obligate\n     carrier counts whatever their phenotype' in seg
+    assert 'The proband is included.' in seg
+    assert 'A sibling with "no result" is not counted' in seg
+    assert 'A published LOD is not held to the\n     size minimums.' in seg
+    assert 'number of affected siblings ONLY' not in seg
+
+
+def test_occurrence_prompt_keeps_an_empty_method_for_inference_only():
+    """Segregation reads an empty method list as untested, so a reported
+    result always carries a method, Genotyping when none is named."""
+    occurrence = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert 'An empty list means one thing only' in occurrence
+    assert 'and Genotyping when\n  the paper names none' in occurrence
+    assert 'Tested or inferred, patient by patient.' in occurrence
+    assert 'an\n  empty list when the paper does not say how' not in occurrence
