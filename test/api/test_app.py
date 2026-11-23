@@ -3667,7 +3667,8 @@ def test_load_hpo_link_cache(db_session, seeded_paper):
     link('No seizures', 'HP:NEGATED', negated=True)
     link('Maternal ataxia', 'HP:FAMILY', family_history=True)
     link('Unmatched', None)
-    # A measured concept: the agent's link is not reused, a curator's is.
+    # A concept carrying a measurement is reused like any other; a stale
+    # link is replaced by re-running the paper, not kept out of the cache.
     link('LDL cholesterol 132 mg/dl', 'HP:AGENT_MEASURED')
     measured = link('HDL cholesterol 44 mg/dl', 'HP:CURATED_MEASURED')
     db_session.add(EditDB(hpo_link_id=measured.hpo.id, field_name='hpo'))
@@ -3679,6 +3680,7 @@ def test_load_hpo_link_cache(db_session, seeded_paper):
     assert {key: entry.hpo_id for key, entry in cache.items()} == {
         'seizures': 'HP:CURATED',
         'short stature': 'HP:SECOND',
+        'ldl cholesterol 132 mg/dl': 'HP:AGENT_MEASURED',
         'hdl cholesterol 44 mg/dl': 'HP:CURATED_MEASURED',
     }
     assert cache['seizures'].curated
