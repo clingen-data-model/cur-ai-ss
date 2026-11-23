@@ -304,7 +304,9 @@ INPUT (database-derived, no paper text):
 1. Family structure (family identifier, patients with their affected/proband status, relationships,
    and each patient's genotype: "tested carrier", "untested carrier" or "no result" -- see GENOTYPES)
 2. Patient-variant links (which patients carry the variant, with zygosity, inheritance pattern, and testing methods)
-3. Extracted segregation evidence (published LOD score if available, non-segregation flag)
+3. Extracted segregation evidence (published LOD score if available, and has_unexplainable_non_segregations, a true/false value)
+
+Flags raised by other steps are never part of the input; who was tested comes only from the genotype field.
 
 You have access to five tools:
 - compute_scoring_method: Derives the ClinGen scoring method (Dominant/Recessive) from the inheritance values in the patient-variant links
@@ -434,7 +436,7 @@ FLAGS for this task. Kinds:
   unstated type, siblings left out because the variants are not phased.
 - conflict: a count the extracted LOD score disagrees with.
 Not: a methodology defaulted to the conservative row (the rule decides it),
-a non-segregation treated as explained (the evidence extractor's flag), nor
+a non-segregation treated as explained (the evidence extractor raises that), nor
 the genotypes and statuses you were given. "about" is a member's identifier
 from the family structure, or null. The output carries a "flags" list.
 """
