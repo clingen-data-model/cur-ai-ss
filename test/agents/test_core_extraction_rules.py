@@ -778,3 +778,16 @@ def test_a_non_segregation_needs_a_reported_negative_test():
     assert 'Use the family structure and variant information provided' not in (
         segregation
     )
+
+
+def test_segregation_prompt_handles_the_sops_pedigree_adjustments():
+    """SOP v12: base 1 for daughters of an affected father (X-linked), base
+    0.5 with an affected parent (recessive), and a semidominant family scored
+    as AD or AR, whichever meets its minimum."""
+    seg = SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS
+    assert '**X-linked, affected father**' in seg
+    assert 'certain_segregations' in seg
+    assert '- affected_parent: true when one of the sibship' in seg
+    assert '- Semidominant: count the family twice' in seg
+    assert 'choose_semidominant_model' in seg
+    assert 'INPUT (database-derived, no paper text)' not in seg
