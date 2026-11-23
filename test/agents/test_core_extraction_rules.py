@@ -763,3 +763,18 @@ def test_occurrence_prompt_keeps_an_empty_method_for_inference_only():
     assert 'and `Unknown`\n  when the paper names none' in occurrence
     assert 'Tested or inferred, patient by patient.' in occurrence
     assert 'an\n  empty list when the paper does not say how' not in occurrence
+
+
+def test_a_non_segregation_needs_a_reported_negative_test():
+    """SOP v12 p. 29: a non-segregation is genotype-negative and affected. The
+    prompt had judged it from the links, which hold carriers only, so an
+    untested affected relative read as a non-carrier and failed the family."""
+    segregation = SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS
+    assert 'TESTED and\n     found NOT to carry' in segregation
+    assert 'The patient-variant links record carriers -- tested ones, and untested' in (
+        segregation
+    )
+    assert 'The missing link is never the\n     evidence' in segregation
+    assert 'Use the family structure and variant information provided' not in (
+        segregation
+    )
