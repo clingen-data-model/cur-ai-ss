@@ -749,6 +749,10 @@ def test_segregation_prompt_counts_only_genotyped_members_per_the_sop():
     assert 'A sibling with "no result" is not counted' in seg
     assert 'A published LOD is not held to the\n     size minimums.' in seg
     assert 'number of affected siblings ONLY' not in seg
+    assert 'Read the genotype variant by variant' in seg
+    assert 'never counts. The proband is the' in seg
+    assert '- unresolved: no scoring method' in seg
+    assert 'methodology was not taken from a proband' in seg
 
 
 def test_occurrence_prompt_keeps_an_empty_method_for_inference_only():

@@ -3,9 +3,13 @@
 
 import pytest
 
-from lib.agents.segregation_analysis_computed_agent import lod_score, minimum_criteria
+from lib.agents.segregation_analysis_computed_agent import (
+    lod_score,
+    minimum_criteria,
+    scoring_method,
+)
 from lib.models import PatientVariantOccurrenceDB
-from lib.tasks.handlers import segregation_genotype
+from lib.tasks.handlers import segregation_basis, segregation_genotype
 
 
 def _lod(**kw) -> float:
@@ -83,18 +87,78 @@ def test_an_unexplainable_non_segregation_fails_even_a_published_lod() -> None:
     )
 
 
-def _link(*methods: str) -> PatientVariantOccurrenceDB:
-    return PatientVariantOccurrenceDB(testing_methods=list(methods))
+def _link(
+    *methods: str, patient_id: int = 1, variant_id: int = 10
+) -> PatientVariantOccurrenceDB:
+    return PatientVariantOccurrenceDB(
+        patient_id=patient_id, variant_id=variant_id, testing_methods=list(methods)
+    )
 
 
-def test_genotype_is_tested_when_a_link_names_a_method() -> None:
-    assert segregation_genotype([_link('Sanger Sequencing')]) == 'tested carrier'
-    assert segregation_genotype([_link(), _link('Unknown')]) == 'tested carrier'
+def test_genotype_is_per_segregating_variant() -> None:
+    """Tested for one of a compound-het proband's variants and only inferred
+    for the other is a tested carrier of the first only."""
+    links = [_link('Sanger Sequencing', variant_id=10), _link(variant_id=20)]
+    assert segregation_genotype(links, [10, 20]) == {
+        '10': 'tested carrier',
+        '20': 'untested carrier',
+    }
 
 
-def test_genotype_is_untested_when_no_link_names_a_method() -> None:
-    assert segregation_genotype([_link()]) == 'untested carrier'
+def test_unknown_method_is_tested_and_no_link_is_no_result() -> None:
+    assert segregation_genotype([_link('Unknown')], [10, 20]) == {
+        '10': 'tested carrier',
+        '20': 'no result',
+    }
 
 
-def test_genotype_is_no_result_without_a_link() -> None:
-    assert segregation_genotype([]) == 'no result'
+def test_a_link_to_a_non_segregating_variant_never_counts() -> None:
+    assert segregation_genotype([_link('Sanger Sequencing', variant_id=99)], [10]) == {
+        '10': 'no result'
+    }
+
+
+def test_basis_is_the_probands_variants_and_methods() -> None:
+    links = [
+        _link('Exome Sequencing', 'Sanger Sequencing', patient_id=1, variant_id=10),
+        _link('Sanger Sequencing', patient_id=2, variant_id=10),
+        _link('MLPA', patient_id=3, variant_id=99),
+    ]
+    basis = segregation_basis({1}, links)
+    assert basis.variant_ids == [10]
+    assert basis.methods == ['Exome Sequencing', 'Sanger Sequencing']
+    assert basis.from_proband
+
+
+def test_basis_falls_back_to_the_family_without_a_linked_proband() -> None:
+    links = [
+        _link('Sanger Sequencing', patient_id=2, variant_id=10),
+        _link(patient_id=3, variant_id=10),
+    ]
+    basis = segregation_basis({1}, links)
+    assert basis.variant_ids == [10]
+    assert basis.methods == ['Sanger Sequencing']
+    assert not basis.from_proband
+
+
+@pytest.mark.parametrize(
+    ('values', 'method'),
+    [
+        (['Dominant', 'Dominant', 'Unknown'], 'Dominant'),
+        (['X-linked'], 'Dominant'),
+        (['Semi-dominant'], 'Dominant'),
+        (['Recessive', 'Unknown', 'Recessive'], 'Recessive'),
+        (['Unknown', 'Unknown', 'Recessive'], None),
+        (['Mitochondrial'], None),
+        ([], None),
+    ],
+)
+def test_scoring_method_gives_none_for_unknown_or_non_mendelian(
+    values: list[str], method: str | None
+) -> None:
+    """Anything not dominant used to score as Recessive, Unknown included."""
+    assert scoring_method(values)['scoring_method'] == method
+
+
+def test_no_scoring_method_fails_the_minimum_instead_of_raising() -> None:
+    assert not _meets(scoring_method=None, segregation_count=6, affected_count=6)
