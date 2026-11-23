@@ -370,11 +370,13 @@ def test_occurrence_prompt_gives_a_labelled_person_the_familys_testing_method():
         'the one the\n  paper says it used to find or confirm the variant in that family'
         in (prompt)
     )
-    assert 'Genotyping when the paper names none' in prompt
-    # An unstated method is never the Unknown member (paper 111 used it, every
-    # other paper an empty list); since 2026-11-23 a reported result with no
-    # named method is Genotyping and an empty list means an inferred link.
-    assert 'Never\n  `Unknown`, which reads as a method the paper named' in prompt
+    assert '`Unknown` when the paper names none' in prompt
+    # Until 2026-11-23 an unstated method was an empty list and Unknown was
+    # banned (paper 111 used the one, every other paper the other). An empty
+    # list now means an inferred link, so a reported result with no named
+    # method is Unknown again, and Genotyping keeps meaning the assay.
+    assert 'not Genotyping, which is a\n  genotyping assay the paper names' in prompt
+    assert 'Never\n  `Unknown`' not in prompt
 
 
 def test_occurrence_prompt_reads_a_pedigree_genotype_label_as_a_stated_genotype():
@@ -751,9 +753,9 @@ def test_segregation_prompt_counts_only_genotyped_members_per_the_sop():
 
 def test_occurrence_prompt_keeps_an_empty_method_for_inference_only():
     """Segregation reads an empty method list as untested, so a reported
-    result always carries a method, Genotyping when none is named."""
+    result always carries a method, Unknown when none is named."""
     occurrence = INDIVIDUAL_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'An empty list means one thing only' in occurrence
-    assert 'and Genotyping when\n  the paper names none' in occurrence
+    assert 'and `Unknown`\n  when the paper names none' in occurrence
     assert 'Tested or inferred, patient by patient.' in occurrence
     assert 'an\n  empty list when the paper does not say how' not in occurrence

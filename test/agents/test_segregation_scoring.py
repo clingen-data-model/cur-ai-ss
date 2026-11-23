@@ -89,7 +89,7 @@ def _link(*methods: str) -> PatientVariantOccurrenceDB:
 
 def test_genotype_is_tested_when_a_link_names_a_method() -> None:
     assert segregation_genotype([_link('Sanger Sequencing')]) == 'tested carrier'
-    assert segregation_genotype([_link(), _link('Genotyping')]) == 'tested carrier'
+    assert segregation_genotype([_link(), _link('Unknown')]) == 'tested carrier'
 
 
 def test_genotype_is_untested_when_no_link_names_a_method() -> None:

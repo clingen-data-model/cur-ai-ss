@@ -87,7 +87,7 @@ def sequencing_methodology(proband_testing_methods: list[str]) -> dict:
     sequencing alone." This used to be the most frequent method across every
     link in the family, so relatives confirmed by Sanger -- or, since the
     occurrence prompt began giving a tested relative with no named method
-    Genotyping (2026-11-23), relatives tested by an unnamed method -- could
+    Unknown (2026-11-23), relatives tested by an unnamed method -- could
     outvote a proband's exome and move the family to the candidate-gene
     points row.
     """
