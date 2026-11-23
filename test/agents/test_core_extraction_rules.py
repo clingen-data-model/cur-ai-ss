@@ -712,3 +712,27 @@ def test_a_diagnosis_that_names_a_finding_is_a_phenotype():
     assert 'A tumour or other\nneoplasm, a malformation' in prompt
     assert 'Only skip diagnoses that name a syndrome or a disorder' in prompt
     assert 'When you cannot tell whether a diagnosis names a finding' in prompt
+
+
+def test_hpo_prompt_takes_numbers_only_from_the_concept_or_hpo():
+    """The HPO linker had cited reference ranges and grading scales of its own
+    (a hearing band HPO puts elsewhere, a lipid 'cutoff' HPO does not have)
+    and given a bare lab value a direction the concept never stated."""
+    hpo = HPO_LINKING_AGENT_INSTRUCTIONS
+    assert 'never from memory' in hpo
+    assert 'A bare value ("<analyte> <number> <unit>") states none' in hpo
+    assert "with a mismatch flag naming the value and\n  HPO's range" in hpo
+    assert 'definition, comment (str or null)' in hpo
+    assert 'a bare measured value whose direction the concept does not' in hpo
+    assert 'outside the numeric range HPO defines for the term' in hpo
+
+
+def test_phenotype_prompt_names_a_measured_finding_in_words():
+    """A measured finding is written with its direction in words, never as
+    the bare measurement, and a normal value is not a phenotype; the
+    inferred-threshold rule of 2026-10-29 stays."""
+    phenotype = PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS
+    assert 'its direction first, with the measurement after it' in phenotype
+    assert 'never\n  the bare measurement' in phenotype
+    assert 'A value inside the normal range' in phenotype
+    assert 'A finding read from a number against a normal range' in phenotype

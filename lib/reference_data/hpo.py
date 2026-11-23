@@ -10,7 +10,7 @@ from lib.core.environment import env
 from lib.models import HpoCandidate
 
 # Lazy-loaded ontology
-_ontology: hpotk.MinimalOntology | None = None
+_ontology: hpotk.Ontology | None = None
 # Lazy-loaded name/synonym -> HPO id lookup, built from the ontology above
 _term_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]] | None = None
 
@@ -50,12 +50,45 @@ def ensure_ontology() -> Path:
     return path
 
 
-def get_ontology() -> hpotk.MinimalOntology:
+def get_ontology() -> hpotk.Ontology:
     """Load and cache the HPO ontology."""
     global _ontology
     if _ontology is None:
         _ontology = hpotk.load_ontology(str(ensure_ontology()))
     return _ontology
+
+
+def describe_term(term: hpotk.model.Term) -> dict:
+    """An HPO term as the linking agent is shown it: id, name, definition,
+    comment and synonyms, all plain text.
+
+    The comment is where HPO writes the threshold for some 280 terms whose
+    definition gives none (hypertension's 140/90 mm Hg, the neutropenia
+    grades), and the definition is a ``Definition`` object whose repr, with
+    its xrefs, is what the agent used to be handed. Without both, the agent
+    recalled thresholds from memory and some were wrong: a moderate hearing
+    loss cited as 41-70 dB where HPO says 41-60, an HDL of 60 mg/dL called
+    increased against a 'reference cutoff' HPO does not have (dev, 2026-11-23).
+    """
+    definition = term.definition
+    return {
+        'id': str(term.identifier.value),
+        'name': term.name,
+        'definition': definition.definition if definition is not None else None,
+        'comment': term.comment,
+        'synonyms': [s.name for s in term.synonyms] if term.synonyms else [],
+    }
+
+
+def describe_term_id(hpo_id: str) -> dict | None:
+    """describe_term for an HPO id, or None when the ontology has no such
+    term (a candidate from the lookup always resolves; a model-typed id may
+    not)."""
+    try:
+        term = get_ontology().get_term(hpotk.TermId.from_curie(hpo_id))
+    except ValueError:
+        return None
+    return describe_term(term) if term is not None else None
 
 
 def build_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]:

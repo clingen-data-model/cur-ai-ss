@@ -216,3 +216,51 @@ def test_find_matching_hpo_terms_synonym_match(
     assert len(result) > 0
     # Should match with high score due to being in lookup
     assert result[0].similarity_score >= 95
+
+
+def _term(**kw) -> hpotk.model.Term:
+    return hpotk.model.Term.create_term(
+        identifier='HP:0000822',
+        name='Hypertension',
+        alt_term_ids=[],
+        is_obsolete=False,
+        **{'synonyms': None, 'xrefs': None, **kw},
+    )
+
+
+def test_describe_term_hands_over_the_definition_text_and_the_comment() -> None:
+    """The comment is where HPO writes some terms' thresholds, and the
+    definition reaches the agent as its text, not a Definition repr."""
+    described = hpo_module.describe_term(
+        _term(
+            definition=hpotk.model.Definition(
+                'Chronic increased systemic arterial pressure.', ['ORCID:1']
+            ),
+            comment='Sustained resting systolic BP of 140 mm Hg or higher.',
+            synonyms=[hpotk.model.Synonym('High blood pressure')],
+        )
+    )
+    assert described == {
+        'id': 'HP:0000822',
+        'name': 'Hypertension',
+        'definition': 'Chronic increased systemic arterial pressure.',
+        'comment': 'Sustained resting systolic BP of 140 mm Hg or higher.',
+        'synonyms': ['High blood pressure'],
+    }
+
+
+def test_describe_term_without_definition_or_comment() -> None:
+    described = hpo_module.describe_term(_term(definition=None, comment=None))
+    assert described['definition'] is None
+    assert described['comment'] is None
+    assert described['synonyms'] == []
+
+
+def test_describe_term_id_is_none_for_an_unknown_or_malformed_id(monkeypatch) -> None:
+    class FakeOntology:
+        def get_term(self, term_id):
+            return None
+
+    monkeypatch.setattr(hpo_module, 'get_ontology', lambda: FakeOntology())
+    assert hpo_module.describe_term_id('HP:9999999') is None
+    assert hpo_module.describe_term_id('not an id') is None
