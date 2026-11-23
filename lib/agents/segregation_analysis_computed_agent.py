@@ -67,29 +67,54 @@ def compute_scoring_method(inheritance_values: list[str]) -> dict:
     }
 
 
-@function_tool
-def compute_sequencing_methodology(testing_method_values: list[str]) -> dict:
+# Broadest first: the SOP awards more points when the linkage interval was
+# searched more completely.
+_METHODOLOGY_BREADTH = [
+    SequencingMethodology.ExomeOrGenome.value,
+    SequencingMethodology.AllGenesInRegion.value,
+    SequencingMethodology.CandidateGene.value,
+    SequencingMethodology.Unknown.value,
+]
+
+
+def sequencing_methodology(proband_testing_methods: list[str]) -> dict:
+    """The family's sequencing methodology: the broadest one among the
+    proband's own testing methods.
+
+    SOP v12, p. 35: "typically only the proband needs to have undergone
+    [exome/genome] sequencing to be counted in this segregation method,
+    whereas family members may have undergone exome/genome or Sanger
+    sequencing alone." This used to be the most frequent method across every
+    link in the family, so relatives confirmed by Sanger -- or, since the
+    occurrence prompt began giving a tested relative with no named method
+    Genotyping (2026-11-23), relatives tested by an unnamed method -- could
+    outvote a proband's exome and move the family to the candidate-gene
+    points row.
     """
-    Derive the sequencing methodology from the most-frequent testing method
-    across all patient-variant links in the family.
-    """
-    if not testing_method_values:
+    methodologies = {
+        _TESTING_TO_METHODOLOGY.get(m, SequencingMethodology.Unknown.value)
+        for m in proband_testing_methods
+    }
+    if not methodologies:
         return {
             'sequencing_methodology': SequencingMethodology.Unknown.value,
-            'reasoning': 'No testing methods found; defaulting to Unknown',
+            'reasoning': "The proband's links name no testing method; defaulting to Unknown",
         }
-
-    counts: Counter[str] = Counter(testing_method_values)
-    most_common, count = counts.most_common(1)[0]
-    methodology = _TESTING_TO_METHODOLOGY.get(
-        most_common, SequencingMethodology.Unknown.value
-    )
+    broadest = next(m for m in _METHODOLOGY_BREADTH if m in methodologies)
     return {
-        'sequencing_methodology': methodology,
+        'sequencing_methodology': broadest,
         'reasoning': (
-            f'Most frequent testing method: {most_common} ({count} of {len(testing_method_values)} methods) → {methodology}'
+            f"The proband's testing methods ({', '.join(sorted(set(proband_testing_methods)))}) "
+            f'make the broadest methodology {broadest}'
         ),
     }
+
+
+@function_tool
+def compute_sequencing_methodology(proband_testing_methods: list[str]) -> dict:
+    """Derive the family's sequencing methodology from the proband's own
+    testing methods (the broadest of them); relatives' methods do not count."""
+    return sequencing_methodology(proband_testing_methods)
 
 
 def lod_score(
@@ -283,7 +308,7 @@ INPUT (database-derived, no paper text):
 
 You have access to five tools:
 - compute_scoring_method: Derives the ClinGen scoring method (Dominant/Recessive) from the inheritance values in the patient-variant links
-- compute_sequencing_methodology: Derives the sequencing methodology from the testing methods in the patient-variant links
+- compute_sequencing_methodology: Derives the sequencing methodology from the proband's testing methods
 - check_minimum_criteria: Evaluates if family meets ClinGen size/segregation requirements
 - calculate_lod_score: Computes LOD using ClinGen formulas (or uses published LOD if available); its affected_count includes the proband
 - assign_points: Assigns points based on LOD score and sequencing methodology per Figure 6 matrix
@@ -296,7 +321,9 @@ Your task:
    - Use this scoring method for all subsequent steps
 
 0.5. **Determine sequencing methodology** (call compute_sequencing_methodology tool):
-   - Flatten all `testing_methods` values from the patient-variant links into a single list
+   - Collect the `testing_methods` of the PROBAND's links only. Relatives are
+     often confirmed by Sanger or tested by an unnamed method; the SOP grades
+     the family by how the proband's variant was found
    - Pass them to `compute_sequencing_methodology` to get the sequencing methodology and basis
    - Use this methodology when calling `assign_points` in step 5
 
