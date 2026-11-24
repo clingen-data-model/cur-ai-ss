@@ -17,7 +17,7 @@ uv run pytest test/path/to/test_file.py          # CI runs the whole suite with 
 alembic upgrade head
 ```
 
-From `frontend/`: `pnpm type-check`, `pnpm lint`, `pnpm build` (regenerates the API client first). CI does not run these, so run them yourself before merging frontend work.
+From `frontend/`: `pnpm type-check`, `pnpm lint`, `pnpm build` (regenerates the API client first). CI runs all three (`.github/workflows/frontend-check.yml`) whenever `frontend/` or `lib/` changes, since an API change can break the frontend's types.
 
 Tests read `ENV_FILE=.env.test`. Settings live in `lib/core/environment.py`, loaded from `.env` or the environment. Data is under `CAA_ROOT` (`/var/caa`): `sqllite/app.db`, `documents/`, `logs/`, `reference_data/`.
 
@@ -52,7 +52,7 @@ PDF Parsing (docling-serve on Cloud Run, `docs/cloud-run-parsing.md`) → Paper 
 
 ## Migrations (SQLite)
 
-Both failures below are silent, and both have destroyed production data.
+Both failures below are silent, and both have destroyed production data. `test/migrations/test_migration_safety.py` walks every new migration over a database with a row in every table and fails on either one, on an Enum column holding anything but member names, and on a second alembic head. It uses generic rows, so a data migration still wants its own test with realistic rows in `test_alembic.py`.
 
 - **Enum columns store the member's name** (`'COMPLETED'`), not its value. A `server_default` or raw-SQL backfill must write `.name`. Confirm by reading a freshly migrated row back through the ORM: a wrong value only fails on read, with a `LookupError` (this took down `GET /papers` on 2026-09-17).
 - **`batch_alter_table` on a table with CASCADE dependents recreates it and deletes the child rows** unless foreign keys are really off. `PRAGMA foreign_keys` does nothing inside alembic's open transaction. Calling `connection.commit()` to escape it leaves `alembic_version` one revision behind. Use `autocommit_block()`:

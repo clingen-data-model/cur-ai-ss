@@ -1,0 +1,65 @@
+# Type-check, lint and build the SPA. The build regenerates frontend/api-spec.json
+# and the API client from the FastAPI app (the prebuild hook), and neither is
+# checked in, so this is also what catches an API change that breaks the
+# frontend's types: it runs when lib/ changes, not only frontend/.
+name: Frontend checks
+
+on:
+  push:
+    branches: [main]
+    paths: [frontend/**, lib/**, bin/generate-api-spec, pyproject.toml, uv.lock, .github/workflows/frontend-check.yml]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths: [frontend/**, lib/**, bin/generate-api-spec, pyproject.toml, uv.lock, .github/workflows/frontend-check.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      # bin/generate-api-spec imports the app, which reads its settings.
+      ENV_FILE: .env.test
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        cache-dependency-glob: |
+          **/uv.lock
+          **/pyproject.toml
+
+    - name: Sync Python dependencies
+      working-directory: .
+      run: uv sync --locked --python-preference=system
+
+    # Versions match what the playbook installs on dev-caa.
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 12
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: pnpm
+        cache-dependency-path: frontend/pnpm-lock.yaml
+
+    - name: Install frontend dependencies
+      run: pnpm install --frozen-lockfile
+
+    # First, so the generated client exists for type-check and lint.
+    - name: Build (regenerates the API spec and client)
+      run: pnpm build
+
+    - name: Type check
+      run: pnpm type-check
+
+    - name: Lint
+      run: pnpm lint
