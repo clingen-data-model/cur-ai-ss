@@ -113,6 +113,10 @@ class Env(BaseSettings):
 
     # Feature Flags
     SKIP_DATA_MIGRATIONS: bool = False
+    # The API runs `alembic upgrade head` as it starts. dev-caa turns this off and
+    # migrates with bin/migrate (lib/bin/migrate.py) while everything is stopped,
+    # backing up first; the API then refuses to start on a database not at head.
+    MIGRATE_ON_STARTUP: bool = True
 
     @model_validator(mode='after')
     def validate_worker_shard(self) -> 'Env':

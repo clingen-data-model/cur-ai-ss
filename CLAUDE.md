@@ -14,7 +14,7 @@ uv run ruff check lib && uv run ruff format --check lib test && uv run mypy lib
 uv run pytest test/path/to/test_file.py          # CI runs the whole suite with coverage of lib/
 ./bin/api    ./bin/worker    ./bin/ui            # ports 8000 and 8501; `./bin/ui <script>` runs a pnpm script
 ./bin/generate-api-spec                          # frontend/api-spec.json from the FastAPI app, no server needed
-alembic upgrade head
+alembic upgrade head                             # ./bin/api does this as it starts; dev-caa uses ./bin/migrate
 ```
 
 From `frontend/`: `pnpm type-check`, `pnpm lint`, `pnpm build` (regenerates the API client first). CI runs all three (`.github/workflows/frontend-check.yml`) whenever `frontend/` or `lib/` changes, since an API change can break the frontend's types.
@@ -52,7 +52,7 @@ PDF Parsing (docling-serve on Cloud Run, `docs/cloud-run-parsing.md`) → Paper 
 
 ## Migrations (SQLite)
 
-Both failures below are silent, and both have destroyed production data. `test/migrations/test_migration_safety.py` walks every new migration over a database with a row in every table and fails on either one, on an Enum column holding anything but member names, and on a second alembic head. It uses generic rows, so a data migration still wants its own test with realistic rows in `test_alembic.py`.
+Both failures below are silent, and both have destroyed production data. `test/migrations/test_migration_safety.py` walks every new migration over a database with a row in every table and fails on either one, on an Enum column holding anything but member names, and on a second alembic head. It uses generic rows, so a data migration still wants its own test with realistic rows in `test_alembic.py`. A migration that deletes rows from a table it keeps, or renames a table, declares it beside its `revision` (`deletes_rows_from = {...}`, `renames = {'old': 'new'}`), and both this test and the deploy's `bin/migrate` follow it; a dropped table needs nothing.
 
 - **Enum columns store the member's name** (`'COMPLETED'`), not its value. A `server_default` or raw-SQL backfill must write `.name`. Confirm by reading a freshly migrated row back through the ORM: a wrong value only fails on read, with a `LookupError` (this took down `GET /papers` on 2026-09-17).
 - **`batch_alter_table` on a table with CASCADE dependents recreates it and deletes the child rows** unless foreign keys are really off. `PRAGMA foreign_keys` does nothing inside alembic's open transaction. Calling `connection.commit()` to escape it leaves `alembic_version` one revision behind. Use `autocommit_block()`:
@@ -151,4 +151,4 @@ Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`.
 
 ## Deployment
 
-dev-caa is one GCP VM (instance `dev-caa-2`, domain `gene-curation-ai.app`). nginx serves FastAPI at `/api/` (prefix stripped) and the SPA at `/`. `ansible-playbook -i dev-caa-2.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml` deploys `main` from GitHub, so merge and push first. See the Deployment section of `README.md`.
+dev-caa is one GCP VM (instance `dev-caa-2`, domain `gene-curation-ai.app`). nginx serves FastAPI at `/api/` (prefix stripped) and the SPA at `/`. `ansible-playbook -i dev-caa-2.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml --tags deploy` deploys `main` from GitHub, so merge and push first; without `--tags deploy` it also provisions the VM (packages, Node, certbot, nginx). A deploy stops the API and workers, runs `bin/migrate` (`lib/bin/migrate.py`: snapshot to `sqllite/backups/`, `upgrade head`, then a check that `alembic_version` landed and no table lost rows, restoring the snapshot if not) and starts them again; the API itself does not migrate there (`MIGRATE_ON_STARTUP=false`). A migration that deletes rows on purpose, or renames a table, declares it in its file (`deletes_rows_from`, `renames`; see `migrations/script.py.mako`). See the Deployment section of `README.md`.

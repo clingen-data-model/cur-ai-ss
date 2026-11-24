@@ -17,6 +17,12 @@ down_revision: Union[str, None] = ${repr(down_revision)}
 branch_labels: Union[str, Sequence[str], None] = ${repr(branch_labels)}
 depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}
 
+# The deploy (bin/migrate) and CI (test_migration_safety) fail when a table that
+# exists before and after this migration has fewer rows afterwards. Declare what
+# this migration does to rows on purpose; a dropped table needs nothing.
+# deletes_rows_from = {'table'}       # this table may lose rows
+# renames = {'old_name': 'new_name'}  # compare old_name's count to new_name's
+
 
 def upgrade() -> None:
     ${upgrades if upgrades else "pass"}
