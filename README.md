@@ -242,11 +242,37 @@ stops, disables and removes it.) TLS is a Let's Encrypt wildcard managed by cert
 VM, renewed twice-daily by cron via a Porkbun DNS-01 challenge.
 
 Deploying pulls `main` from GitHub onto the VM, syncs Python dependencies, writes `.env`
-from GCP Secret Manager, builds the React SPA, then restarts the services:
+from GCP Secret Manager and builds the React SPA. It then stops the workers and the API,
+migrates the database with `bin/migrate`, starts them again and checks that the API
+answers and every worker is running:
 
 ```bash
-ansible-playbook -i dev-caa-2.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml
+ansible-playbook -i dev-caa-2.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml --tags deploy
 ```
+
+Leave out `--tags deploy` to also provision the VM: system packages, swap, Node and pnpm,
+certbot and nginx. A new VM needs that full run once.
+
+`bin/migrate` (`lib/bin/migrate.py`) does nothing to a database already at head.
+Otherwise it:
+
+1. snapshots it with SQLite's backup API to
+   `/var/caa/sqllite/backups/app-premigrate-<time>-<revision>.db` (the newest 10 are kept);
+2. runs `alembic upgrade head`;
+3. checks that `alembic_version` landed on head and that no table lost rows.
+
+If the migration raises or either check fails, it restores the snapshot and the deploy
+stops with the services down. The deploy's output names the commit that was running
+before, so redeploying that commit with `-e git_version=<commit>` brings the site back.
+A dropped table is not compared. A migration that deletes rows from a table it keeps,
+or renames one, declares it beside its `revision`, and the deploy and CI both follow it:
+`deletes_rows_from = {'flags'}`, `renames = {'pedigrees': 'figure_descriptions'}` (the
+template in `migrations/script.py.mako` has both, commented out).
+
+On dev-caa, `.env` sets `MIGRATE_ON_STARTUP=false`, so the API does not migrate as it
+starts (as it does locally); it refuses to start on a database that is not at head.
+A cron job takes a daily snapshot at 02:00 (`bin/migrate --backup-only`,
+`app-daily-*.db`, the newest 7 kept; `journalctl -t caa-db-backup`).
 
 That direct form needs SSH to the VM's public IP, which works **from the Broad network
 (including VPN)**. Port 22 is not opened by this repo's terraform — it is granted by a

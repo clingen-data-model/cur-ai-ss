@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Back up the database, migrate it to head, and check no rows were lost; see
+# lib/bin/migrate.py. `--backup-only` takes a snapshot and nothing else.
+set -euo pipefail
+
+uv run python3 -m 'lib.bin.migrate' "$@"

@@ -45,6 +45,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from lib.api import db
+from lib.bin.migrate import declared_changes, lost_rows
 from lib.models import Base
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -52,10 +53,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # The walk starts after this revision (see the module docstring). Leave it be:
 # every migration added later is walked.
 BASELINE = '24aa340de723'
-
-# Revisions that delete rows on purpose, and from which tables. A migration that
-# drops a table needs no entry: a table that no longer exists is not counted.
-EXPECTED_ROW_LOSS: dict[str, set[str]] = {}
 
 
 @pytest.fixture
@@ -213,7 +210,8 @@ def test_single_head(alembic_cfg):
 def _walk(cfg: Config, start: str, stop: str) -> dict[str, dict[str, tuple[int, int]]]:
     """Upgrade to ``start``, then one revision at a time to ``stop``, seeding
     empty tables before each step. Returns the rows each step lost, by table
-    (before, after), leaving out ``EXPECTED_ROW_LOSS``."""
+    (before, after), leaving out what the step declares (``deletes_rows_from``,
+    ``renames``; lib/bin/migrate.py, the same check the deploy makes)."""
     engine = db.get_engine()
     revisions = _revisions_base_to_head(cfg)
     command.upgrade(cfg, start)
@@ -232,13 +230,8 @@ def _walk(cfg: Config, start: str, stop: str) -> dict[str, dict[str, tuple[int, 
                 "alembic's transaction? Use autocommit_block() instead"
             )
             after = _row_counts(connection)
-        lost = {
-            table: (count, after[table])
-            for table, count in before.items()
-            if table in after
-            and after[table] < count
-            and table not in EXPECTED_ROW_LOSS.get(revision, set())
-        }
+        previous = revisions[revisions.index(revision) - 1]
+        lost = lost_rows(before, after, declared_changes(cfg, previous, revision))
         if lost:
             losses[revision] = lost
     return losses
@@ -260,7 +253,9 @@ def test_every_migration_keeps_every_row(alembic_cfg):
     assert not losses, (
         f'migrations deleted rows (revision: table: (before, after)): {losses}. '
         'A batch_alter_table on a parent with CASCADE children deletes them '
-        'unless foreign keys are off; see CLAUDE.md, "Migrations (SQLite)"'
+        'unless foreign keys are off; see CLAUDE.md, "Migrations (SQLite)". '
+        'A migration that deletes or renames on purpose declares it: '
+        'deletes_rows_from = {...} or renames = {...} (migrations/script.py.mako)'
     )
 
     with engine.begin() as connection:

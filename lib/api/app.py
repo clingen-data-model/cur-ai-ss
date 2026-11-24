@@ -271,8 +271,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from alembic import command
     from alembic.config import Config
 
+    from lib.bin.migrate import current_revision, database_path, head_revision
+
     alembic_cfg = Config('alembic.ini')
-    await asyncio.to_thread(command.upgrade, alembic_cfg, 'head')
+    if env.MIGRATE_ON_STARTUP:
+        await asyncio.to_thread(command.upgrade, alembic_cfg, 'head')
+    else:
+        current = current_revision(database_path())
+        head = head_revision(alembic_cfg)
+        if current != head:
+            raise RuntimeError(
+                f'The database is at {current}, not head ({head}), and '
+                'MIGRATE_ON_STARTUP is off; run bin/migrate first'
+            )
 
     setup_logging()  # NB: run setup logging after the alembic setup to prevent it from overriding.
     init_agents_sdk()

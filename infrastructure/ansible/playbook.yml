@@ -31,7 +31,13 @@
 #                           owning the papers whose id % N is its number (default: 4)
 #
 # Examples (run from the repo root):
+#   # Everything: packages, Node, certbot, nginx, and the app
 #   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml
+#
+#   # Just the app: pull, sync, .env, build the SPA, then stop the services, back up
+#   # and migrate the database (bin/migrate), start them and check they answer.
+#   # Needs a host the full run has provisioned once.
+#   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml --tags deploy
 #
 #   # Deploy a specific tag
 #   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml \
@@ -214,6 +220,7 @@
     # --- User Setup ---
 
     - name: Create CAA user
+      tags: deploy
       user:
         name: "{{ caa_user }}"
         shell: /bin/bash
@@ -221,6 +228,7 @@
       register: caa_user_result
 
     - name: Ensure XDG runtime dir exists
+      tags: deploy
       file:
         path: /run/user/{{ caa_user_result.uid }}
         state: directory
@@ -280,6 +288,7 @@
     # --- Clone/Update Application Code ---
 
     - name: Clone or update application repository
+      tags: deploy
       become_user: "{{ caa_user }}"
       git:
         repo: "{{ git_repo }}"
@@ -287,21 +296,21 @@
         version: "{{ git_version }}"
         force: yes
       register: git_result
-      notify: Restart services
 
     # --- Python Environment ---
     - name: Install Python dependencies
+      tags: deploy
       become_user: "{{ caa_user }}"
       command: /home/{{ caa_user }}/.local/bin/uv sync --frozen --no-dev
       args:
         chdir: "/opt/{{ caa_user }}"
       register: uv_sync_result
       changed_when: true   # <- always marked as changed
-      notify: Restart services
 
     # --- Environment File ---
 
     - name: Fetch OpenAI API key from Secret Manager
+      tags: deploy
       delegate_to: localhost
       become: no
       command: >
@@ -313,6 +322,7 @@
       no_log: true
 
     - name: Fetch Anthropic API key from Secret Manager
+      tags: deploy
       delegate_to: localhost
       become: no
       command: >
@@ -324,6 +334,7 @@
       no_log: true
 
     - name: Fetch NCBI API key from Secret Manager
+      tags: deploy
       delegate_to: localhost
       become: no
       command: >
@@ -335,6 +346,7 @@
       no_log: true
 
     - name: Fetch NCBI email from Secret Manager
+      tags: deploy
       delegate_to: localhost
       become: no
       command: >
@@ -346,6 +358,7 @@
       no_log: true
 
     - name: Fetch auth/SMTP secrets from Secret Manager
+      tags: deploy
       delegate_to: localhost
       become: no
       command: >
@@ -357,18 +370,19 @@
       no_log: true
 
     - name: Parse auth/SMTP secrets JSON
+      tags: deploy
       set_fact:
         auth_secrets: "{{ auth_secrets_content.stdout | from_json }}"
       no_log: true
 
     - name: Deploy environment file
+      tags: deploy
       template:
         src: templates/env.j2
         dest: "/opt/{{ caa_user }}/.env"
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
         mode: "0600"
-      notify: Restart services
 
     # --- Frontend (React SPA served at /) ---
     #
@@ -401,6 +415,7 @@
       changed_when: false
 
     - name: Install frontend dependencies
+      tags: deploy
       become_user: "{{ caa_user }}"
       # --frozen-lockfile installs exactly what frontend/pnpm-lock.yaml pins and fails
       # if the lockfile and package.json disagree, rather than silently re-resolving.
@@ -412,6 +427,7 @@
       changed_when: true
 
     - name: Build frontend
+      tags: deploy
       become_user: "{{ caa_user }}"
       # VITE_BASE_PATH is the root the nginx location serves the SPA from;
       # VITE_API_URL keeps API calls same-origin so nginx proxies them to the API.
@@ -426,6 +442,7 @@
     # --- Systemd User Services ---
 
     - name: Create systemd user config directory
+      tags: deploy
       file:
         path: /home/{{ caa_user }}/.config/systemd/user
         state: directory
@@ -434,22 +451,22 @@
         mode: "0755"
 
     - name: Deploy api systemd service
+      tags: deploy
       template:
         src: templates/api.service.j2
         dest: /home/{{ caa_user }}/.config/systemd/user/api.service
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
         mode: "0644"
-      notify: Restart services
 
     - name: Deploy worker systemd template unit
+      tags: deploy
       template:
         src: templates/worker@.service.j2
         dest: /home/{{ caa_user }}/.config/systemd/user/worker@.service
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
         mode: "0644"
-      notify: Restart services
 
     # The single `worker` unit became the `worker@` template on 2026-11-09. A host
     # deployed before that still runs it, and left running beside the instances it
@@ -487,6 +504,7 @@
         state: absent
 
     - name: Reload systemd user daemon
+      tags: deploy
       become_user: "{{ caa_user }}"
       environment:
         XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
@@ -494,7 +512,60 @@
         daemon_reload: yes
         scope: user
 
-    - name: Enable and start CAA services
+    # --- Restart onto the new code, migrating in between ---
+    #
+    # Every deploy stops everything, migrates, and starts everything. The API used to
+    # migrate as it started, beside four starting workers, with no backup taken
+    # first; both ways a migration has destroyed data were silent (CLAUDE.md,
+    # "Migrations (SQLite)"). bin/migrate (lib/bin/migrate.py) backs up, migrates,
+    # checks that alembic_version landed and that no table lost rows, and restores
+    # the backup when either fails. .env sets MIGRATE_ON_STARTUP=false, so the API
+    # refuses to start on a database that is not at head instead of migrating it.
+
+    # Workers first: on SIGTERM each sweeps the tasks it claimed back to PENDING
+    # (lib/bin/worker.py, _sweep_claimed_tasks), so their next start picks them up.
+    - name: Stop the workers and the API
+      tags: deploy
+      become_user: "{{ caa_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        scope: user
+      loop: "{{ worker_units + ['api'] }}"
+
+    - name: Migrate the database
+      tags: deploy
+      block:
+        - name: Back up, migrate and check the database (bin/migrate)
+          become_user: "{{ caa_user }}"
+          # A migration that deletes or renames on purpose declares it in its own
+          # file (deletes_rows_from, renames; migrations/script.py.mako).
+          command: "/opt/{{ caa_user }}/bin/migrate"
+          args:
+            chdir: "/opt/{{ caa_user }}"
+          environment:
+            PATH: "/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+          register: migrate_result
+          changed_when: "'Migrated' in (migrate_result.stderr | default(''))"
+
+      rescue:
+        # The services stay down: the new code cannot run on the old schema, and
+        # bringing the old code back is a deploy of its own.
+        - name: Stop the deploy with the services down
+          fail:
+            msg: >-
+              bin/migrate failed (its output is above). It restored the database
+              from the backup it took, unless it failed taking the backup, in which
+              case nothing was migrated. The API and workers are stopped and the VM
+              has the new code ({{ git_result.after }}). To bring the site back on
+              the code that was running before, deploy it again:
+              `ansible-playbook -i <host>, infrastructure/ansible/playbook.yml
+              --tags deploy -e git_version={{ git_result.before }}`
+
+    - name: Start the API and the workers
+      tags: deploy
       become_user: "{{ caa_user }}"
       environment:
         XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
@@ -504,6 +575,35 @@
         state: started
         scope: user
       loop: "{{ ['api'] + worker_units }}"
+
+    # Startup loads the HPO lookup, so the API can take a while to answer.
+    - name: Wait for the API to answer
+      tags: deploy
+      check_mode: false
+      uri:
+        url: http://127.0.0.1:8000/status
+      register: api_status
+      until: api_status.status == 200
+      retries: 24
+      delay: 5
+
+    # By now the workers have been up as long as the API took to answer, long
+    # enough for a worker that fails on start to have exited at least once.
+    - name: Check every worker is running
+      tags: deploy
+      check_mode: false
+      become_user: "{{ caa_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
+      command: systemctl --user is-active {{ worker_units | join(' ') }}
+      changed_when: false
+
+    - name: Report what was deployed
+      tags: deploy
+      debug:
+        msg: >-
+          Deployed {{ git_result.after }} (was {{ git_result.before }}).
+          {{ (migrate_result.stderr_lines | default([])) | select('search', 'Migrated|at head|Backed up') | join(' ') }}
 
     # --- TLS Certificate (certbot + DNS-01 via Porkbun) ---
     #
@@ -835,28 +935,26 @@
 
     # --- Database Backup ---
 
+    # A dated snapshot through SQLite's backup API, safe while the services write
+    # (a plain cp of a live database is not), into /var/caa/sqllite/backups/ beside
+    # the ones bin/migrate takes before each migration; the newest 7 are kept.
+    # Output goes to the journal: `journalctl -t caa-db-backup`.
     - name: Create cron job for SQLite database backup
+      tags: deploy
       cron:
         name: "Backup CAA SQLite database"
         minute: "0"
         hour: "2"
         user: "{{ caa_user }}"
-        job: "cp /var/{{ caa_user }}/sqllite/app.db /var/{{ caa_user }}/sqllite/app.db.backup"
+        job: >-
+          cd /opt/{{ caa_user }} &&
+          PATH=/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+          bin/migrate --backup-only --keep 7 2>&1 | logger -t caa-db-backup
         cron_file: caa_db_backup
 
   # --- Handlers ---
 
   handlers:
-    - name: Restart services
-      become_user: "{{ caa_user }}"
-      environment:
-        XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
-      systemd:
-        name: "{{ item }}"
-        state: restarted
-        scope: user
-      loop: "{{ ['api'] + worker_units }}"
-
     - name: Reload nginx
       systemd:
         name: nginx
