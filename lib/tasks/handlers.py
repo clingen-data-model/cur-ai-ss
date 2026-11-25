@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable, cast
+from typing import Any, Awaitable, Callable, NamedTuple, cast
 
 from agents import Agent, Runner, ToolCallItem, TResponseInputItem
 from agents.exceptions import MaxTurnsExceeded
@@ -1227,6 +1227,69 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         )
 
 
+class SegregationBasis(NamedTuple):
+    """What the segregation agent counts against: the variants that segregate
+    and the testing methods that set the family's sequencing methodology."""
+
+    variant_ids: list[int]
+    methods: list[str]
+    # True when both come from a proband's links; False for the fallback.
+    from_proband: bool
+
+
+def segregation_basis(
+    proband_ids: set[int], links: list[PatientVariantOccurrenceDB]
+) -> SegregationBasis:
+    """The variants a family's segregation is about, and whose testing
+    methods set its methodology.
+
+    Normally the proband's: segregation implicates the locus of the proband's
+    variant(s), and the SOP (v12, p. 35) grades the methodology by how the
+    proband was tested. When no proband has a link -- no member is marked
+    proband, or the proband's link is missing (187 families on dev,
+    2026-11-23) -- every variant linked in the family and every tested
+    member's methods stand in, and the agent flags the result inferred.
+    """
+    proband_links = [link for link in links if link.patient_id in proband_ids]
+    source = proband_links or links
+    variant_ids = sorted(
+        {link.variant_id for link in source if link.variant_id is not None}
+    )
+    methods = sorted({m for link in source for m in (link.testing_methods or [])})
+    return SegregationBasis(variant_ids, methods, bool(proband_links))
+
+
+def segregation_genotype(
+    links: list[PatientVariantOccurrenceDB], variant_ids: list[int]
+) -> dict[str, str]:
+    """A family member's genotype for each segregating variant, keyed by
+    variant id: "tested carrier" when their link to it names a testing method
+    (the paper reports their own result; Unknown when it names none),
+    "untested carrier" when the link names none (the occurrence agent placed
+    the variant on them by inference: a carrier symbol, a parent named as the
+    origin, a parent of a homozygous child), "no result" with no link.
+
+    Per variant, so a sibling tested for one of a compound-het proband's
+    variants and only inferred for the other is not read as tested for both;
+    and only the segregating variants, so a link to any other variant never
+    counts. The ClinGen SOP counts an affected relative only once genotyped;
+    the agent counted every affected member, so a family with two of five
+    affected members tested reached 5 segregations (dev, paper 181,
+    2026-11-23). "No result" covers both untested and tested negative, which
+    the links cannot tell apart, so it is never counted as genotyped.
+    """
+    genotype = {}
+    for variant_id in variant_ids:
+        own = [link for link in links if link.variant_id == variant_id]
+        if not own:
+            genotype[str(variant_id)] = 'no result'
+        elif any(link.testing_methods for link in own):
+            genotype[str(variant_id)] = 'tested carrier'
+        else:
+            genotype[str(variant_id)] = 'untested carrier'
+    return genotype
+
+
 async def handle_segregation_analysis_computed(task_id: int) -> None:
     """Compute segregation analysis metrics for a specific family using ClinGen methodology."""
     family_id: int | None = None
@@ -1283,16 +1346,33 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
             .first()
         )
 
+        basis = segregation_basis(
+            {p.id for p in patients if p.proband_status == ProbandStatus.Proband.value},
+            variant_links,
+        )
+
         # Build input for agent
         family_info = {
             'family_identifier': family.identifier,
+            'segregating_variant_ids': basis.variant_ids,
+            'sequencing_methods': {
+                'testing_methods': basis.methods,
+                'source': 'the proband'
+                if basis.from_proband
+                else 'every tested member: no proband has a variant link',
+            },
             'patients': [
                 {
                     'id': p.id,
                     'identifier': p.identifier,
                     'affected_status': p.affected_status,
                     'proband_status': p.proband_status,
+                    'relationship_to_proband': p.relationship_to_proband,
                     'sex': p.sex,
+                    'genotype': segregation_genotype(
+                        [vl for vl in variant_links if vl.patient_id == p.id],
+                        basis.variant_ids,
+                    ),
                 }
                 for p in patients
             ],

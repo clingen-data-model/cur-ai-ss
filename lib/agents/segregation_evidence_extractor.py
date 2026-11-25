@@ -32,12 +32,24 @@ Extract the following fields:
      family's own.
 
 2. has_unexplainable_non_segregations (EvidenceBlock[bool]):
-   - Determine if there are individuals in the family with the disease phenotype but NOT carrying the identified variant.
-   - This indicates incomplete segregation (non-segregating cases).
-   - Use the family structure and variant information provided to make this assessment.
-   - Return true if such individuals exist, false if segregation is complete or unclear.
-   - Basis should explain which individuals (if any) are non-segregators, or why segregation is unclear.
-   - Note: If the paper doesn't explicitly discuss segregation or variant carriers, still make your best assessment based on available information.
+   - True when the paper reports an affected family member who was TESTED and
+     found NOT to carry the family's variant (genotype-negative, phenotype-
+     positive), and does not explain it -- as a phenocopy, a second cause, a
+     misdiagnosis or the like. An explained case is false with an ambiguous
+     flag (below).
+   - The negative result must come from the paper: a "-" or wild-type
+     genotype on the pedigree, a table cell, a sentence ("did not carry the
+     variant"). Cite it.
+   - The patient-variant links record carriers -- tested ones, and untested
+     ones placed by inference -- and never a negative result. An affected
+     person with no link is only not recorded as a carrier: they may be
+     untested, tested negative, or missed. The missing link is never the
+     evidence; only the paper's report of a negative test is. An affected
+     relative the paper does not report as tested is not a non-segregation.
+   - False when no affected member is reported tested negative, including
+     when the paper says nothing about testing relatives.
+   - Basis names each non-segregator and the report of their negative result,
+     or says that none is reported.
 
 Output format:
 Return two EvidenceBlocks with:

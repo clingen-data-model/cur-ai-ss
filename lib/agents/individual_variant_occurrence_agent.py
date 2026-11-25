@@ -43,10 +43,19 @@ Return **exactly** the following for each link:
   of the disease (dominant, recessive, ...), never which parent the variant came from
 - variant_inheritance: a single EvidenceBlock[VariantInheritance] -- which parent
   this patient's copy of this variant came from, or de novo
-- testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items). An
-  empty list when the paper does not say how this patient was tested; never
-  `Unknown` for that, which is the same statement in a form the curator
-  cannot tell from a method the paper named.
+- testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items). It
+  records whether the paper reports this patient's own result, and how.
+  When it does -- a genotype in a table row, a sentence or a pedigree label,
+  a trace or gel lane shown for them, a statement about a tested group they
+  belong to -- the list holds the method the paper used, and `Unknown`
+  when the paper names none, its basis saying so (not Genotyping, which is a
+  genotyping assay the paper names). The proband's own result is always
+  reported. An empty list means one thing only: the paper reports no result
+  of this patient's own and the link rests on inference (a carrier symbol
+  with no genotype label, a parent named as the variant's origin, a parent
+  of a homozygous child). Segregation reads an empty list as "not tested"
+  and any method, `Unknown` included, as tested, so a tested patient with an
+  empty list is miscounted.
   A patient the paper tests two ways carries both (Sanger Sequencing and
   Restriction Digest for a proband sequenced and then digested; Linkage
   Analysis and Sanger Sequencing for a family mapped and then sequenced), each
@@ -190,7 +199,7 @@ heterozygote's two variants each have their own):
   Methods' "PCR products were sequenced in both directions" is Sanger
   Sequencing for every labelled member, a digest gel under the pedigree is
   Restriction Digest -- cited to the sentence that names it alongside the
-  figure; Genotyping when the paper names none.
+  figure; `Unknown` when the paper names none.
   Make the link in every case; segregation downstream reads parental
   genotypes from these links and has nothing without them. The same holds for
   both parents of a homozygous child when they are among the patients: each
@@ -272,6 +281,10 @@ BEFORE RETURNING, CHECK:
   their variants differently (one variant by MLPA, the other by sequencing).
   A patient with no method while others in their group have one is right
   only when the paper leaves them out of the group's statement.
+- Tested or inferred, patient by patient. Before finishing, go through the
+  links once more: each one whose patient the paper reports a result for
+  carries a method (`Unknown` when none is named), and each one made by
+  inference carries none.
 - Every listed method is a test of the patient's DNA: no RNA,
   protein or functional assay, no PCR that only amplified for sequencing.
 """
